@@ -364,6 +364,9 @@ final class GitDaemonProtocol
         }
         @fclose($stdout);
         @fclose($stderr);
+        // Deviation from Go `handleClient`, which calls `d.fatal` (an ERR pkt-line) on a
+        // non-zero service exit: once git has streamed bytes we never append ERR, which
+        // would corrupt an already-sent pack. Spawn failure is the only ERR path (above).
         proc_close($process);
     }
 
