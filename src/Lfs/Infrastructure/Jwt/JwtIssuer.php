@@ -4,16 +4,19 @@ declare(strict_types=1);
 
 namespace App\Lfs\Infrastructure\Jwt;
 
+use App\Lfs\Domain\TokenIssuer;
 use App\Shared\Infrastructure\Server\JwtKeyGenerator;
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Eddsa;
 use Lcobucci\JWT\Signer\Key\InMemory;
+use Symfony\Component\DependencyInjection\Attribute\AsAlias;
 
 /**
  * Signs short-lived Ed25519 (EdDSA) JSON Web Tokens for Git LFS HTTP access,
  * mirroring Go `pkg/ssh/cmd/jwt.go` (claims subject/audience/issuer, 1h TTL).
  */
-final class JwtIssuer
+#[AsAlias(TokenIssuer::class)]
+final class JwtIssuer implements TokenIssuer
 {
     public function __construct(private readonly JwtKeyGenerator $keys) {}
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Lfs\Infrastructure\Jwt;
 
+use App\Lfs\Domain\TokenVerifier;
 use App\Shared\Domain\Exception\AccessDenied;
 use App\Shared\Infrastructure\Server\JwtKeyGenerator;
 use Lcobucci\JWT\Configuration;
@@ -15,6 +16,7 @@ use Lcobucci\JWT\Validation\Constraint\PermittedFor;
 use Lcobucci\JWT\Validation\Constraint\SignedWith;
 use Lcobucci\JWT\Validation\Constraint\StrictValidAt;
 use Psr\Clock\ClockInterface;
+use Symfony\Component\DependencyInjection\Attribute\AsAlias;
 
 /**
  * Verifies the LFS bearer JWTs minted by {@see JwtIssuer}, enforcing signature,
@@ -25,7 +27,8 @@ use Psr\Clock\ClockInterface;
  * the answer leaks nothing about private repositories. Any failure raises
  * {@see AccessDenied} (mapped to 401 by the HTTP layer).
  */
-final class JwtVerifier
+#[AsAlias(TokenVerifier::class)]
+final class JwtVerifier implements TokenVerifier
 {
     public function __construct(
         private readonly JwtKeyGenerator $keys,

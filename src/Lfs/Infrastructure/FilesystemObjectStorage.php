@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Lfs\Infrastructure;
 
+use App\Lfs\Domain\ObjectStorage;
 use App\Lfs\Domain\Oid;
 use App\Shared\Domain\Exception\InvalidInput;
 use App\Shared\Infrastructure\Config\ServerSettings;
+use Symfony\Component\DependencyInjection\Attribute\AsAlias;
 
 /**
  * Content-addressable storage for LFS objects on the local filesystem, one tree
@@ -15,7 +17,8 @@ use App\Shared\Infrastructure\Config\ServerSettings;
  *
  * Uploads are streamed and hashed incrementally, never buffered whole.
  */
-final class FilesystemObjectStorage
+#[AsAlias(ObjectStorage::class)]
+final class FilesystemObjectStorage implements ObjectStorage
 {
     public function __construct(private readonly ServerSettings $settings) {}
 
