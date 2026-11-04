@@ -5,14 +5,21 @@ security:
         app_users:
             id: App\Identity\Infrastructure\Security\SecurityUserProvider
     firewalls:
+        # SSH sessions set their PreAuthenticatedToken directly (SshEntrypointCommand); never matched by HTTP.
         ssh:
-            lazy: true
+            pattern: ^/_ssh$
             stateless: true
             provider: app_users
-        main:
-            lazy: true
+        git:
+            pattern: ^/
             stateless: true
             provider: app_users
+            entry_point: App\UI\Http\Security\GitAuthChallenge
+            custom_authenticators:
+                - App\UI\Http\Security\AccessTokenAuthenticator
+            access_token:
+                token_handler: App\UI\Http\Security\JwtAccessTokenHandler
+                failure_handler: App\UI\Http\Security\GitAuthChallenge
 
 when@test:
     security:

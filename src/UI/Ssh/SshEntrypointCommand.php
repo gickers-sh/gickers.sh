@@ -6,6 +6,7 @@ namespace App\UI\Ssh;
 
 use App\Access\Application\ServerPolicy;
 use App\Identity\Application\AuthenticateSshKey;
+use App\Lfs\Application\IssueLfsToken;
 use App\Identity\Domain\Model\SshKey;
 use App\Identity\Infrastructure\Security\SecurityUser;
 use App\Shared\Domain\Exception\AccessDenied;
@@ -36,6 +37,7 @@ final class SshEntrypointCommand extends Command
         private readonly GitTransportRunner $gitTransportRunner,
         private readonly SshCliApplication $cliApplication,
         private readonly ExceptionRenderer $exceptionRenderer,
+        private readonly IssueLfsToken $issueLfsToken,
     ) {
         parent::__construct();
     }
@@ -131,9 +133,18 @@ final class SshEntrypointCommand extends Command
                 );
             }
 
-            // Git LFS authenticate routing
+            // Git LFS authenticate routing (Go `git-lfs-authenticate REPO OPERATION`, exactly 2 args)
             if ('git-lfs-authenticate' === $firstToken) {
-                return $this->handleGitLfsAuthenticate();
+                if (3 !== count($tokens)) {
+                    throw new InvalidInput('usage: git-lfs-authenticate REPO OPERATION');
+                }
+
+                $output->writeln(
+                    json_encode(($this->issueLfsToken)($user, $tokens[1], $tokens[2]), \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_SLASHES),
+                    OutputInterface::OUTPUT_RAW,
+                );
+
+                return Command::SUCCESS;
             }
 
             // CLI application routing
@@ -186,7 +197,7 @@ final class SshEntrypointCommand extends Command
         }
 
         if ('test' === ($app instanceof \Symfony\Bundle\FrameworkBundle\Console\Application ? $app->getKernel()->getEnvironment() : '') || !@posix_isatty(\STDIN)) {
-            $output->writeln(sprintf('Launch TUI%s', null !== $initialRepo ? ' for '.$initialRepo : ''), OutputInterface::OUTPUT_RAW);
+            $output->writeln(sprintf('Launch TUI%s', null !== $initialRepo ? ' for ' . $initialRepo : ''), OutputInterface::OUTPUT_RAW);
 
             return Command::SUCCESS;
         }
@@ -198,13 +209,5 @@ final class SshEntrypointCommand extends Command
         }
 
         return $cmd->run(new ArrayInput($params), $output);
-    }
-
-    /**
-     * Unavailability placeholder for git-lfs-authenticate until phase 5 wires it.
-     */
-    private function handleGitLfsAuthenticate(): never
-    {
-        throw new InvalidInput('git-lfs-authenticate is not available');
     }
 }
