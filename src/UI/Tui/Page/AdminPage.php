@@ -4,122 +4,200 @@ declare(strict_types=1);
 
 namespace App\UI\Tui\Page;
 
-use CodesSh\Tui\Component\ComponentInterface;
-use CodesSh\Tui\Component\Field\TextInputField;
-use CodesSh\Tui\Component\Field\ToggleField;
-use CodesSh\Tui\Component\FormComponent;
-use CodesSh\Tui\Component\HeaderComponent;
-use CodesSh\Tui\Component\SelectorComponent;
-use CodesSh\Tui\Component\StatusbarComponent;
-use CodesSh\Tui\Component\TabsComponent;
-use CodesSh\Tui\Event\InputEvent;
-use CodesSh\Tui\Event\KeyMsg;
-use CodesSh\Tui\Style\Style;
-use CodesSh\Tui\Style\TokyoNight;
+use App\Access\Application\ServerPolicy;
+use App\Access\Domain\AccessLevel;
+use App\Identity\Domain\Model\User;
+use App\Identity\Domain\UserStore;
+use App\Shared\Infrastructure\Config\ServerSettings;
+use App\UI\Tui\Input\Keys;
+use App\UI\Tui\Render\Screen;
 
-final class AdminPage implements ComponentInterface
+/**
+ * Server administration page (admins only): an Overview tab exposing the live
+ * {@see ServerPolicy} (anonymous access level, keyless access) with keyboard
+ * toggles that persist, and a Users tab listing the real {@see User} accounts.
+ *
+ * Mirrors Go `pkg/ui/pages/selection` admin affordances + `soft settings`.
+ */
+final class AdminPage extends AbstractPage
 {
-    public const TAB_SETTINGS = 0;
-    public const TAB_USERS = 1;
+    private const TAB_OVERVIEW = 0;
 
-    private TabsComponent $tabs;
-    private HeaderComponent $header;
-    private StatusbarComponent $statusbar;
+    /** @var list<string> */
+    private const TABS = ['Overview', 'Users'];
 
-    private FormComponent $serverSettingsForm;
-    private SelectorComponent $usersSelector;
+    private int $tab = self::TAB_OVERVIEW;
+    private int $sel = 0;
+    private ?string $flash = null;
 
-    /** @var callable|null */
-    private $onBackCallback;
+    /** @var list<User> */
+    private array $users = [];
 
-    public function __construct()
-    {
-        $this->header = new HeaderComponent('Server Administration', ['Admin Access']);
-        $this->tabs = new TabsComponent(['Server Settings', 'Users & Keys']);
-        $this->statusbar = new StatusbarComponent();
-
-        $keylessField = new ToggleField('allow_keyless', 'Allow keyless access (anonymous SSH)', true);
-        $anonAccessField = new TextInputField('anon_access', 'Anonymous access level', 'ReadOnlyAccess');
-        $this->serverSettingsForm = new FormComponent('Server Configuration', 'Manage global permissions and policies', [
-            $keylessField,
-            $anonAccessField,
-        ]);
-
-        $currentUser = get_current_user();
-        $this->usersSelector = new SelectorComponent([
-            ['id' => '1', 'label' => '👑 '.Style::create()->bold(true)->foreground(TokyoNight::ACTIVE_BORDER)->render($currentUser).' (admin)'],
-            ['id' => '2', 'label' => '👤 anonymous (read-only)'],
-        ], 'Users');
+    public function __construct(
+        private readonly ServerPolicy $serverPolicy,
+        private readonly UserStore $userStore,
+        private readonly ServerSettings $settings,
+        private readonly ?User $actor,
+    ) {
     }
 
-    public function setOnBack(?callable $callback): void
+    private function isAdmin(): bool
     {
-        $this->onBackCallback = $callback;
+        return true === $this->actor?->isAdmin();
     }
 
-    public function init(): void
+    protected function load(): void
     {
-        $this->tabs->setActiveTab(self::TAB_SETTINGS);
-        $this->statusbar->setStatus('Admin', 'System', 'Settings', '');
+        $this->users = $this->isAdmin() ? $this->userStore->all() : [];
     }
 
-    public function update(InputEvent $event): ?string
+    public function handleKey(string $seq): bool
     {
-        if ($event instanceof KeyMsg) {
-            if ($event->is('q')) {
-                return 'quit';
+        $this->flash = null;
+        $tok = Keys::normalize($seq);
+        $txt = Keys::text($seq);
+
+        if (Keys::CTRL_C === $tok) {
+            $this->host->quit();
+
+            return true;
+        }
+        if (Keys::ESCAPE === $tok || 'q' === $txt) {
+            $this->host->navigateToSelection();
+
+            return true;
+        }
+        if (Keys::TAB === $tok) {
+            $this->tab = ($this->tab + 1) % \count(self::TABS);
+            $this->sel = 0;
+
+            return true;
+        }
+        if (Keys::BACKTAB === $tok) {
+            $this->tab = ($this->tab + \count(self::TABS) - 1) % \count(self::TABS);
+            $this->sel = 0;
+
+            return true;
+        }
+
+        if (!$this->isAdmin()) {
+            return false;
+        }
+
+        if (self::TAB_OVERVIEW === $this->tab) {
+            if ('a' === $txt) {
+                $this->cycleAnonAccess();
+
+                return true;
             }
-            if ($event->is(KeyMsg::ESC)) {
-                if (null !== $this->onBackCallback) {
-                    ($this->onBackCallback)();
+            if ('k' === $txt) {
+                $this->toggleKeyless();
 
-                    return null;
-                }
+                return true;
             }
+
+            return false;
         }
 
-        // Support left/right / h/l to cycle options in Server Settings
-        if (self::TAB_SETTINGS === $this->tabs->getActiveTab() && $event instanceof KeyMsg) {
-            if ($event->is('h') || $event->is('l') || $event->is(KeyMsg::LEFT) || $event->is(KeyMsg::RIGHT)) {
-                $this->serverSettingsForm->update($event);
+        // Users tab
+        $count = \count($this->users);
+        if (Keys::UP === $tok || 'k' === $txt) {
+            $this->sel = max(0, $this->sel - 1);
 
-                return null;
-            }
+            return true;
+        }
+        if (Keys::DOWN === $tok || 'j' === $txt) {
+            $this->sel = max(0, min($this->sel + 1, max(0, $count - 1)));
+
+            return true;
         }
 
-        $oldTab = $this->tabs->getActiveTab();
-        $this->tabs->update($event);
-        if ($this->tabs->getActiveTab() !== $oldTab) {
-            return null;
-        }
-
-        if (self::TAB_SETTINGS === $this->tabs->getActiveTab()) {
-            $this->serverSettingsForm->update($event);
-        } else {
-            $this->usersSelector->update($event);
-        }
-
-        return null;
+        return false;
     }
 
-    public function view(int $width, int $height): string
+    private function cycleAnonAccess(): void
     {
-        if ($width <= 0 || $height <= 0) {
-            return '';
+        $next = AccessLevel::from(($this->serverPolicy->anonAccess()->value + 1) % 4);
+        $this->serverPolicy->setAnonAccess($next);
+        $this->flash = 'Anonymous access: '.$next->toString();
+    }
+
+    private function toggleKeyless(): void
+    {
+        $value = !$this->serverPolicy->allowKeyless();
+        $this->serverPolicy->setAllowKeyless($value);
+        $this->flash = 'Keyless access: '.($value ? 'enabled' : 'disabled');
+    }
+
+    protected function headerText(): string
+    {
+        return ' Admin — '.($this->settings->name ?: 'Soft Serve').' ';
+    }
+
+    protected function tabBarText(): string
+    {
+        return Screen::tabBar(self::TABS, $this->tab, 120);
+    }
+
+    protected function footerText(): string
+    {
+        if (null !== $this->flash) {
+            return ' '.$this->flash;
+        }
+        if (!$this->isAdmin()) {
+            return ' Esc: back';
         }
 
-        $headerView = $this->header->view($width, 1);
-        $tabsView = $this->tabs->view($width, 1);
-        $statusbarView = $this->statusbar->view($width, 1);
+        return self::TAB_OVERVIEW === $this->tab
+            ? ' a: cycle anon access · k: toggle keyless · Tab: switch · q: back'
+            : ' ↑/↓ move · Tab: switch · q: back';
+    }
 
-        $bodyHeight = max(1, $height - 3);
+    protected function paintBody(int $cols, int $rows): array
+    {
+        if (!$this->isAdmin()) {
+            return $this->messageBody('Access denied: administrator privileges required.', $cols);
+        }
 
-        $bodyView = match ($this->tabs->getActiveTab()) {
-            self::TAB_SETTINGS => $this->serverSettingsForm->view($width, $bodyHeight),
-            self::TAB_USERS => $this->usersSelector->view($width, $bodyHeight),
-            default => '',
-        };
+        return self::TAB_OVERVIEW === $this->tab
+            ? $this->overviewBody($cols)
+            : $this->usersBody($cols, $rows);
+    }
 
-        return implode("\n", [$headerView, $tabsView, $bodyView, $statusbarView]);
+    /**
+     * @return list<string>
+     */
+    private function overviewBody(int $cols): array
+    {
+        $lines = [
+            '',
+            '  Server         '.($this->settings->name ?: 'Soft Serve'),
+            '  Anon access    '.$this->serverPolicy->anonAccess()->toString(),
+            '  Keyless access '.($this->serverPolicy->allowKeyless() ? 'enabled' : 'disabled'),
+            '  Users          '.$this->userStore->count(),
+            '',
+            '  a  cycle anonymous access level (no-access → read-only → read-write → admin-access)',
+            '  k  toggle keyless access',
+        ];
+
+        return array_map(static fn (string $l): string => Screen::fit($l, $cols), $lines);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function usersBody(int $cols, int $rows): array
+    {
+        if ([] === $this->users) {
+            return $this->messageBody('No users.', $cols);
+        }
+
+        $items = [];
+        foreach ($this->users as $user) {
+            $meta = ($user->isAdmin() ? 'admin' : 'user').' · '.\count($user->publicKeys()).' key(s)';
+            $items[] = ['label' => $user->username(), 'meta' => $meta];
+        }
+
+        return Screen::listView($items, $this->sel, $rows, $cols);
     }
 }

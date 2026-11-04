@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\UI\Tui\Render;
 
-use CodesSh\Tui\Component\SnippetRenderer;
-
 use Termstrap\Termstrap;
 
 final class TermstrapRenderer implements SnippetRenderer

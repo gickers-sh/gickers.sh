@@ -4,1175 +4,1201 @@ declare(strict_types=1);
 
 namespace App\UI\Tui\Page;
 
-use App\Model\PullRequestModel;
-use App\Model\UserModel;
+use App\CodeIntel\Application\Query\CodeIntelQuery;
+use App\CodeIntel\Domain\SymbolLocation;
+use App\Identity\Domain\Model\User;
+use App\PullRequest\Application\MergePullRequest;
+use App\PullRequest\Application\Query\PullRequestQuery;
+use App\PullRequest\Domain\Model\PullRequest;
+use App\PullRequest\Domain\PullRequestStatus;
+use App\Repo\Application\UpdateRepoSettings;
 use App\Repo\Domain\Git\Commit;
 use App\Repo\Domain\Git\GitRepository;
+use App\Repo\Domain\Git\TreeEntry;
+use App\Repo\Domain\Model\Repo;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
-use App\Repo\Infrastructure\Git\GitRepositoryWriter;
-use App\Service\Backend\BackendService;
-use App\Service\CodeIntel\CodeIntelService;
+use App\Shared\Domain\Exception\AccessDenied;
+use App\Shared\Domain\Exception\Conflict;
+use App\Shared\Domain\Exception\InvalidInput;
+use App\Shared\Domain\Exception\NotFound;
+use App\UI\Tui\Input\Keys;
+use App\UI\Tui\Render\Screen;
 use App\UI\Tui\Render\TermstrapRenderer;
-use CodesSh\Tui\Component\CodeViewerComponent;
-use CodesSh\Tui\Component\ComponentInterface;
-use CodesSh\Tui\Component\EditorComponent;
-use CodesSh\Tui\Component\Field\TextAreaField;
-use CodesSh\Tui\Component\Field\TextInputField;
-use CodesSh\Tui\Component\Field\ToggleField;
-use CodesSh\Tui\Component\FormComponent;
-use CodesSh\Tui\Component\HeaderComponent;
-use CodesSh\Tui\Component\SelectorComponent;
-use CodesSh\Tui\Component\StatusbarComponent;
-use CodesSh\Tui\Component\TabsComponent;
-use CodesSh\Tui\Component\ViewportComponent;
-use CodesSh\Tui\Event\InputEvent;
-use CodesSh\Tui\Event\KeyMsg;
-use CodesSh\Tui\Event\MouseMsg;
-use CodesSh\Tui\Style\Style;
-use CodesSh\Tui\Style\TokyoNight;
 
-final class RepoPage implements ComponentInterface
+/**
+ * Single-repository browser: tabs for readme, files, commits, branches, tags,
+ * pull requests and settings. The file tab opens a syntax-highlighted code
+ * viewer with keyboard go-to-definition / find-references backed by
+ * {@see CodeIntelQuery}. Keyboard-only (symfony/tui 8.1 has no mouse support).
+ *
+ * Mirrors Go `pkg/ui/pages/repo`. Works both on a stored {@see Repo} (feed
+ * navigation) and a bare/non-bare {@see GitRepository} opened by path (soft:browse),
+ * in which case `$db` is null and settings/pull requests are read-only.
+ */
+final class RepoPage extends AbstractPage
 {
-    public const TAB_README = 0;
-    public const TAB_FILES = 1;
-    public const TAB_LOG = 2;
-    public const TAB_BRANCHES = 3;
-    public const TAB_TAGS = 4;
-    public const TAB_PRS = 5;
-    public const TAB_PROFILE = 6;
-    public const TAB_SETTINGS = 7;
+    private const TAB_README = 0;
+    private const TAB_FILES = 1;
+    private const TAB_COMMITS = 2;
+    private const TAB_BRANCHES = 3;
+    private const TAB_TAGS = 4;
+    private const TAB_PULLS = 5;
+    private const TAB_SETTINGS = 6;
 
-    private TabsComponent $tabs;
-    private HeaderComponent $header;
-    private StatusbarComponent $statusbar;
+    /** @var list<string> */
+    private const TABS = ['Readme', 'Files', 'Commits', 'Branches', 'Tags', 'Pull Requests', 'Settings'];
 
-    // Readme tab
-    private ViewportComponent $readmeViewport;
-    private ?string $readmePath = null;
-    private string $readmeContent = '';
+    private string $name;
+    private string $ref;
+    private int $tab = self::TAB_README;
+    private int $sel = 0;
+    private int $scroll = 0;
+    private ?string $flash = null;
 
     // Files tab
-    private SelectorComponent $filesSelector;
-    private CodeViewerComponent $fileViewer;
-    private ViewportComponent $renderedDocViewport;
-    private ViewportComponent $blameViewport;
-    private ViewportComponent $refsPreviewViewport;
-    private bool $viewingFile = false;
-    private bool $viewingBlame = false;
-    private bool $viewingRefsPreview = false;
-    private string $currentFilePath = '';
-    private string $currentSubpath = '';
-    private bool $isFileRendered = false;
+    private string $subpath = '';
+    private bool $fileOpen = false;
+    private string $filePath = '';
+    /** @var list<string> */
+    private array $fileRaw = [];
+    private int $cursorLine = 0;
+    private int $cursorCol = 0;
 
-    // Log tab
-    private SelectorComponent $logSelector;
-    private ViewportComponent $commitDiffViewport;
-    private bool $viewingCommitDiff = false;
-    private ?Commit $currentCommit = null;
+    // References overlay (inside the file viewer)
+    private bool $refsOpen = false;
+    /** @var list<SymbolLocation> */
+    private array $refs = [];
+    private int $refSel = 0;
 
-    // Other tabs
-    private SelectorComponent $branchesSelector;
-    private SelectorComponent $tagsSelector;
-    private SelectorComponent $prsSelector;
-    private ViewportComponent $profileViewport;
-    private FormComponent $settingsForm;
+    // Commits tab
+    private bool $diffOpen = false;
+    /** @var list<string> */
+    private array $diffLines = [];
 
-    // Pull Requests Detail view
-    private bool $viewingPRDetail = false;
-    private ?PullRequestModel $selectedPR = null;
-    private ViewportComponent $prDetailViewport;
-    private int $prDetailTab = 0; // 0=About, 1=Commits, 2=Changes, 3=Comments
-    private bool $prCommentMenuActive = false;
-    private ?FormComponent $prFormModal = null;
-    private ?FormComponent $prCommentModal = null;
-    private ?FormComponent $prConfirmDeleteModal = null;
+    // Settings tab
+    private bool $settingsEditing = false;
+    /** @var array{description: string, private: bool} */
+    private array $settingsForm = ['description' => '', 'private' => false];
+    private int $settingsField = 0;
 
-    // Optional modal editor/form
-    private ?EditorComponent $activeEditor = null;
-    private ?FormComponent $activeModal = null;
-    private ?FormComponent $commitModal = null;
-    private ?string $editingTargetFile = null;
-    private bool $isEditingReadme = false;
-    private bool $showHelp = false;
-
-    private string $currentRef = 'HEAD';
-    /** @var callable|null */
-    private $onBackCallback;
-    private GitRepositoryWriter $plumbing;
+    /** @var array<string,string> ref => sha */
+    private array $shaCache = [];
+    /** @var array{key: string, lines: list<string>}|null */
+    private ?array $readmeCache = null;
+    /** @var array<string, list<TreeEntry>> */
+    private array $treeCache = [];
+    /** @var list<Commit>|null */
+    private ?array $commits = null;
+    /** @var array{branches: list<string>, tags: list<string>, current: string}|null */
+    private ?array $refsData = null;
+    /** @var list<PullRequest>|null */
+    private ?array $pullsCache = null;
+    private bool $prDetailOpen = false;
+    private bool $prMergeConfirm = false;
+    private bool $prDiffOpen = false;
+    /** @var list<string> */
+    private array $prDiffLines = [];
+    private int $prDiffScroll = 0;
 
     public function __construct(
-        private readonly GitRepository $repo,
-        private readonly GitRepositoryReader $gitService,
+        private readonly GitRepository $git,
+        private readonly ?Repo $db,
+        private readonly ?User $actor,
+        private readonly GitRepositoryReader $reader,
         private readonly TermstrapRenderer $renderer,
-        private readonly ?BackendService $backend = null,
-        private readonly ?UserModel $currentUser = null,
-        private readonly ?CodeIntelService $codeIntel = null,
+        private readonly CodeIntelQuery $codeIntel,
+        private readonly UpdateRepoSettings $updateSettings,
+        private readonly ?PullRequestQuery $pullRequestQuery = null,
+        private readonly ?MergePullRequest $mergePullRequest = null,
     ) {
-        $this->plumbing = new GitRepositoryWriter();
-
-        $this->header = new HeaderComponent($this->repo->name, [
-            $this->repo->defaultBranch,
-            $this->repo->isPrivate ? 'private' : 'public',
-        ]);
-
-        $this->tabs = new TabsComponent([
-            'Readme',
-            'Files',
-            'Log',
-            'Branches',
-            'Tags',
-            'Pull Requests',
-            'Profil',
-            'Settings',
-        ]);
-
-        $this->statusbar = new StatusbarComponent();
-        $this->readmeViewport = new ViewportComponent();
-        $this->filesSelector = new SelectorComponent([], 'Files');
-        $this->filesSelector->setDisplayMode('files');
-        $this->fileViewer = new CodeViewerComponent();
-        $this->renderedDocViewport = new ViewportComponent();
-        $this->blameViewport = new ViewportComponent();
-        $this->refsPreviewViewport = new ViewportComponent();
-        $this->logSelector = new SelectorComponent([], 'Commits');
-        $this->commitDiffViewport = new ViewportComponent();
-        $this->branchesSelector = new SelectorComponent([], 'Branches');
-        $this->tagsSelector = new SelectorComponent([], 'Tags');
-        $this->prsSelector = new SelectorComponent([], 'Pull Requests');
-        $this->profileViewport = new ViewportComponent();
-        $this->prDetailViewport = new ViewportComponent();
-
-        $this->initSettingsForm();
-    }
-
-    public function setOnBack(?callable $callback): void
-    {
-        $this->onBackCallback = $callback;
-    }
-
-    public function init(): void
-    {
-        $this->currentRef = $this->repo->defaultBranch ?: 'HEAD';
-        $this->tabs->setActiveTab(self::TAB_README);
-        $this->loadReadme();
-        $this->loadFiles('');
-        $this->loadCommits();
-        $this->loadBranchesAndTags();
-        $this->loadPRs();
-        $this->loadProfile();
-        $this->updateStatusbar();
-    }
-
-    private function initSettingsForm(): void
-    {
-        $descField = new TextInputField('description', 'Description', $this->repo->description);
-        $privField = new ToggleField('is_private', 'Private repository', $this->repo->isPrivate);
-        $this->settingsForm = new FormComponent('Repository Settings', 'Configure repository metadata', [
-            $descField,
-            $privField,
-        ]);
-    }
-
-    private function loadReadme(): void
-    {
-        try {
-            $entries = $this->gitService->getTree($this->repo, $this->currentRef);
-            $this->readmePath = null;
-            $this->readmeContent = '';
-            foreach ($entries as $entry) {
-                if ($entry->isFile() && preg_match('/^readme(\.md|\.markdown|\.txt)?$/i', $entry->name)) {
-                    $this->readmePath = $entry->path;
-                    break;
-                }
-            }
-
-            if (null !== $this->readmePath) {
-                $raw = $this->gitService->getBlob($this->repo, $this->currentRef, $this->readmePath);
-                $this->readmeContent = $raw;
-                $rendered = $this->renderer->renderDocument($this->readmePath, $raw, 80);
-                $this->readmeViewport->setContent($rendered);
-            } else {
-                $emptyMsg = Style::create()->foreground(TokyoNight::MUTED)->padding(2)->render("No README found for this repository. Press 'n' to create one.");
-                $this->readmeViewport->setContent($emptyMsg);
-            }
-        } catch (\Throwable $e) {
-            $this->readmeViewport->setContent('Error loading README: '.$e->getMessage());
+        $this->name = $this->db?->nameString() ?? $this->git->name;
+        $this->ref = $this->git->defaultBranch;
+        if (null !== $this->db) {
+            $this->settingsForm = ['description' => $this->db->description(), 'private' => $this->db->isPrivate()];
         }
     }
 
-    private function loadFiles(string $subpath = ''): void
+    public function handleKey(string $seq): bool
     {
-        $this->currentSubpath = $subpath;
-        try {
-            $entries = $this->gitService->getTree($this->repo, $this->currentRef, $subpath);
+        $this->flash = null;
 
-            // Match Go (FileItems.Less): directories first, then files, each
-            // sorted alphabetically by name.
-            usort($entries, static function ($a, $b): int {
-                $ad = $a->isDirectory();
-                $bd = $b->isDirectory();
-                if ($ad !== $bd) {
-                    return $ad ? -1 : 1;
-                }
-
-                return strcmp($a->name, $b->name);
-            });
-
-            $items = [];
-            foreach ($entries as $e) {
-                $items[] = [
-                    'id' => $e->path,
-                    'label' => $e->name,
-                    'name' => $e->name,
-                    'type' => $e->type,
-                    'path' => $e->path,
-                    'mode' => $e->mode,
-                    'size' => $e->size,
-                    'isDir' => $e->isDirectory(),
-                ];
-            }
-            $this->filesSelector->setItems($items);
-        } catch (\Throwable $e) {
-            $this->filesSelector->setItems([['id' => 'err', 'label' => 'Error: '.$e->getMessage()]]);
+        if ($this->settingsEditing) {
+            return $this->handleSettingsKey($seq);
         }
+        if ($this->refsOpen) {
+            return $this->handleRefsKey($seq);
+        }
+        if ($this->fileOpen) {
+            return $this->handleFileKey($seq);
+        }
+        if ($this->diffOpen) {
+            return $this->handleDiffKey($seq);
+        }
+        if ($this->prDiffOpen) {
+            return $this->handlePrDiffKey($seq);
+        }
+        if ($this->prMergeConfirm) {
+            return $this->handlePrMergeConfirmKey($seq);
+        }
+        if ($this->prDetailOpen) {
+            return $this->handlePrDetailKey($seq);
+        }
+
+        return $this->handleTabKey($seq);
     }
 
-    private function loadCommits(): void
+    private function handleTabKey(string $seq): bool
     {
-        try {
-            $commits = $this->gitService->getCommits($this->repo, $this->currentRef, 50);
-            $items = [];
-            foreach ($commits as $c) {
-                $date = date('Y-m-d', $c->timestamp);
-                $items[] = [
-                    'id' => $c->hash,
-                    'label' => Style::create()->foreground(TokyoNight::MUTED)->render($c->shortHash).' '.$c->subject.Style::create()->foreground(TokyoNight::MUTED)->render(" ({$c->authorName}, {$date})"),
-                    'commit' => $c,
-                    'command' => $c->hash,
-                ];
-            }
-            $this->logSelector->setItems($items);
-        } catch (\Throwable) {
-            $this->logSelector->setItems([]);
+        $tok = Keys::normalize($seq);
+        $txt = Keys::text($seq);
+
+        if (Keys::CTRL_C === $tok) {
+            $this->host->quit();
+
+            return true;
         }
-    }
+        if (Keys::ESCAPE === $tok || 'q' === $txt) {
+            $this->host->navigateToSelection();
 
-    private function loadBranchesAndTags(): void
-    {
-        try {
-            $refs = $this->gitService->getRefs($this->repo);
-            $bItems = [];
-            foreach ($refs->branches as $b) {
-                $isCurrent = ($b === $refs->currentBranch);
-                $bItems[] = [
-                    'id' => $b,
-                    'label' => ($isCurrent ? '• ' : '  ').$b,
-                    'current' => $isCurrent,
-                    'command' => $b,
-                ];
-            }
-            $this->branchesSelector->setItems($bItems);
-
-            $tItems = [];
-            foreach ($refs->tags as $t) {
-                $tItems[] = ['id' => $t, 'label' => '🏷️ '.$t, 'command' => $t];
-            }
-            $this->tagsSelector->setItems($tItems);
-        } catch (\Throwable) {
-            $this->branchesSelector->setItems([]);
-            $this->tagsSelector->setItems([]);
+            return true;
         }
-    }
+        if (Keys::TAB === $tok) {
+            $this->switchTab(($this->tab + 1) % \count(self::TABS));
 
-    private function loadPRs(): void
-    {
-        if (null === $this->backend) {
-            $this->prsSelector->setItems([
-                ['id' => 'none', 'label' => 'No active pull requests in local repository'],
-            ]);
+            return true;
+        }
+        if (Keys::BACKTAB === $tok) {
+            $this->switchTab(($this->tab + \count(self::TABS) - 1) % \count(self::TABS));
 
-            return;
+            return true;
+        }
+        if (null !== $txt && ctype_digit($txt) && '1' <= $txt && $txt <= '7') {
+            $this->switchTab((int) $txt - 1);
+
+            return true;
         }
 
-        try {
-            $prs = $this->backend->listPullRequests($this->repo->name);
-            if (empty($prs)) {
-                $this->prsSelector->setItems([
-                    ['id' => 'empty', 'label' => 'No pull requests found. Press "n" to open one.'],
-                ]);
-
-                return;
-            }
-
-            $items = [];
-            foreach ($prs as $pr) {
-                $stateIcon = match ($pr->status) {
-                    'open' => '🟢 #',
-                    'merged' => '🟣 #',
-                    default => '🔴 #',
-                };
-                $items[] = [
-                    'id' => (string) $pr->number,
-                    'label' => $stateIcon.$pr->number.' '.$pr->title.' ('.$pr->authorUsername.')',
-                    'pr' => $pr,
-                    'command' => $pr->title,
-                ];
-            }
-            $this->prsSelector->setItems($items);
-        } catch (\Throwable) {
-            $this->prsSelector->setItems([
-                ['id' => 'none', 'label' => 'No pull requests found.'],
-            ]);
-        }
-    }
-
-    private function loadProfile(): void
-    {
-        $sb = [];
-        $sb[] = Style::create()->bold(true)->foreground(TokyoNight::ACTIVE_BORDER)->render('📦 '.$this->repo->name);
-        $sb[] = '' !== $this->repo->description ? $this->repo->description : 'No description provided.';
-        $sb[] = '';
-        $sb[] = 'Default branch : '.Style::create()->foreground(TokyoNight::CYAN)->render($this->repo->defaultBranch);
-        $sb[] = 'Path           : '.$this->repo->path;
-        $sb[] = 'Visibility     : '.($this->repo->isPrivate ? 'Private' : 'Public');
-        $sb[] = 'Type           : '.($this->repo->isBare ? 'Bare repository' : 'Standard repository');
-        $this->profileViewport->setContent(implode("\n", $sb));
-    }
-
-    public function update(InputEvent $event): ?string
-    {
-        // 1. Modals & confirmation dialogs
-        if (null !== $this->activeModal) {
-            $action = $this->activeModal->update($event);
-            if ('cancel' === $action || 'submit' === $action) {
-                $this->activeModal = null;
-            }
-
-            return null;
-        }
-
-        if (null !== $this->commitModal) {
-            $action = $this->commitModal->update($event);
-            if ('cancel' === $action) {
-                $this->commitModal = null;
-
-                return null;
-            }
-            if ('submit' === $action) {
-                $msg = trim((string) $this->commitModal->getFieldValue('message'));
-                $this->commitModal = null;
-                if (null !== $this->activeEditor) {
-                    $newContent = $this->activeEditor->getValue();
-                    $this->saveFileCommit($this->editingTargetFile ?? 'README.md', $newContent, $msg);
-                    $this->activeEditor = null;
-                }
-
-                return null;
-            }
-
-            return null;
-        }
-
-        if (null !== $this->prFormModal) {
-            $action = $this->prFormModal->update($event);
-            if ('cancel' === $action) {
-                $this->prFormModal = null;
-
-                return null;
-            }
-            if ('submit' === $action) {
-                $head = trim((string) $this->prFormModal->getFieldValue('head'));
-                $base = trim((string) $this->prFormModal->getFieldValue('base'));
-                $title = trim((string) $this->prFormModal->getFieldValue('title'));
-                $desc = trim((string) $this->prFormModal->getFieldValue('description'));
-                $this->prFormModal = null;
-                if (null !== $this->backend && '' !== $title) {
-                    try {
-                        $this->backend->createPullRequest(
-                            targetRepoName: $this->repo->name,
-                            authorUsername: $this->currentUser?->username ?? 'admin',
-                            title: $title,
-                            description: $desc,
-                            headBranch: $head,
-                            baseBranch: $base,
-                        );
-                        $this->loadPRs();
-                    } catch (\Throwable) {
-                    }
-                }
-
-                return null;
-            }
-
-            return null;
-        }
-
-        if (null !== $this->prCommentModal) {
-            $action = $this->prCommentModal->update($event);
-            if ('cancel' === $action) {
-                $this->prCommentModal = null;
-
-                return null;
-            }
-            if ('submit' === $action) {
-                $body = trim((string) $this->prCommentModal->getFieldValue('body'));
-                $this->prCommentModal = null;
-                if (null !== $this->backend && null !== $this->selectedPR && '' !== $body) {
-                    try {
-                        $this->backend->addPullRequestComment(
-                            targetRepoName: $this->repo->name,
-                            number: $this->selectedPR->number,
-                            authorUsername: $this->currentUser?->username ?? 'admin',
-                            body: $body,
-                        );
-                        $this->openPRDetail($this->selectedPR);
-                    } catch (\Throwable) {
-                    }
-                }
-
-                return null;
-            }
-
-            return null;
-        }
-
-        if (null !== $this->prConfirmDeleteModal) {
-            $action = $this->prConfirmDeleteModal->update($event);
-            if ('cancel' === $action) {
-                $this->prConfirmDeleteModal = null;
-
-                return null;
-            }
-            if ('submit' === $action) {
-                $this->prConfirmDeleteModal = null;
-                if (null !== $this->backend && null !== $this->selectedPR) {
-                    try {
-                        $this->backend->closePullRequest(
-                            targetRepoName: $this->repo->name,
-                            number: $this->selectedPR->number,
-                            username: $this->currentUser?->username ?? 'admin',
-                        );
-                        $this->viewingPRDetail = false;
-                        $this->selectedPR = null;
-                        $this->loadPRs();
-                    } catch (\Throwable) {
-                    }
-                }
-
-                return null;
-            }
-
-            return null;
-        }
-
-        // 2. If editor is active
-        if (null !== $this->activeEditor) {
-            if ($event instanceof KeyMsg) {
-                if ($event->is('esc')) {
-                    $this->activeEditor = null;
-
-                    return null;
-                }
-                if ($event->is('ctrl+s')) {
-                    // Open commit message modal
-                    $this->openCommitModal();
-
-                    return null;
-                }
-            }
-            $this->activeEditor->update($event);
-
-            return null;
-        }
-
-        // 3. Global shortcuts
-        if ($event instanceof KeyMsg) {
-            if ($event->is('q')) {
-                return 'quit';
-            }
-            if ($event->is('?')) {
-                $this->showHelp = !$this->showHelp;
-
-                return null;
-            }
-            if ($event->is(KeyMsg::ESC)) {
-                if ($this->viewingRefsPreview) {
-                    $this->viewingRefsPreview = false;
-
-                    return null;
-                }
-                if ($this->viewingBlame) {
-                    $this->viewingBlame = false;
-
-                    return null;
-                }
-                if ($this->viewingFile) {
-                    $this->viewingFile = false;
-
-                    return null;
-                }
-                if ($this->viewingCommitDiff) {
-                    $this->viewingCommitDiff = false;
-
-                    return null;
-                }
-                if ($this->viewingPRDetail) {
-                    $this->viewingPRDetail = false;
-                    $this->selectedPR = null;
-
-                    return null;
-                }
-                if (null !== $this->onBackCallback) {
-                    ($this->onBackCallback)();
-
-                    return null;
-                }
-            }
-        }
-
-        if ($event instanceof MouseMsg && $event->isLeftClick()) {
-            if ($this->statusbar->isHelpClicked($event)) {
-                $this->showHelp = !$this->showHelp;
-
-                return null;
-            }
-        }
-
-        // 4. Update Tabs first
-        $oldTab = $this->tabs->getActiveTab();
-        $this->tabs->update($event);
-        if ($this->tabs->getActiveTab() !== $oldTab) {
-            $this->viewingFile = false;
-            $this->viewingCommitDiff = false;
-            $this->viewingBlame = false;
-            $this->viewingRefsPreview = false;
-            $this->viewingPRDetail = false;
-            $this->updateStatusbar();
-
-            return null;
-        }
-
-        // 5. Dispatch to current tab component
-        switch ($this->tabs->getActiveTab()) {
-            case self::TAB_README:
-                if ($event instanceof KeyMsg) {
-                    if ($event->is('e')) {
-                        $this->openReadmeEditor();
-
-                        return null;
-                    }
-                    if ($event->is('n') && null === $this->readmePath) {
-                        $this->openReadmeEditor(isNew: true);
-
-                        return null;
-                    }
-                    if ($event->is('c')) {
-                        echo "\x1b]52;c;".base64_encode($this->readmeContent)."\x07";
-
-                        return null;
-                    }
-                }
-                $this->readmeViewport->update($event);
-                break;
-
-            case self::TAB_FILES:
-                if ($this->viewingRefsPreview) {
-                    if ($event instanceof KeyMsg && ($event->is('esc') || $event->is('q'))) {
-                        $this->viewingRefsPreview = false;
-
-                        return null;
-                    }
-                    $this->refsPreviewViewport->update($event);
-                } elseif ($this->viewingBlame) {
-                    if ($event instanceof KeyMsg && ($event->is('esc') || $event->is('b') || $event->is('q'))) {
-                        $this->viewingBlame = false;
-
-                        return null;
-                    }
-                    $this->blameViewport->update($event);
-                } elseif ($this->viewingFile) {
-                    if ($event instanceof KeyMsg) {
-                        if ($event->is('b')) {
-                            $this->openBlameView();
-
-                            return null;
-                        }
-                        if ($event->is('p')) {
-                            // Toggle preview between rendered and raw code
-                            $this->isFileRendered = !$this->isFileRendered;
-
-                            return null;
-                        }
-                        if ($event->is('e')) {
-                            $this->openFileEditor($this->currentFilePath);
-
-                            return null;
-                        }
-                        if ($event->is('d')) {
-                            $this->openDeleteFileModal($this->currentFilePath);
-
-                            return null;
-                        }
-                    }
-
-                    if ($this->isFileRendered) {
-                        $this->renderedDocViewport->update($event);
-                    } else {
-                        $codeRes = $this->fileViewer->update($event);
-                        if ('goto_def' === $codeRes || 'find_refs' === $codeRes) {
-                            $this->handleCodeIntel($codeRes);
-                        }
-                    }
-                } else {
-                    if ($event instanceof KeyMsg) {
-                        if ($event->is('n')) {
-                            $this->openNewFileModal();
-
-                            return null;
-                        }
-                        if ($event->is('e')) {
-                            $sel = $this->filesSelector->getSelectedItem();
-                            if (is_array($sel) && ($sel['type'] ?? '') !== 'tree' && ($sel['id'] ?? '') !== '..') {
-                                $this->openFileEditor((string) $sel['path']);
-
-                                return null;
-                            }
-                        }
-                        if ($event->is('d')) {
-                            $sel = $this->filesSelector->getSelectedItem();
-                            if (is_array($sel) && ($sel['type'] ?? '') !== 'tree' && ($sel['id'] ?? '') !== '..') {
-                                $this->openDeleteFileModal((string) $sel['path']);
-
-                                return null;
-                            }
-                        }
-                    }
-
-                    $res = $this->filesSelector->update($event);
-                    if ('select' === $res) {
-                        $selected = $this->filesSelector->getSelectedItem();
-                        if (is_array($selected)) {
-                            if (($selected['type'] ?? '') === 'tree') {
-                                $this->loadFiles($selected['path']);
-                            } else {
-                                $this->openFile($selected['path']);
-                            }
-                        }
-                    } elseif ('back' === $res && '' !== $this->currentSubpath) {
-                        // Navigate to the parent directory (Go: backtab/esc in a subtree).
-                        $parent = dirname($this->currentSubpath);
-                        $this->loadFiles('.' === $parent ? '' : $parent);
-
-                        return null;
-                    }
-                }
-                break;
-
-            case self::TAB_LOG:
-                if ($this->viewingCommitDiff) {
-                    if ($event instanceof KeyMsg && $event->is('c') && null !== $this->currentCommit) {
-                        try {
-                            $diff = $this->gitService->getDiff($this->repo, $this->currentCommit->hash);
-                            echo "\x1b]52;c;".base64_encode($diff->rawDiff)."\x07";
-                        } catch (\Throwable) {
-                        }
-
-                        return null;
-                    }
-                    $this->commitDiffViewport->update($event);
-                } else {
-                    $res = $this->logSelector->update($event);
-                    if ('select' === $res) {
-                        $selected = $this->logSelector->getSelectedItem();
-                        if (is_array($selected) && isset($selected['commit']) && $selected['commit'] instanceof Commit) {
-                            $this->openCommitDiff($selected['commit']);
-                        }
-                    }
-                }
-                break;
-
-            case self::TAB_BRANCHES:
-                $res = $this->branchesSelector->update($event);
-                if ('select' === $res) {
-                    $selected = $this->branchesSelector->getSelectedItem();
-                    if (is_array($selected)) {
-                        $this->currentRef = $selected['id'];
-                        $this->header->setBadges([$this->currentRef, $this->repo->isPrivate ? 'private' : 'public']);
-                        $this->loadReadme();
-                        $this->loadFiles('');
-                        $this->loadCommits();
-                    }
-                }
-                break;
-
-            case self::TAB_TAGS:
-                $this->tagsSelector->update($event);
-                break;
-
-            case self::TAB_PRS:
-                if ($this->viewingPRDetail) {
-                    $this->handlePRDetailKeys($event);
-                } else {
-                    if ($event instanceof KeyMsg) {
-                        if ($event->is('n')) {
-                            $this->openPRCreateModal();
-
-                            return null;
-                        }
-                    }
-                    $res = $this->prsSelector->update($event);
-                    if ('select' === $res) {
-                        $sel = $this->prsSelector->getSelectedItem();
-                        if (is_array($sel) && isset($sel['pr']) && $sel['pr'] instanceof PullRequestModel) {
-                            $this->openPRDetail($sel['pr']);
-                        }
-                    }
-                }
-                break;
-
-            case self::TAB_PROFILE:
-                $this->profileViewport->update($event);
-                break;
-
-            case self::TAB_SETTINGS:
-                $this->settingsForm->update($event);
-                break;
-        }
-
-        $this->updateStatusbar();
-
-        return null;
-    }
-
-    private function handleCodeIntel(string $action): void
-    {
-        if (null === $this->codeIntel) {
-            return;
-        }
-
-        try {
-            $line = $this->fileViewer->getCursorLine();
-            $sha = $this->currentRef;
-            if ('goto_def' === $action) {
-                $def = $this->codeIntel->findDefinition($this->repo->name, $sha, $this->currentFilePath, $line, 0);
-                if (null !== $def) {
-                    $this->openFile($def->path);
-                    $this->fileViewer->setCursorLine($def->line);
-                }
-            } elseif ('find_refs' === $action) {
-                $refs = $this->codeIntel->findReferences($this->repo->name, $sha, $this->currentFilePath, $line, 0);
-                $lines = [];
-                $lines[] = Style::create()->bold(true)->foreground(TokyoNight::CYAN)->render('References ('.count($refs).'):');
-                $lines[] = '';
-                foreach ($refs as $r) {
-                    $lines[] = sprintf('  📄 %s:%d:%d', $r->path, $r->line + 1, $r->col + 1);
-                }
-                $this->refsPreviewViewport->setContent(implode("\n", $lines));
-                $this->viewingRefsPreview = true;
-            }
-        } catch (\Throwable) {
-        }
-    }
-
-    private function handlePRDetailKeys(InputEvent $event): void
-    {
-        if (!$event instanceof KeyMsg || null === $this->selectedPR) {
-            return;
-        }
-
-        if ($this->prCommentMenuActive) {
-            $this->prCommentMenuActive = false;
-            if ($event->is('c') || $event->is('n')) {
-                $this->openPRCommentModal();
-
-                return;
-            }
-            if ($event->is('x') || $event->is('d')) {
-                $this->openPRConfirmDeleteModal();
-
-                return;
-            }
-
-            return;
-        }
-
-        if ($event->is('tab') || $event->is(KeyMsg::TAB)) {
-            $this->prDetailTab = ($this->prDetailTab + 1) % 4;
-            $this->renderPRDetailContent();
-
-            return;
-        }
-
-        if ($event->is(KeyMsg::BACKTAB)) {
-            $this->prDetailTab = ($this->prDetailTab - 1 + 4) % 4;
-            $this->renderPRDetailContent();
-
-            return;
-        }
-
-        if ($event->is('m') && null !== $this->backend && 'open' === $this->selectedPR->status) {
-            try {
-                $this->backend->mergePullRequest(
-                    targetRepoName: $this->repo->name,
-                    number: $this->selectedPR->number,
-                    mergedByUsername: $this->currentUser?->username ?? 'admin',
-                );
-                $this->selectedPR = $this->backend->getPullRequest($this->repo->name, $this->selectedPR->number);
-                $this->renderPRDetailContent();
-            } catch (\Throwable) {
-            }
-
-            return;
-        }
-
-        if ($event->is('s') && null !== $this->backend) {
-            try {
-                if ('open' === $this->selectedPR->status) {
-                    $this->selectedPR = $this->backend->closePullRequest($this->repo->name, $this->selectedPR->number, $this->currentUser?->username ?? 'admin');
-                } else {
-                    $this->selectedPR = $this->backend->reopenPullRequest($this->repo->name, $this->selectedPR->number, $this->currentUser?->username ?? 'admin');
-                }
-                $this->renderPRDetailContent();
-            } catch (\Throwable) {
-            }
-
-            return;
-        }
-
-        if ($event->is('c')) {
-            $this->prCommentMenuActive = true;
-
-            return;
-        }
-
-        if ($event->is('d')) {
-            $this->openPRConfirmDeleteModal();
-
-            return;
-        }
-
-        $this->prDetailViewport->update($event);
-    }
-
-    private function openPRDetail(PullRequestModel $pr): void
-    {
-        $this->selectedPR = $pr;
-        $this->viewingPRDetail = true;
-        $this->prDetailTab = 0;
-        $this->renderPRDetailContent();
-    }
-
-    private function renderPRDetailContent(): void
-    {
-        if (null === $this->selectedPR) {
-            return;
-        }
-
-        $tabsHeader = '[0: About]  [1: Commits]  [2: Changes]  [3: Comments]';
-        $activeTabName = match ($this->prDetailTab) {
-            0 => 'About',
-            1 => 'Commits',
-            2 => 'Changes',
-            default => 'Comments',
+        return match ($this->tab) {
+            self::TAB_README => $this->handleDocScroll($tok, $txt, $this->readmeLineCount()),
+            self::TAB_FILES => $this->handleFilesTabKey($tok, $txt),
+            self::TAB_COMMITS => $this->handleCommitsTabKey($tok, $txt),
+            self::TAB_BRANCHES => $this->handleRefListKey($tok, $txt, $this->branchList(), true),
+            self::TAB_TAGS => $this->handleRefListKey($tok, $txt, $this->tagList(), false),
+            self::TAB_SETTINGS => $this->handleSettingsTabKey($tok, $txt),
+            self::TAB_PULLS => $this->handlePullsTabKey($tok, $txt),
+            default => false,
         };
+    }
 
-        $sb = [];
-        $sb[] = Style::create()->bold(true)->foreground(TokyoNight::ACTIVE_BORDER)->render("#{$this->selectedPR->number} {$this->selectedPR->title}");
-        $sb[] = 'Status: '.$this->selectedPR->status.' | Author: '.$this->selectedPR->authorUsername;
-        $sb[] = 'Branch: '.$this->selectedPR->headBranch.' → '.$this->selectedPR->baseBranch;
-        $sb[] = Style::create()->foreground(TokyoNight::MUTED)->render(str_repeat('─', 60));
-        $sb[] = Style::create()->foreground(TokyoNight::CYAN)->render("Active Tab: {$activeTabName} (Press Tab to switch)");
-        $sb[] = '';
+    private function switchTab(int $tab): void
+    {
+        $this->tab = $tab;
+        $this->sel = 0;
+        $this->scroll = 0;
+        $this->fileOpen = false;
+        $this->diffOpen = false;
+        $this->refsOpen = false;
+        $this->settingsEditing = false;
+    }
 
-        if (0 === $this->prDetailTab) {
-            $sb[] = '' !== $this->selectedPR->description ? $this->selectedPR->description : 'No description provided.';
-        } elseif (1 === $this->prDetailTab) {
-            try {
-                $commits = $this->gitService->getCommits($this->repo, $this->selectedPR->headBranch, 10);
-                foreach ($commits as $c) {
-                    $sb[] = '• '.$c->shortHash.' '.$c->subject.' ('.$c->authorName.')';
-                }
-            } catch (\Throwable) {
-                $sb[] = "No commits found on branch {$this->selectedPR->headBranch}.";
-            }
-        } elseif (2 === $this->prDetailTab) {
-            try {
-                $diff = $this->gitService->getDiff($this->repo, $this->selectedPR->headBranch);
-                $sb[] = $diff->rawDiff;
-            } catch (\Throwable) {
-                $sb[] = 'No diff available.';
-            }
+    private function handleDocScroll(string $tok, ?string $txt, int $total): bool
+    {
+        if (Keys::UP === $tok || 'k' === $txt) {
+            $this->scroll = max(0, $this->scroll - 1);
+        } elseif (Keys::DOWN === $tok || 'j' === $txt) {
+            $this->scroll = max(0, min($this->scroll + 1, max(0, $total - 1)));
+        } elseif (Keys::PAGE_UP === $tok) {
+            $this->scroll = max(0, $this->scroll - 10);
+        } elseif (Keys::PAGE_DOWN === $tok) {
+            $this->scroll = max(0, min($this->scroll + 10, max(0, $total - 1)));
+        } elseif (Keys::HOME === $tok || 'g' === $txt) {
+            $this->scroll = 0;
+        } elseif (Keys::END === $tok || 'G' === $txt) {
+            $this->scroll = max(0, $total - 1);
         } else {
-            if (null !== $this->backend) {
-                $comments = $this->backend->listPullRequestComments($this->repo->name, $this->selectedPR->number);
-                if (empty($comments)) {
-                    $sb[] = "No comments yet. Press 'c' then 'n' to add one.";
-                } else {
-                    foreach ($comments as $cm) {
-                        $sb[] = '💬 @'.$cm->authorUsername.' ('.$cm->createdAt->format('Y-m-d H:i').'):';
-                        $sb[] = '   '.$cm->body;
-                        $sb[] = '';
-                    }
-                }
+            return false;
+        }
+
+        return true;
+    }
+
+    private function handleListMove(string $tok, ?string $txt, int $count): bool
+    {
+        if (Keys::UP === $tok || 'k' === $txt) {
+            $this->sel = max(0, $this->sel - 1);
+        } elseif (Keys::DOWN === $tok || 'j' === $txt) {
+            $this->sel = max(0, min($this->sel + 1, max(0, $count - 1)));
+        } elseif (Keys::HOME === $tok || 'g' === $txt) {
+            $this->sel = 0;
+        } elseif (Keys::END === $tok || 'G' === $txt) {
+            $this->sel = max(0, $count - 1);
+        } else {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function handleFilesTabKey(string $tok, ?string $txt): bool
+    {
+        $entries = $this->tree();
+        if (Keys::BACKSPACE === $tok && '' !== $this->subpath) {
+            $this->subpath = $this->parentPath($this->subpath);
+            $this->sel = 0;
+
+            return true;
+        }
+        if (Keys::ENTER === $tok && [] !== $entries) {
+            $entry = $entries[min($this->sel, \count($entries) - 1)];
+            if ($entry->isDirectory()) {
+                $this->subpath = $entry->path;
+                $this->sel = 0;
+            } else {
+                $this->openFile($entry->path);
+            }
+
+            return true;
+        }
+
+        return $this->handleListMove($tok, $txt, \count($entries));
+    }
+
+    private function handleCommitsTabKey(string $tok, ?string $txt): bool
+    {
+        $commits = $this->commitList();
+        if (Keys::ENTER === $tok && [] !== $commits) {
+            $this->openDiff($commits[min($this->sel, \count($commits) - 1)]->hash);
+
+            return true;
+        }
+
+        return $this->handleListMove($tok, $txt, \count($commits));
+    }
+
+    /**
+     * @param list<string> $list
+     */
+    private function handleRefListKey(string $tok, ?string $txt, array $list, bool $branch): bool
+    {
+        if (Keys::ENTER === $tok && [] !== $list) {
+            $this->switchRef($list[min($this->sel, \count($list) - 1)]);
+
+            return true;
+        }
+
+        return $this->handleListMove($tok, $txt, \count($list));
+    }
+
+    private function handleSettingsTabKey(string $tok, ?string $txt): bool
+    {
+        if ('e' === $txt && $this->canEditSettings()) {
+            $this->settingsEditing = true;
+            $this->settingsField = 0;
+            $this->settingsForm = [
+                'description' => $this->db?->description() ?? '',
+                'private' => $this->db?->isPrivate() ?? false,
+            ];
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private function handleFileKey(string $seq): bool
+    {
+        $tok = Keys::normalize($seq);
+        $txt = Keys::text($seq);
+        $last = max(0, \count($this->fileRaw) - 1);
+
+        if (Keys::ESCAPE === $tok || 'q' === $txt) {
+            $this->fileOpen = false;
+
+            return true;
+        }
+        if (Keys::UP === $tok || 'k' === $txt) {
+            $this->cursorLine = max(0, $this->cursorLine - 1);
+        } elseif (Keys::DOWN === $tok || 'j' === $txt) {
+            $this->cursorLine = min($last, $this->cursorLine + 1);
+        } elseif (Keys::LEFT === $tok) {
+            $this->cursorCol = max(0, $this->cursorCol - 1);
+        } elseif (Keys::RIGHT === $tok) {
+            $this->cursorCol = min($this->currentLineLength(), $this->cursorCol + 1);
+        } elseif (Keys::PAGE_UP === $tok) {
+            $this->cursorLine = max(0, $this->cursorLine - 10);
+        } elseif (Keys::PAGE_DOWN === $tok) {
+            $this->cursorLine = min($last, $this->cursorLine + 10);
+        } elseif (Keys::HOME === $tok || 'g' === $txt) {
+            $this->cursorLine = 0;
+        } elseif (Keys::END === $tok || 'G' === $txt) {
+            $this->cursorLine = $last;
+        } elseif ('d' === $txt) {
+            $this->gotoDefinition();
+        } elseif ('r' === $txt) {
+            $this->findReferences();
+        } else {
+            return false;
+        }
+        $this->cursorCol = min($this->cursorCol, $this->currentLineLength());
+
+        return true;
+    }
+
+    private function handleRefsKey(string $seq): bool
+    {
+        $tok = Keys::normalize($seq);
+        $txt = Keys::text($seq);
+
+        if (Keys::ESCAPE === $tok || 'q' === $txt) {
+            $this->refsOpen = false;
+        } elseif (Keys::UP === $tok || 'k' === $txt) {
+            $this->refSel = max(0, $this->refSel - 1);
+        } elseif (Keys::DOWN === $tok || 'j' === $txt) {
+            $this->refSel = max(0, min($this->refSel + 1, \count($this->refs) - 1));
+        } elseif (Keys::ENTER === $tok && [] !== $this->refs) {
+            $this->refsOpen = false;
+            $this->openLocation($this->refs[min($this->refSel, \count($this->refs) - 1)]);
+        } else {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function handlePullsTabKey(string $tok, ?string $txt): bool
+    {
+        $pulls = $this->pullList();
+        if (Keys::ENTER === $tok && [] !== $pulls) {
+            $this->prDetailOpen = true;
+
+            return true;
+        }
+
+        if ('m' === $txt && [] !== $pulls && null !== $this->mergePullRequest) {
+            $pr = $this->selectedPull();
+            if ($pr?->isOpen()) {
+                $this->prMergeConfirm = true;
+
+                return true;
             }
         }
 
-        $this->prDetailViewport->setContent(implode("\n", $sb));
+        return $this->handleListMove($tok, $txt, \count($pulls));
     }
 
-    private function openPRCreateModal(): void
+    private function handlePrDetailKey(string $seq): bool
     {
-        $headField = new TextInputField('head', 'Head branch (source)', $this->currentRef);
-        $baseField = new TextInputField('base', 'Base branch (target)', $this->repo->defaultBranch);
-        $titleField = new TextInputField('title', 'Title', '');
-        $descField = new TextAreaField('description', 'Description', '');
-        $this->prFormModal = new FormComponent('New Pull Request', 'Submit changes to repository', [
-            $headField,
-            $baseField,
-            $titleField,
-            $descField,
-        ]);
-    }
+        $tok = Keys::normalize($seq);
+        $txt = Keys::text($seq);
 
-    private function openPRCommentModal(): void
-    {
-        $bodyField = new TextAreaField('body', 'Comment message', '');
-        $this->prCommentModal = new FormComponent('New Comment', 'Comment on PR #'.$this->selectedPR?->number, [
-            $bodyField,
-        ]);
-    }
+        if (Keys::ESCAPE === $tok || 'q' === $txt) {
+            $this->prDetailOpen = false;
 
-    private function openPRConfirmDeleteModal(): void
-    {
-        $this->prConfirmDeleteModal = new FormComponent('Close Pull Request', 'Are you sure you want to close PR #'.$this->selectedPR?->number.'?', [
-            new ToggleField('confirm', 'Confirm closing', true),
-        ]);
-    }
-
-    private function openReadmeEditor(bool $isNew = false): void
-    {
-        $this->isEditingReadme = true;
-        $this->editingTargetFile = $this->readmePath ?? 'README.md';
-        $content = $isNew ? '# '.$this->repo->name."\n\n" : $this->readmeContent;
-        $this->activeEditor = new EditorComponent($this->editingTargetFile, $content);
-    }
-
-    private function openFileEditor(string $path): void
-    {
-        $this->isEditingReadme = false;
-        $this->editingTargetFile = $path;
-        try {
-            $raw = $this->gitService->getBlob($this->repo, $this->currentRef, $path);
-        } catch (\Throwable) {
-            $raw = '';
+            return true;
         }
-        $this->activeEditor = new EditorComponent($path, $raw);
+
+        if ('m' === $txt && null !== ($pr = $this->selectedPull()) && $pr->isOpen() && null !== $this->mergePullRequest) {
+            $this->prMergeConfirm = true;
+
+            return true;
+        }
+
+        if ('d' === $txt && null !== ($pr = $this->selectedPull()) && null !== $this->pullRequestQuery && null !== $this->db) {
+            try {
+                $raw = $this->pullRequestQuery->diff($this->actor, $this->db->name(), $pr->number());
+                $this->prDiffLines = preg_split('/\r\n|\r|\n/', rtrim($raw, "\n")) ?: [];
+                $this->prDiffScroll = 0;
+                $this->prDiffOpen = true;
+            } catch (\Throwable $e) {
+                $this->flash = 'Failed to load diff: '.$e->getMessage();
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
-    private function openNewFileModal(): void
+    private function handlePrMergeConfirmKey(string $seq): bool
     {
-        $pathField = new TextInputField('path', 'File path', ('' !== $this->currentSubpath ? $this->currentSubpath.'/' : '').'new_file.txt');
-        $this->activeModal = new FormComponent('Create New File', 'Add a file to repository', [
-            $pathField,
-        ]);
+        $tok = Keys::normalize($seq);
+        $txt = Keys::text($seq);
+
+        if ('y' === $txt || 'Y' === $txt) {
+            $this->confirmMerge();
+
+            return true;
+        }
+
+        if ('n' === $txt || 'N' === $txt || Keys::ESCAPE === $tok) {
+            $this->prMergeConfirm = false;
+
+            return true;
+        }
+
+        return true;
     }
 
-    private function openDeleteFileModal(string $path): void
+    private function handlePrDiffKey(string $seq): bool
     {
-        $this->activeModal = new FormComponent('Delete File', 'Delete '.basename($path).' from repository?', [
-            new ToggleField('confirm', 'Confirm delete', true),
-        ]);
+        $tok = Keys::normalize($seq);
+        $txt = Keys::text($seq);
+
+        if (Keys::ESCAPE === $tok || 'q' === $txt) {
+            $this->prDiffOpen = false;
+
+            return true;
+        }
+
+        $total = \count($this->prDiffLines);
+        if (Keys::UP === $tok || 'k' === $txt) {
+            $this->prDiffScroll = max(0, $this->prDiffScroll - 1);
+        } elseif (Keys::DOWN === $tok || 'j' === $txt) {
+            $this->prDiffScroll = max(0, min($this->prDiffScroll + 1, max(0, $total - 1)));
+        }
+
+        return true;
     }
 
-    private function openCommitModal(): void
+    private function confirmMerge(): void
     {
-        $defaultMsg = 'Update '.basename($this->editingTargetFile ?? 'file');
-        $msgField = new TextInputField('message', 'Commit message', $defaultMsg);
-        $this->commitModal = new FormComponent('Commit Changes', 'Save file and commit to Git', [
-            $msgField,
-        ]);
-    }
+        $pr = $this->selectedPull();
+        if (null === $pr || null === $this->mergePullRequest || null === $this->db) {
+            $this->prMergeConfirm = false;
 
-    private function saveFileCommit(string $path, string $content, string $message): void
-    {
-        $authorName = $this->currentUser?->name ?? 'codes.sh';
-        $authorEmail = $this->currentUser?->email ?? 'codes@sh';
+            return;
+        }
+
         try {
-            $this->plumbing->writeFile(
-                repo: $this->repo,
-                branch: $this->currentRef,
-                filePath: $path,
-                content: $content,
-                message: $message,
-                authorName: $authorName,
-                authorEmail: $authorEmail,
-            );
-            $this->loadReadme();
-            $this->loadFiles($this->currentSubpath);
-            $this->loadCommits();
-        } catch (\Throwable) {
+            ($this->mergePullRequest)($this->actor, $this->db->name(), $pr->number());
+            $this->flash = sprintf('Merged PR #%d', $pr->number());
+            $this->pullsCache = null;
+            $this->prMergeConfirm = false;
+            $this->prDetailOpen = false;
+        } catch (\Throwable $e) {
+            $this->flash = 'Merge failed: '.$e->getMessage();
+            $this->prMergeConfirm = false;
         }
     }
 
-    private function openBlameView(): void
+    /**
+     * @return list<PullRequest>
+     */
+    private function pullList(): array
     {
-        $this->viewingBlame = true;
-        $lines = $this->gitService->getBlame($this->repo, $this->currentRef, $this->currentFilePath);
-        $this->blameViewport->setContent(implode("\n", $lines));
+        if (null === $this->db || null === $this->pullRequestQuery) {
+            return [];
+        }
+
+        if (null === $this->pullsCache) {
+            try {
+                $this->pullsCache = $this->pullRequestQuery->list($this->actor, $this->db->name());
+            } catch (\Throwable) {
+                $this->pullsCache = [];
+            }
+        }
+
+        return $this->pullsCache;
     }
+
+    private function selectedPull(): ?PullRequest
+    {
+        $pulls = $this->pullList();
+
+        return $pulls[min($this->sel, max(0, \count($pulls) - 1))] ?? null;
+    }
+
+    private function handleDiffKey(string $seq): bool
+    {
+        $tok = Keys::normalize($seq);
+        $txt = Keys::text($seq);
+        if (Keys::ESCAPE === $tok || 'q' === $txt) {
+            $this->diffOpen = false;
+
+            return true;
+        }
+
+        return $this->handleDocScroll($tok, $txt, \count($this->diffLines));
+    }
+
+    private function handleSettingsKey(string $seq): bool
+    {
+        $tok = Keys::normalize($seq);
+        $txt = Keys::text($seq);
+
+        if (Keys::ESCAPE === $tok) {
+            $this->settingsEditing = false;
+        } elseif (Keys::ENTER === $tok) {
+            $this->saveSettings();
+        } elseif (Keys::TAB === $tok || Keys::DOWN === $tok) {
+            $this->settingsField = ($this->settingsField + 1) % 2;
+        } elseif (Keys::BACKTAB === $tok || Keys::UP === $tok) {
+            $this->settingsField = ($this->settingsField + 1) % 2;
+        } elseif (1 === $this->settingsField && (Keys::SPACE === $tok || Keys::LEFT === $tok || Keys::RIGHT === $tok)) {
+            $this->settingsForm['private'] = !$this->settingsForm['private'];
+        } elseif (0 === $this->settingsField && Keys::BACKSPACE === $tok) {
+            $this->settingsForm['description'] = mb_substr($this->settingsForm['description'], 0, -1);
+        } elseif (0 === $this->settingsField && null !== $txt) {
+            $this->settingsForm['description'] .= $txt;
+        }
+
+        return true;
+    }
+
+    // --- actions -----------------------------------------------------------
 
     private function openFile(string $path): void
     {
-        $this->currentFilePath = $path;
-        $this->viewingFile = true;
-        $this->viewingBlame = false;
-        $this->viewingRefsPreview = false;
         try {
-            $content = $this->gitService->getBlob($this->repo, $this->currentRef, $path);
-            $ext = strtolower(pathinfo($path, \PATHINFO_EXTENSION));
-
-            if (in_array($ext, ['md', 'markdown', 'csv', 'tsv', 'html'], true)) {
-                $this->isFileRendered = true;
-                $rendered = $this->renderer->renderDocument($path, $content, 80);
-                $this->renderedDocViewport->setContent($rendered);
-            } else {
-                $this->isFileRendered = false;
-                $this->fileViewer->setCode($content, $path);
-            }
+            $content = $this->reader->getBlob($this->git, $this->ref, $path);
         } catch (\Throwable $e) {
-            $this->isFileRendered = false;
-            $this->fileViewer->setCode('Error reading file: '.$e->getMessage(), $path);
+            $this->flash = 'Cannot open '.$path;
+
+            return;
         }
+        $this->fileRaw = preg_split('/\r\n|\r|\n/', rtrim($content, "\n")) ?: [''];
+        $this->filePath = $path;
+        $this->fileOpen = true;
+        $this->cursorLine = 0;
+        $this->cursorCol = 0;
     }
 
-    private function openCommitDiff(Commit $commit): void
+    private function switchRef(string $ref): void
     {
-        $this->currentCommit = $commit;
-        $this->viewingCommitDiff = true;
+        if ('' === $ref || $ref === $this->ref) {
+            return;
+        }
+        $this->ref = $ref;
+        $this->readmeCache = null;
+        $this->treeCache = [];
+        $this->commits = null;
+        $this->subpath = '';
+        $this->sel = 0;
+        $this->scroll = 0;
+        $this->flash = 'Switched to '.$ref;
+    }
+
+    private function openDiff(string $sha): void
+    {
         try {
-            $diff = $this->gitService->getDiff($this->repo, $commit->hash);
-            $sb = [];
-            $sb[] = Style::create()->bold(true)->foreground(TokyoNight::ACTIVE_BORDER)->render('Commit: '.$commit->hash);
-            $sb[] = 'Author: '.$commit->authorName.' <'.$commit->authorEmail.'>';
-            $sb[] = 'Date:   '.date('Y-m-d H:i:s', $commit->timestamp);
-            $sb[] = '';
-            $sb[] = $commit->subject;
-            if ('' !== $commit->body) {
-                $sb[] = '';
-                $sb[] = $commit->body;
-            }
-            $sb[] = '';
-            $sb[] = Style::create()->foreground(TokyoNight::MUTED)->render(str_repeat('─', 60));
-            $sb[] = "Diff (+{$diff->totalAdditions} / -{$diff->totalDeletions}):";
-            $sb[] = '';
-            $sb[] = $diff->rawDiff;
+            $diff = $this->reader->getDiff($this->git, $sha);
+        } catch (\Throwable) {
+            $this->flash = 'Cannot load diff.';
 
-            $this->commitDiffViewport->setContent(implode("\n", $sb));
-        } catch (\Throwable $e) {
-            $this->commitDiffViewport->setContent('Error loading diff: '.$e->getMessage());
+            return;
         }
+        $this->diffLines = preg_split('/\r\n|\r|\n/', rtrim($diff->rawDiff, "\n")) ?: [];
+        $this->diffOpen = true;
+        $this->scroll = 0;
     }
 
-    private function updateStatusbar(): void
+    private function gotoDefinition(): void
     {
-        $percent = match ($this->tabs->getActiveTab()) {
-            self::TAB_README => $this->readmeViewport->getScrollPercentage(),
-            self::TAB_FILES => $this->viewingFile ? ($this->isFileRendered ? $this->renderedDocViewport->getScrollPercentage() : 0) : 0,
-            self::TAB_LOG => $this->viewingCommitDiff ? $this->commitDiffViewport->getScrollPercentage() : 0,
-            default => 0,
-        };
+        $sha = $this->sha();
+        if ('' === $sha || !$this->codeIntel->has($this->name, $sha)) {
+            $this->flash = 'No code intelligence index for this commit.';
 
-        $this->statusbar->setStatus(
-            $this->repo->name,
-            $this->currentRef,
-            $this->tabs->getActiveTabName(),
-            "≡ {$percent}%"
-        );
+            return;
+        }
+        $def = $this->codeIntel->findDefinition($this->name, $sha, $this->filePath, $this->cursorLine, $this->cursorCol);
+        if (null === $def) {
+            $this->flash = 'No definition found at cursor.';
+
+            return;
+        }
+        $this->openLocation($def);
     }
 
-    public function view(int $width, int $height): string
+    private function findReferences(): void
     {
-        if ($width <= 0 || $height <= 0) {
+        $sha = $this->sha();
+        if ('' === $sha || !$this->codeIntel->has($this->name, $sha)) {
+            $this->flash = 'No code intelligence index for this commit.';
+
+            return;
+        }
+        $refs = $this->codeIntel->findReferences($this->name, $sha, $this->filePath, $this->cursorLine, $this->cursorCol);
+        if ([] === $refs) {
+            $this->flash = 'No references found at cursor.';
+
+            return;
+        }
+        $this->refs = $refs;
+        $this->refSel = 0;
+        $this->refsOpen = true;
+    }
+
+    private function openLocation(SymbolLocation $loc): void
+    {
+        if ($loc->path !== $this->filePath) {
+            try {
+                $content = $this->reader->getBlob($this->git, $this->ref, $loc->path);
+            } catch (\Throwable) {
+                $this->flash = 'Cannot open '.$loc->path;
+
+                return;
+            }
+            $this->fileRaw = preg_split('/\r\n|\r|\n/', rtrim($content, "\n")) ?: [''];
+            $this->filePath = $loc->path;
+            $this->fileOpen = true;
+        }
+        $this->cursorLine = max(0, min($loc->line, \count($this->fileRaw) - 1));
+        $this->cursorCol = max(0, $loc->col);
+        $this->flash = '→ '.$loc->path.':'.($loc->line + 1);
+    }
+
+    private function saveSettings(): void
+    {
+        if (null === $this->db) {
+            $this->settingsEditing = false;
+
+            return;
+        }
+        try {
+            ($this->updateSettings)(
+                $this->actor,
+                $this->db->name(),
+                $this->settingsForm['description'],
+                null,
+                $this->settingsForm['private'],
+                null,
+            );
+        } catch (AccessDenied|NotFound|Conflict|InvalidInput $e) {
+            $this->flash = $e->getMessage();
+
+            return;
+        }
+        $this->settingsEditing = false;
+        $this->flash = 'Settings saved.';
+    }
+
+    private function canEditSettings(): bool
+    {
+        return null !== $this->db && null !== $this->actor;
+    }
+
+    // --- data accessors (memoised) -----------------------------------------
+
+    private function sha(): string
+    {
+        return $this->shaCache[$this->ref] ??= $this->resolveSha($this->ref);
+    }
+
+    private function resolveSha(string $ref): string
+    {
+        try {
+            $commits = $this->reader->getCommits($this->git, $ref, 1, 0);
+        } catch (\Throwable) {
             return '';
         }
 
-        // Top Header & Tabs (2 lines)
-        $headerView = $this->header->view($width, 1);
-        $tabsView = $this->tabs->view($width, 1);
-
-        // Bottom Statusbar (1 line)
-        $statusbarView = $this->statusbar->view($width, 1);
-
-        // Optional Help overlay in footer
-        $helpHeight = $this->showHelp ? 2 : 0;
-        $helpView = '';
-        if ($this->showHelp) {
-            $helpStyle = Style::create()->background(TokyoNight::STATUS_BAR)->foreground(TokyoNight::FG)->width($width);
-            $helpView = $helpStyle->render('  [tab/shift+tab] Change tab • [j/k/↑/↓] Navigate • [e] Edit • [n] New • [d] Delete • [c] Copy • [b] Blame • [esc] Back • [q] Quit');
-        }
-
-        // Available body height
-        $bodyHeight = max(1, $height - 2 - 1 - $helpHeight);
-
-        // If active editor or modal
-        if (null !== $this->activeEditor) {
-            $bodyView = $this->activeEditor->view($width, $bodyHeight);
-        } elseif (null !== $this->commitModal) {
-            $bodyView = $this->commitModal->view($width, $bodyHeight);
-        } elseif (null !== $this->prFormModal) {
-            $bodyView = $this->prFormModal->view($width, $bodyHeight);
-        } elseif (null !== $this->prCommentModal) {
-            $bodyView = $this->prCommentModal->view($width, $bodyHeight);
-        } elseif (null !== $this->prConfirmDeleteModal) {
-            $bodyView = $this->prConfirmDeleteModal->view($width, $bodyHeight);
-        } elseif (null !== $this->activeModal) {
-            $bodyView = $this->activeModal->view($width, $bodyHeight);
-        } else {
-            $bodyView = $this->renderCurrentTab($width, $bodyHeight);
-        }
-
-        $components = [$headerView, $tabsView, $bodyView];
-        if ($this->showHelp) {
-            $components[] = $helpView;
-        }
-        $components[] = $statusbarView;
-
-        return implode("\n", $components);
+        return $commits[0]->hash ?? '';
     }
 
-    private function renderCurrentTab(int $width, int $height): string
+    /**
+     * @return list<TreeEntry>
+     */
+    private function tree(): array
     {
-        return match ($this->tabs->getActiveTab()) {
-            self::TAB_README => $this->readmeViewport->view($width, $height),
-            self::TAB_FILES => $this->renderFilesTab($width, $height),
-            self::TAB_LOG => $this->viewingCommitDiff
-                ? $this->commitDiffViewport->view($width, $height)
-                : $this->logSelector->view($width, $height),
-            self::TAB_BRANCHES => $this->branchesSelector->view($width, $height),
-            self::TAB_TAGS => $this->tagsSelector->view($width, $height),
-            self::TAB_PRS => $this->viewingPRDetail
-                ? $this->prDetailViewport->view($width, $height)
-                : $this->prsSelector->view($width, $height),
-            self::TAB_PROFILE => $this->profileViewport->view($width, $height),
-            self::TAB_SETTINGS => $this->settingsForm->view($width, $height),
-            default => '',
+        $key = $this->ref.':'.$this->subpath;
+        if (!isset($this->treeCache[$key])) {
+            try {
+                $this->treeCache[$key] = array_values($this->reader->getTree($this->git, $this->ref, $this->subpath));
+            } catch (\Throwable) {
+                $this->treeCache[$key] = [];
+            }
+        }
+
+        return $this->treeCache[$key];
+    }
+
+    /**
+     * @return list<Commit>
+     */
+    private function commitList(): array
+    {
+        if (null === $this->commits) {
+            try {
+                $this->commits = array_values($this->reader->getCommits($this->git, $this->ref, 100, 0));
+            } catch (\Throwable) {
+                $this->commits = [];
+            }
+        }
+
+        return $this->commits;
+    }
+
+    /**
+     * @return array{branches: list<string>, tags: list<string>, current: string}
+     */
+    private function refsData(): array
+    {
+        if (null === $this->refsData) {
+            try {
+                $refs = $this->reader->getRefs($this->git);
+                $this->refsData = ['branches' => array_values($refs->branches), 'tags' => array_values($refs->tags), 'current' => $refs->currentBranch];
+            } catch (\Throwable) {
+                $this->refsData = ['branches' => [], 'tags' => [], 'current' => $this->ref];
+            }
+        }
+
+        return $this->refsData;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function branchList(): array
+    {
+        return $this->refsData()['branches'];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function tagList(): array
+    {
+        return $this->refsData()['tags'];
+    }
+
+    private function currentLineLength(): int
+    {
+        $line = $this->fileRaw[$this->cursorLine] ?? '';
+
+        return mb_strlen($line);
+    }
+
+    private function readmeLineCount(): int
+    {
+        return \count($this->readmeLines(120));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function readmeLines(int $cols): array
+    {
+        $key = $this->ref.':'.$cols;
+        if (null === $this->readmeCache || $this->readmeCache['key'] !== $key) {
+            $doc = $this->reader->readme($this->git, $this->ref);
+            if (null === $doc) {
+                $lines = [];
+            } elseif ($this->renderer->isAvailable()) {
+                $ansi = $this->renderer->renderDocument($doc['path'], $doc['content'], max(20, $cols - 2));
+                $lines = preg_split('/\r\n|\r|\n/', rtrim($ansi, "\n")) ?: [];
+            } else {
+                $lines = preg_split('/\r\n|\r|\n/', rtrim($doc['content'], "\n")) ?: [];
+            }
+            $this->readmeCache = ['key' => $key, 'lines' => $lines];
+        }
+
+        return $this->readmeCache['lines'];
+    }
+
+    private function parentPath(string $path): string
+    {
+        $pos = strrpos($path, '/');
+
+        return false === $pos ? '' : substr($path, 0, $pos);
+    }
+
+    // --- rendering ---------------------------------------------------------
+
+    protected function headerText(): string
+    {
+        $vis = $this->db?->isPrivate() ? ' (private)' : '';
+
+        return ' '.$this->name.$vis.' @ '.$this->ref.' ';
+    }
+
+    protected function tabBarText(): string
+    {
+        return Screen::tabBar(self::TABS, $this->tab, 300);
+    }
+
+    protected function footerText(): string
+    {
+        if (null !== $this->flash) {
+            return ' '.$this->flash;
+        }
+        if ($this->prDiffOpen) {
+            return ' ↑/↓ scroll · Esc: back';
+        }
+        if ($this->prMergeConfirm) {
+            return ' y: confirm merge · n/Esc: cancel';
+        }
+        if ($this->prDetailOpen) {
+            return ' m: merge · d: diff · Esc: back';
+        }
+        if (self::TAB_PULLS === $this->tab) {
+            return ' ↑/↓ move · Enter: view · m: merge · Tab: next · q: back';
+        }
+        if ($this->refsOpen) {
+            return ' ↑/↓ move · Enter: jump · Esc: back';
+        }
+        if ($this->fileOpen) {
+            return sprintf(' Ln %d, Col %d · d: definition · r: references · Esc: back', $this->cursorLine + 1, $this->cursorCol + 1);
+        }
+        if ($this->diffOpen) {
+            return ' ↑/↓ scroll · Esc: back';
+        }
+        if ($this->settingsEditing) {
+            return ' Enter: save · Tab: next · Esc: cancel';
+        }
+
+        return ' Tab: next · 1–7: jump · Enter: open · q: back';
+    }
+
+    protected function paintBody(int $cols, int $rows): array
+    {
+        if ($this->refsOpen) {
+            return $this->paintRefs($cols, $rows);
+        }
+        if ($this->fileOpen) {
+            return $this->paintFile($cols, $rows);
+        }
+        if ($this->diffOpen) {
+            return $this->docWindow($this->colourDiff($this->diffLines), $cols, $rows);
+        }
+
+        return match ($this->tab) {
+            self::TAB_README => $this->paintReadme($cols, $rows),
+            self::TAB_FILES => $this->paintFiles($cols, $rows),
+            self::TAB_COMMITS => $this->paintCommits($cols, $rows),
+            self::TAB_BRANCHES => $this->paintRefList($this->branchList(), $this->refsData()['current'], 'No branches.', $cols, $rows),
+            self::TAB_TAGS => $this->paintRefList($this->tagList(), '', 'No tags.', $cols, $rows),
+            self::TAB_PULLS => $this->paintPulls($cols, $rows),
+            self::TAB_SETTINGS => $this->paintSettings($cols, $rows),
+            default => [],
         };
     }
 
-    private function renderFilesTab(int $width, int $height): string
+    /**
+     * @return list<string>
+     */
+    private function paintReadme(int $cols, int $rows): array
     {
-        if ($this->viewingRefsPreview) {
-            return $this->refsPreviewViewport->view($width, $height);
-        }
-        if ($this->viewingBlame) {
-            return $this->blameViewport->view($width, $height);
-        }
-        if ($this->viewingFile) {
-            return $this->isFileRendered
-                ? $this->renderedDocViewport->view($width, $height)
-                : $this->fileViewer->view($width, $height);
+        $lines = $this->readmeLines($cols);
+        if ([] === $lines) {
+            return $this->messageBody('This repository has no README.', $cols);
         }
 
-        return $this->filesSelector->view($width, $height);
+        return $this->docWindow($lines, $cols, $rows);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function paintFiles(int $cols, int $rows): array
+    {
+        $entries = $this->tree();
+        $crumb = '  /'.$this->subpath;
+        $header = "\e[2m".Screen::fit($crumb, $cols)."\e[0m";
+        $bodyRows = max(1, $rows - 1);
+
+        if ([] === $entries) {
+            return array_merge([$header], $this->messageBody('Empty directory.', $cols));
+        }
+
+        $items = [];
+        foreach ($entries as $entry) {
+            $label = $entry->isDirectory() ? $entry->name.'/' : $entry->name;
+            $meta = $entry->isFile() && null !== $entry->size ? $this->humanSize($entry->size) : '';
+            $items[] = ['label' => $label, 'meta' => $meta];
+        }
+
+        return array_merge([$header], Screen::listView($items, $this->sel, $bodyRows, $cols));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function paintCommits(int $cols, int $rows): array
+    {
+        $commits = $this->commitList();
+        if ([] === $commits) {
+            return $this->messageBody('No commits.', $cols);
+        }
+
+        $items = [];
+        foreach ($commits as $commit) {
+            $meta = $commit->shortHash.'  '.$this->relativeTime($commit->timestamp);
+            $items[] = ['label' => $commit->subject, 'meta' => $meta];
+        }
+
+        return Screen::listView($items, $this->sel, $rows, $cols);
+    }
+
+    /**
+     * @param list<string> $list
+     *
+     * @return list<string>
+     */
+    private function paintRefList(array $list, string $current, string $empty, int $cols, int $rows): array
+    {
+        if ([] === $list) {
+            return $this->messageBody($empty, $cols);
+        }
+
+        $items = [];
+        foreach ($list as $ref) {
+            $marker = $ref === $this->ref ? 'current' : ($ref === $current ? 'default' : '');
+            $items[] = ['label' => $ref, 'meta' => $marker];
+        }
+
+        return Screen::listView($items, $this->sel, $rows, $cols);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function paintPulls(int $cols, int $rows): array
+    {
+        if (null === $this->db || null === $this->pullRequestQuery) {
+            return $this->messageBody('Pull requests are unavailable for local repositories.', $cols);
+        }
+
+        if ($this->prDiffOpen) {
+            $header = "\e[2m  Diff for PR #".($this->selectedPull()?->number() ?? 0)."\e[0m";
+
+            return array_merge([$header], $this->docWindow($this->colourDiff($this->prDiffLines), $cols, max(1, $rows - 1)));
+        }
+
+        if ($this->prMergeConfirm) {
+            $pr = $this->selectedPull();
+            $lines = [
+                '',
+                sprintf('  Merge pull request #%d: %s?', $pr?->number() ?? 0, $pr?->title() ?? ''),
+                sprintf('  into base branch "%s"', $pr?->baseRef() ?? ''),
+                '',
+                '  Press y to confirm merge, or n/Esc to cancel.',
+            ];
+            $box = Screen::box('Confirm merge', $lines, min(60, max(30, $cols - 4)));
+
+            return Screen::centerBlock($box, $cols, $rows);
+        }
+
+        if ($this->prDetailOpen && null !== ($pr = $this->selectedPull())) {
+            return $this->paintPullDetail($pr, $cols, $rows);
+        }
+
+        $pulls = $this->pullList();
+        if ([] === $pulls) {
+            return $this->messageBody('No pull requests.', $cols);
+        }
+
+        $items = [];
+        foreach ($pulls as $pr) {
+            $statusBadge = match ($pr->status()) {
+                PullRequestStatus::Open => "\e[32mopen\e[0m",
+                PullRequestStatus::Merged => "\e[35mmerged\e[0m",
+                PullRequestStatus::Closed => "\e[31mclosed\e[0m",
+            };
+            $label = sprintf('#%d  %s', $pr->number(), $pr->title());
+            $meta = sprintf('%s  %s → %s', $statusBadge, $pr->headRef(), $pr->baseRef());
+            $items[] = ['label' => $label, 'meta' => $meta];
+        }
+
+        return Screen::listView($items, $this->sel, $rows, $cols);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function paintPullDetail(PullRequest $pr, int $cols, int $rows): array
+    {
+        $statusStr = match ($pr->status()) {
+            PullRequestStatus::Open => "\e[32mopen\e[0m",
+            PullRequestStatus::Merged => "\e[35mmerged\e[0m",
+            PullRequestStatus::Closed => "\e[31mclosed\e[0m",
+        };
+        $lines = [
+            sprintf('  #%d: %s [%s]', $pr->number(), $pr->title(), $statusStr),
+            sprintf('  Author: %s · Base: %s · Head: %s', $pr->author()->username(), $pr->baseRef(), $pr->headRef()),
+            '',
+            '  '.('' !== $pr->description() ? $pr->description() : 'No description.'),
+            '',
+        ];
+
+        $comments = $this->pullRequestQuery?->comments($this->actor, $this->db?->name() ?? '', $pr->number()) ?? [];
+        if ([] !== $comments) {
+            $lines[] = '  Comments:';
+            foreach ($comments as $c) {
+                $lines[] = sprintf('    %s: %s', $c->author()->username(), $c->body());
+            }
+            $lines[] = '';
+        }
+
+        if ($pr->isOpen()) {
+            $lines[] = '  m: merge · d: diff · Esc: back';
+        } else {
+            $lines[] = '  d: diff · Esc: back';
+        }
+
+        return $this->docWindow($lines, $cols, $rows);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function paintSettings(int $cols, int $rows): array
+    {
+        if (null === $this->db) {
+            return array_map(static fn (string $l): string => Screen::fit($l, $cols), [
+                '',
+                '  Local repository (not registered on this server).',
+                '  Name         '.$this->name,
+                '  Default ref  '.$this->git->defaultBranch,
+            ]);
+        }
+
+        if ($this->settingsEditing) {
+            $lines = [
+                '',
+                $this->editRow('Description', $this->settingsForm['description'], 0 === $this->settingsField),
+                $this->toggleRow('Private', $this->settingsForm['private'], 1 === $this->settingsField),
+            ];
+
+            return array_map(static fn (string $l): string => Screen::fit($l, $cols), $lines);
+        }
+
+        $lines = [
+            '',
+            '  Name         '.$this->name,
+            '  Project      '.($this->db->projectName() ?: '—'),
+            '  Description  '.($this->db->description() ?: '—'),
+            '  Private      '.($this->db->isPrivate() ? 'yes' : 'no'),
+            '  Default ref  '.$this->ref,
+            '',
+            $this->canEditSettings() ? '  Press e to edit.' : '  Read-only (write access required to edit).',
+        ];
+
+        return array_map(static fn (string $l): string => Screen::fit($l, $cols), $lines);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function paintRefs(int $cols, int $rows): array
+    {
+        $items = [];
+        foreach ($this->refs as $loc) {
+            $items[] = ['label' => $loc->path, 'meta' => ($loc->line + 1).':'.($loc->col + 1)];
+        }
+        $header = "\e[2m".Screen::fit('  '.\count($this->refs).' reference(s)', $cols)."\e[0m";
+
+        return array_merge([$header], Screen::listView($items, $this->refSel, max(1, $rows - 1), $cols));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function paintFile(int $cols, int $rows): array
+    {
+        $count = \count($this->fileRaw);
+        $gutter = max(3, \strlen((string) $count));
+        $codeWidth = max(1, $cols - $gutter - 2);
+        $top = $count > $rows ? max(0, min($this->cursorLine - intdiv($rows, 2), $count - $rows)) : 0;
+
+        $rowsOut = [];
+        for ($r = 0; $r < $rows; ++$r) {
+            $idx = $top + $r;
+            if ($idx >= $count) {
+                $rowsOut[] = Screen::blank($cols);
+                continue;
+            }
+            $raw = $this->fileRaw[$idx];
+            $code = $this->renderer->isAvailable()
+                ? $this->renderer->renderSnippet($this->filePath, $raw, $codeWidth)
+                : $raw;
+            $num = str_pad((string) ($idx + 1), $gutter, ' ', \STR_PAD_LEFT);
+            if ($idx === $this->cursorLine) {
+                $g = "\e[7m".$num.'▶'."\e[0m".' ';
+            } else {
+                $g = "\e[2m".$num.'│'."\e[0m".' ';
+            }
+            $rowsOut[] = Screen::fit($g.Screen::truncate($code, $codeWidth), $cols);
+        }
+
+        return $rowsOut;
+    }
+
+    /**
+     * @param list<string> $lines
+     *
+     * @return list<string>
+     */
+    private function docWindow(array $lines, int $cols, int $rows): array
+    {
+        $total = \count($lines);
+        $top = max(0, min($this->scroll, max(0, $total - 1)));
+        $out = [];
+        for ($r = 0; $r < $rows; ++$r) {
+            $idx = $top + $r;
+            $out[] = $idx < $total ? Screen::fit($lines[$idx], $cols) : Screen::blank($cols);
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param list<string> $lines
+     *
+     * @return list<string>
+     */
+    private function colourDiff(array $lines): array
+    {
+        return array_map(static function (string $line): string {
+            if (str_starts_with($line, '+') && !str_starts_with($line, '+++')) {
+                return "\e[32m".$line."\e[0m";
+            }
+            if (str_starts_with($line, '-') && !str_starts_with($line, '---')) {
+                return "\e[31m".$line."\e[0m";
+            }
+            if (str_starts_with($line, '@@')) {
+                return "\e[36m".$line."\e[0m";
+            }
+
+            return $line;
+        }, $lines);
+    }
+
+    private function editRow(string $label, string $value, bool $active): string
+    {
+        $text = sprintf('  %-12s %s%s', $label, $value, $active ? '▏' : '');
+
+        return $active ? "\e[1m".$text."\e[0m" : $text;
+    }
+
+    private function toggleRow(string $label, bool $value, bool $active): string
+    {
+        $text = sprintf('  %-12s %s', $label, $value ? '[x]' : '[ ]');
+
+        return $active ? "\e[1m".$text.'  (space)'."\e[0m" : $text;
+    }
+
+    private function humanSize(int $bytes): string
+    {
+        if ($bytes < 1024) {
+            return $bytes.' B';
+        }
+        if ($bytes < 1024 * 1024) {
+            return round($bytes / 1024, 1).' KB';
+        }
+
+        return round($bytes / (1024 * 1024), 1).' MB';
+    }
+
+    private function relativeTime(int $timestamp): string
+    {
+        $diff = max(0, time() - $timestamp);
+        if ($diff < 3600) {
+            return max(1, intdiv($diff, 60)).'m ago';
+        }
+        if ($diff < 86400) {
+            return intdiv($diff, 3600).'h ago';
+        }
+
+        return intdiv($diff, 86400).'d ago';
     }
 }

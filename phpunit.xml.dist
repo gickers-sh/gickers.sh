@@ -15,7 +15,6 @@
     <testsuites>
         <testsuite name="codes.sh">
             <directory>tests</directory>
-            <directory>packages/tui/tests</directory>
         </testsuite>
     </testsuites>
     <source>
