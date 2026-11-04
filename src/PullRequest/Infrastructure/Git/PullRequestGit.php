@@ -27,7 +27,8 @@ final class PullRequestGit
         private readonly RepoDirectory $repoDirectory,
         private readonly GitRepositoryReader $reader,
         private readonly GitRepositoryWriter $writer,
-    ) {}
+    ) {
+    }
 
     /**
      * Resolves `refs/heads/<branch>` of a repository to its commit SHA, or null
@@ -35,7 +36,7 @@ final class PullRequestGit
      */
     public function resolveBranchCommit(Repo $repo, string $branch): ?string
     {
-        return $this->revParse($this->repoDirectory->pathFor($repo->name()), 'refs/heads/' . $branch);
+        return $this->revParse($this->repoDirectory->pathFor($repo->name()), 'refs/heads/'.$branch);
     }
 
     /**
@@ -57,7 +58,7 @@ final class PullRequestGit
         $targetPullRef = \sprintf('refs/pull/%d/head', $number);
         $headRefClean = trim($headRef);
         if (!str_starts_with($headRefClean, 'refs/')) {
-            $headRefClean = 'refs/heads/' . $headRefClean;
+            $headRefClean = 'refs/heads/'.$headRefClean;
         }
 
         $headPath = $this->repoDirectory->pathFor($head->name());
@@ -97,7 +98,7 @@ final class PullRequestGit
     {
         $path = $this->repoDirectory->pathFor($target->name());
         $pullRef = \sprintf('refs/pull/%d/head', $pr->number());
-        $baseRef = 'refs/heads/' . $pr->baseRef();
+        $baseRef = 'refs/heads/'.$pr->baseRef();
 
         $spec = $this->revParse($path, $pullRef)
             ? \sprintf('%s...%s', $baseRef, $pullRef)
@@ -137,6 +138,7 @@ final class PullRequestGit
             $authorEmail,
         );
     }
+
     public function canMerge(PullRequest $pr): bool
     {
         try {
@@ -149,10 +151,9 @@ final class PullRequestGit
         }
     }
 
-
     private function revParse(string $repoPath, string $ref): ?string
     {
-        $process = new Process(['git', 'rev-parse', '--verify', '--quiet', $ref . '^{commit}'], $repoPath);
+        $process = new Process(['git', 'rev-parse', '--verify', '--quiet', $ref.'^{commit}'], $repoPath);
         $process->run();
         if (!$process->isSuccessful()) {
             return null;

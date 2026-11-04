@@ -27,7 +27,8 @@ final readonly class PullRequestQuery
         private AccessGuard $accessGuard,
         private PullRequestStore $pullRequestStore,
         private PullRequestGit $git,
-    ) {}
+    ) {
+    }
 
     /** @return list<PullRequest> */
     public function list(?User $actor, RepoName|string $repo, ?PullRequestStatus $status = null): array

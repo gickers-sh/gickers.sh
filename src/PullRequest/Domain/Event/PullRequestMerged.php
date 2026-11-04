@@ -12,5 +12,6 @@ final readonly class PullRequestMerged
         public int $number,
         public string $mergeCommit,
         public ?int $actorId,
-    ) {}
+    ) {
+    }
 }

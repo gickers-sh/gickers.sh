@@ -26,7 +26,8 @@ final readonly class CommentPullRequest
         private AccessGuard $accessGuard,
         private PullRequestStore $pullRequestStore,
         private ClockInterface $clock,
-    ) {}
+    ) {
+    }
 
     public function __invoke(?User $actor, RepoName|string $repo, int $number, string $body): Comment
     {

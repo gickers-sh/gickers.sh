@@ -28,7 +28,8 @@ final readonly class DeletePullRequest
         private AccessGuard $accessGuard,
         private AccessResolver $accessResolver,
         private PullRequestStore $pullRequestStore,
-    ) {}
+    ) {
+    }
 
     public function __invoke(?User $actor, RepoName|string $repo, int $number): void
     {

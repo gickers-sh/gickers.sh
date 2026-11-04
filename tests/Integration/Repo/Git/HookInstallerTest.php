@@ -34,7 +34,7 @@ final class HookInstallerTest extends TestCase
 
     private function createTempDir(string $prefix = 'hook_installer_test_'): string
     {
-        $path = sys_get_temp_dir() . '/' . $prefix . uniqid('', true);
+        $path = sys_get_temp_dir().'/'.$prefix.uniqid('', true);
         mkdir($path, 0755, true);
         $this->tempDirs[] = $path;
 
@@ -52,7 +52,7 @@ final class HookInstallerTest extends TestCase
 
         $expectedHooks = ['pre-receive', 'update', 'post-receive', 'post-update'];
         foreach ($expectedHooks as $hook) {
-            $hookFile = $dir . '/hooks/' . $hook;
+            $hookFile = $dir.'/hooks/'.$hook;
             $this->assertFileExists($hookFile);
             $this->assertTrue(is_executable($hookFile));
             $content = (string) file_get_contents($hookFile);
@@ -60,13 +60,13 @@ final class HookInstallerTest extends TestCase
             $this->assertStringContainsString('echo "${data}" | "${hook}" "$@"', $content);
             $this->assertStringContainsString('exit ${i}', $content);
 
-            $softHookFile = $dir . '/hooks/' . $hook . '.d/soft-serve';
+            $softHookFile = $dir.'/hooks/'.$hook.'.d/soft-serve';
             $this->assertFileExists($softHookFile);
             $this->assertTrue(is_executable($softHookFile));
             $softContent = (string) file_get_contents($softHookFile);
             $this->assertStringContainsString('SOFT_SERVE_REPO_NAME', $softContent);
             $this->assertStringContainsString($consoleBin, $softContent);
-            $this->assertStringContainsString('soft:hook:' . $hook, $softContent);
+            $this->assertStringContainsString('soft:hook:'.$hook, $softContent);
 
             if ('update' === $hook) {
                 $this->assertStringContainsString('$1 $2 $3', $softContent);
@@ -79,6 +79,6 @@ final class HookInstallerTest extends TestCase
         $dir2 = $this->createTempDir('bare_hooks_str_');
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir2]))->mustRun();
         $this->installer->install($dir2, $consoleBin);
-        $this->assertFileExists($dir2 . '/hooks/pre-receive.d/soft-serve');
+        $this->assertFileExists($dir2.'/hooks/pre-receive.d/soft-serve');
     }
 }

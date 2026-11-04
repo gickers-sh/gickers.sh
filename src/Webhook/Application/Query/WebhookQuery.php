@@ -17,7 +17,8 @@ final readonly class WebhookQuery
     public function __construct(
         private AccessGuard $accessGuard,
         private WebhookStore $webhookStore,
-    ) {}
+    ) {
+    }
 
     /**
      * @return list<Webhook>

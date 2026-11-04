@@ -32,7 +32,8 @@ final readonly class UpdatePullRequest
         private AccessResolver $accessResolver,
         private PullRequestStore $pullRequestStore,
         private ClockInterface $clock,
-    ) {}
+    ) {
+    }
 
     public function __invoke(
         ?User $actor,

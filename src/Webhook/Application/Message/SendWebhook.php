@@ -21,5 +21,6 @@ final class SendWebhook
         public int $webhookId,
         public string $event,
         public array $payload,
-    ) {}
+    ) {
+    }
 }

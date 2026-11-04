@@ -36,7 +36,8 @@ final readonly class ClosePullRequest
         private PullRequestStore $pullRequestStore,
         private ClockInterface $clock,
         private EventDispatcherInterface $eventDispatcher,
-    ) {}
+    ) {
+    }
 
     public function __invoke(?User $actor, RepoName|string $repo, int $number): PullRequest
     {

@@ -20,7 +20,8 @@ final readonly class PayloadFactory
         private ServerSettings $serverSettings,
         private GitRepositoryReader $gitReader,
         private RepoDirectory $repoDirectory,
-    ) {}
+    ) {
+    }
 
     /**
      * @return array<string, mixed>
@@ -52,7 +53,7 @@ final readonly class PayloadFactory
                     ];
                     $commits[] = [
                         'id' => $c->hash,
-                        'message' => '' !== $c->body ? $c->subject . "\n\n" . $c->body : $c->subject,
+                        'message' => '' !== $c->body ? $c->subject."\n\n".$c->body : $c->subject,
                         'title' => $c->subject,
                         'author' => $authorData,
                         'committer' => $authorData,
@@ -163,12 +164,12 @@ final readonly class PayloadFactory
 
     private function repoHttpUrl(Repo $repo): string
     {
-        return rtrim($this->serverSettings->httpPublicUrl, '/') . '/' . $repo->nameString() . '.git';
+        return rtrim($this->serverSettings->httpPublicUrl, '/').'/'.$repo->nameString().'.git';
     }
 
     private function repoSshUrl(Repo $repo): string
     {
-        return rtrim($this->serverSettings->sshPublicUrl, '/') . '/' . $repo->nameString() . '.git';
+        return rtrim($this->serverSettings->sshPublicUrl, '/').'/'.$repo->nameString().'.git';
     }
 
     /**
@@ -177,9 +178,9 @@ final readonly class PayloadFactory
      */
     private function repoGitUrl(Repo $repo): string
     {
-        $host = (string) (parse_url($this->serverSettings->httpPublicUrl, PHP_URL_HOST) ?: 'localhost');
+        $host = (string) (parse_url($this->serverSettings->httpPublicUrl, \PHP_URL_HOST) ?: 'localhost');
 
-        return 'git://' . $host . '/' . $repo->nameString() . '.git';
+        return 'git://'.$host.'/'.$repo->nameString().'.git';
     }
 
     private function formatDate(\DateTimeImmutable $date): string

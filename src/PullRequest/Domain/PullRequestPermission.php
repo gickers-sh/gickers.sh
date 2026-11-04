@@ -23,5 +23,7 @@ final class PullRequestPermission
     /** Merge a pull request (repository write access). */
     public const PR_MERGE = 'pr.merge';
 
-    private function __construct() {}
+    private function __construct()
+    {
+    }
 }

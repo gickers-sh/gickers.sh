@@ -13,6 +13,6 @@ final class Signer
 {
     public function sign(string $payload, string $secret): string
     {
-        return 'sha256=' . hash_hmac('sha256', $payload, $secret);
+        return 'sha256='.hash_hmac('sha256', $payload, $secret);
     }
 }
