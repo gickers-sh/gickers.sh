@@ -1,0 +1,16 @@
+parameters:
+    env(SOFT_SERVE_WEBHOOK_ALLOW_LIST): ''
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    app.webhook_http_client:
+        class: Symfony\Component\HttpClient\NoPrivateNetworkHttpClient
+        arguments:
+            $client: '@http_client'
+            $subnets: null
+            $allowList: '%env(SOFT_SERVE_WEBHOOK_ALLOW_LIST)%'
+
+    Symfony\Contracts\HttpClient\HttpClientInterface $webhookHttpClient: '@app.webhook_http_client'
