@@ -8,6 +8,8 @@ use App\Access\Application\ServerPolicy;
 use App\CodeIntel\Application\Query\CodeIntelQuery;
 use App\Identity\Domain\Model\User;
 use App\Identity\Domain\UserStore;
+use App\PullRequest\Application\MergePullRequest;
+use App\PullRequest\Application\Query\PullRequestQuery;
 use App\Repo\Application\CreateRepo;
 use App\Repo\Application\Query\RepoQuery;
 use App\Repo\Application\UpdateRepoSettings;
@@ -39,6 +41,8 @@ final class TuiPageFactory
         private readonly TermstrapRenderer $renderer,
         private readonly CodeIntelQuery $codeIntel,
         private readonly RepoDirectory $repoDirectory,
+        private readonly ?PullRequestQuery $pullRequestQuery = null,
+        private readonly ?MergePullRequest $mergePullRequest = null,
     ) {
     }
 
@@ -66,12 +70,12 @@ final class TuiPageFactory
         $repo = $this->repoQuery->get($actor, $name);
         $git = $this->reader->openRepository($this->repoDirectory->pathFor($repo->name()));
 
-        return new RepoPage($git, $repo, $actor, $this->reader, $this->renderer, $this->codeIntel, $this->updateSettings);
+        return new RepoPage($git, $repo, $actor, $this->reader, $this->renderer, $this->codeIntel, $this->updateSettings, $this->pullRequestQuery, $this->mergePullRequest);
     }
 
     public function repoPageForGit(?User $actor, GitRepository $git): RepoPage
     {
-        return new RepoPage($git, null, $actor, $this->reader, $this->renderer, $this->codeIntel, $this->updateSettings);
+        return new RepoPage($git, null, $actor, $this->reader, $this->renderer, $this->codeIntel, $this->updateSettings, $this->pullRequestQuery, $this->mergePullRequest);
     }
 
     public function adminPage(?User $actor): AdminPage

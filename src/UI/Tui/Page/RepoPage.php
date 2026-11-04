@@ -7,6 +7,10 @@ namespace App\UI\Tui\Page;
 use App\CodeIntel\Application\Query\CodeIntelQuery;
 use App\CodeIntel\Domain\SymbolLocation;
 use App\Identity\Domain\Model\User;
+use App\PullRequest\Application\MergePullRequest;
+use App\PullRequest\Application\Query\PullRequestQuery;
+use App\PullRequest\Domain\Model\PullRequest;
+use App\PullRequest\Domain\PullRequestStatus;
 use App\Repo\Application\UpdateRepoSettings;
 use App\Repo\Domain\Git\Commit;
 use App\Repo\Domain\Git\GitRepository;
@@ -87,6 +91,14 @@ final class RepoPage extends AbstractPage
     private ?array $commits = null;
     /** @var array{branches: list<string>, tags: list<string>, current: string}|null */
     private ?array $refsData = null;
+    /** @var list<PullRequest>|null */
+    private ?array $pullsCache = null;
+    private bool $prDetailOpen = false;
+    private bool $prMergeConfirm = false;
+    private bool $prDiffOpen = false;
+    /** @var list<string> */
+    private array $prDiffLines = [];
+    private int $prDiffScroll = 0;
 
     public function __construct(
         private readonly GitRepository $git,
@@ -96,6 +108,8 @@ final class RepoPage extends AbstractPage
         private readonly TermstrapRenderer $renderer,
         private readonly CodeIntelQuery $codeIntel,
         private readonly UpdateRepoSettings $updateSettings,
+        private readonly ?PullRequestQuery $pullRequestQuery = null,
+        private readonly ?MergePullRequest $mergePullRequest = null,
     ) {
         $this->name = $this->db?->nameString() ?? $this->git->name;
         $this->ref = $this->git->defaultBranch;
@@ -119,6 +133,15 @@ final class RepoPage extends AbstractPage
         }
         if ($this->diffOpen) {
             return $this->handleDiffKey($seq);
+        }
+        if ($this->prDiffOpen) {
+            return $this->handlePrDiffKey($seq);
+        }
+        if ($this->prMergeConfirm) {
+            return $this->handlePrMergeConfirmKey($seq);
+        }
+        if ($this->prDetailOpen) {
+            return $this->handlePrDetailKey($seq);
         }
 
         return $this->handleTabKey($seq);
@@ -162,6 +185,7 @@ final class RepoPage extends AbstractPage
             self::TAB_BRANCHES => $this->handleRefListKey($tok, $txt, $this->branchList(), true),
             self::TAB_TAGS => $this->handleRefListKey($tok, $txt, $this->tagList(), false),
             self::TAB_SETTINGS => $this->handleSettingsTabKey($tok, $txt),
+            self::TAB_PULLS => $this->handlePullsTabKey($tok, $txt),
             default => false,
         };
     }
@@ -339,6 +363,149 @@ final class RepoPage extends AbstractPage
         }
 
         return true;
+    }
+
+    private function handlePullsTabKey(string $tok, ?string $txt): bool
+    {
+        $pulls = $this->pullList();
+        if (Keys::ENTER === $tok && [] !== $pulls) {
+            $this->prDetailOpen = true;
+
+            return true;
+        }
+
+        if ('m' === $txt && [] !== $pulls && null !== $this->mergePullRequest) {
+            $pr = $this->selectedPull();
+            if ($pr?->isOpen()) {
+                $this->prMergeConfirm = true;
+
+                return true;
+            }
+        }
+
+        return $this->handleListMove($tok, $txt, \count($pulls));
+    }
+
+    private function handlePrDetailKey(string $seq): bool
+    {
+        $tok = Keys::normalize($seq);
+        $txt = Keys::text($seq);
+
+        if (Keys::ESCAPE === $tok || 'q' === $txt) {
+            $this->prDetailOpen = false;
+
+            return true;
+        }
+
+        if ('m' === $txt && null !== ($pr = $this->selectedPull()) && $pr->isOpen() && null !== $this->mergePullRequest) {
+            $this->prMergeConfirm = true;
+
+            return true;
+        }
+
+        if ('d' === $txt && null !== ($pr = $this->selectedPull()) && null !== $this->pullRequestQuery && null !== $this->db) {
+            try {
+                $raw = $this->pullRequestQuery->diff($this->actor, $this->db->name(), $pr->number());
+                $this->prDiffLines = preg_split('/\r\n|\r|\n/', rtrim($raw, "\n")) ?: [];
+                $this->prDiffScroll = 0;
+                $this->prDiffOpen = true;
+            } catch (\Throwable $e) {
+                $this->flash = 'Failed to load diff: '.$e->getMessage();
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private function handlePrMergeConfirmKey(string $seq): bool
+    {
+        $tok = Keys::normalize($seq);
+        $txt = Keys::text($seq);
+
+        if ('y' === $txt || 'Y' === $txt) {
+            $this->confirmMerge();
+
+            return true;
+        }
+
+        if ('n' === $txt || 'N' === $txt || Keys::ESCAPE === $tok) {
+            $this->prMergeConfirm = false;
+
+            return true;
+        }
+
+        return true;
+    }
+
+    private function handlePrDiffKey(string $seq): bool
+    {
+        $tok = Keys::normalize($seq);
+        $txt = Keys::text($seq);
+
+        if (Keys::ESCAPE === $tok || 'q' === $txt) {
+            $this->prDiffOpen = false;
+
+            return true;
+        }
+
+        $total = \count($this->prDiffLines);
+        if (Keys::UP === $tok || 'k' === $txt) {
+            $this->prDiffScroll = max(0, $this->prDiffScroll - 1);
+        } elseif (Keys::DOWN === $tok || 'j' === $txt) {
+            $this->prDiffScroll = max(0, min($this->prDiffScroll + 1, max(0, $total - 1)));
+        }
+
+        return true;
+    }
+
+    private function confirmMerge(): void
+    {
+        $pr = $this->selectedPull();
+        if (null === $pr || null === $this->mergePullRequest || null === $this->db) {
+            $this->prMergeConfirm = false;
+
+            return;
+        }
+
+        try {
+            ($this->mergePullRequest)($this->actor, $this->db->name(), $pr->number());
+            $this->flash = sprintf('Merged PR #%d', $pr->number());
+            $this->pullsCache = null;
+            $this->prMergeConfirm = false;
+            $this->prDetailOpen = false;
+        } catch (\Throwable $e) {
+            $this->flash = 'Merge failed: '.$e->getMessage();
+            $this->prMergeConfirm = false;
+        }
+    }
+
+    /**
+     * @return list<PullRequest>
+     */
+    private function pullList(): array
+    {
+        if (null === $this->db || null === $this->pullRequestQuery) {
+            return [];
+        }
+
+        if (null === $this->pullsCache) {
+            try {
+                $this->pullsCache = $this->pullRequestQuery->list($this->actor, $this->db->name());
+            } catch (\Throwable) {
+                $this->pullsCache = [];
+            }
+        }
+
+        return $this->pullsCache;
+    }
+
+    private function selectedPull(): ?PullRequest
+    {
+        $pulls = $this->pullList();
+
+        return $pulls[min($this->sel, max(0, \count($pulls) - 1))] ?? null;
     }
 
     private function handleDiffKey(string $seq): bool
@@ -654,6 +821,18 @@ final class RepoPage extends AbstractPage
         if (null !== $this->flash) {
             return ' '.$this->flash;
         }
+        if ($this->prDiffOpen) {
+            return ' ↑/↓ scroll · Esc: back';
+        }
+        if ($this->prMergeConfirm) {
+            return ' y: confirm merge · n/Esc: cancel';
+        }
+        if ($this->prDetailOpen) {
+            return ' m: merge · d: diff · Esc: back';
+        }
+        if (self::TAB_PULLS === $this->tab) {
+            return ' ↑/↓ move · Enter: view · m: merge · Tab: next · q: back';
+        }
         if ($this->refsOpen) {
             return ' ↑/↓ move · Enter: jump · Esc: back';
         }
@@ -775,9 +954,88 @@ final class RepoPage extends AbstractPage
      */
     private function paintPulls(int $cols, int $rows): array
     {
-        // The pull-request module (phase 4) is wired here once merged; until then
-        // this tab is intentionally informational rather than a fake list.
-        return $this->messageBody('Pull requests are served over SSH/HTTP; TUI listing lands with the pull-request module.', $cols);
+        if (null === $this->db || null === $this->pullRequestQuery) {
+            return $this->messageBody('Pull requests are unavailable for local repositories.', $cols);
+        }
+
+        if ($this->prDiffOpen) {
+            $header = "\e[2m  Diff for PR #".($this->selectedPull()?->number() ?? 0)."\e[0m";
+
+            return array_merge([$header], $this->docWindow($this->colourDiff($this->prDiffLines), $cols, max(1, $rows - 1)));
+        }
+
+        if ($this->prMergeConfirm) {
+            $pr = $this->selectedPull();
+            $lines = [
+                '',
+                sprintf('  Merge pull request #%d: %s?', $pr?->number() ?? 0, $pr?->title() ?? ''),
+                sprintf('  into base branch "%s"', $pr?->baseRef() ?? ''),
+                '',
+                '  Press y to confirm merge, or n/Esc to cancel.',
+            ];
+            $box = Screen::box('Confirm merge', $lines, min(60, max(30, $cols - 4)));
+
+            return Screen::centerBlock($box, $cols, $rows);
+        }
+
+        if ($this->prDetailOpen && null !== ($pr = $this->selectedPull())) {
+            return $this->paintPullDetail($pr, $cols, $rows);
+        }
+
+        $pulls = $this->pullList();
+        if ([] === $pulls) {
+            return $this->messageBody('No pull requests.', $cols);
+        }
+
+        $items = [];
+        foreach ($pulls as $pr) {
+            $statusBadge = match ($pr->status()) {
+                PullRequestStatus::Open => "\e[32mopen\e[0m",
+                PullRequestStatus::Merged => "\e[35mmerged\e[0m",
+                PullRequestStatus::Closed => "\e[31mclosed\e[0m",
+            };
+            $label = sprintf('#%d  %s', $pr->number(), $pr->title());
+            $meta = sprintf('%s  %s → %s', $statusBadge, $pr->headRef(), $pr->baseRef());
+            $items[] = ['label' => $label, 'meta' => $meta];
+        }
+
+        return Screen::listView($items, $this->sel, $rows, $cols);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function paintPullDetail(PullRequest $pr, int $cols, int $rows): array
+    {
+        $statusStr = match ($pr->status()) {
+            PullRequestStatus::Open => "\e[32mopen\e[0m",
+            PullRequestStatus::Merged => "\e[35mmerged\e[0m",
+            PullRequestStatus::Closed => "\e[31mclosed\e[0m",
+        };
+        $lines = [
+            sprintf('  #%d: %s [%s]', $pr->number(), $pr->title(), $statusStr),
+            sprintf('  Author: %s · Base: %s · Head: %s', $pr->author()->username(), $pr->baseRef(), $pr->headRef()),
+            '',
+            '  '.('' !== $pr->description() ? $pr->description() : 'No description.'),
+            '',
+        ];
+
+        $comments = $this->pullRequestQuery?->comments($this->actor, $this->db?->name() ?? '', $pr->number()) ?? [];
+        if ([] !== $comments) {
+            $lines[] = '  Comments:';
+            foreach ($comments as $c) {
+                $lines[] = sprintf('    %s: %s', $c->author()->username(), $c->body());
+            }
+            $lines[] = '';
+        }
+
+        if ($pr->isOpen()) {
+            $lines[] = '  m: merge · d: diff · Esc: back';
+        } else {
+            $lines[] = '  d: diff · Esc: back';
+        }
+
+        return $this->docWindow($lines, $cols, $rows);
     }
 
     /**

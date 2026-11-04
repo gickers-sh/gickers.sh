@@ -504,4 +504,72 @@ final class TuiFunctionalTest extends KernelTestCase
         $this->assertStringContainsString('Indexing reindex-project', $output);
         $this->assertStringContainsString('reindex-project: OK', $output);
     }
+
+    public function testRepoPagePullRequestsListAndMerge(): void
+    {
+        $container = static::getContainer();
+        $user = new User('prowner'.uniqid(), true, new \DateTimeImmutable());
+        $this->userStore->save($user);
+
+        $repo = ($this->createRepo)($user, 'pulls-repo-'.uniqid(), false, false, 'PR testing repo');
+        $repoPath = $this->repoDirectory->pathFor($repo->name());
+        $gitRepo = $this->gitReader->openRepository($repoPath);
+
+        (new Process(['git', 'config', 'user.name', 'Tester'], $repoPath))->mustRun();
+        (new Process(['git', 'config', 'user.email', 'test@example.com'], $repoPath))->mustRun();
+
+        $this->gitWriter->writeFile($gitRepo, 'main', 'base.txt', "base content\n", 'Initial commit', 'Tester', 'test@example.com');
+        (new Process(['git', 'branch', 'feature-pr', 'main'], $repoPath))->mustRun();
+        $this->gitWriter->writeFile($gitRepo, 'feature-pr', 'feature.txt', "feature content\n", 'Feature commit', 'Tester', 'test@example.com');
+
+        $openPr = $container->get('test.open_pull_request');
+        $pr = $openPr($user, $repo->name(), 'Add feature PR', 'This is a description', 'feature-pr', 'main');
+        $this->assertSame(1, $pr->number());
+
+        $vt = new VirtualTerminal(80, 24);
+        $tui = new Tui(terminal: $vt);
+        $root = $this->factory->createRoot($tui, $user);
+        $page = $this->factory->repoPageForName($user, $repo->nameString());
+        $root->start($page);
+
+        $tui->start();
+        $tui->tick();
+
+        // Switch to Pull Requests tab (shortcut 6)
+        $vt->simulateInput('6');
+        $tui->tick();
+        $output = $vt->consumeOutput();
+        $this->assertStringContainsString('#1', $output);
+        $this->assertStringContainsString('Add feature PR', $output);
+        $this->assertStringContainsString('open', $output);
+        $this->assertStringContainsString('feature-pr → main', $output);
+
+        // Open detail view with Enter
+        $vt->simulateInput("\r");
+        $tui->tick();
+        $output = $vt->consumeOutput();
+        $this->assertStringContainsString('#1: Add feature PR', $output);
+        $this->assertStringContainsString('This is a description', $output);
+        $this->assertStringContainsString('m: merge', $output);
+
+        // Press 'm' to merge
+        $vt->simulateInput('m');
+        $tui->tick();
+        $output = $vt->consumeOutput();
+        $this->assertStringContainsString('Confirm merge', $output);
+        $this->assertStringContainsString('Merge pull request #1', $output);
+
+        // Press 'y' to confirm merge
+        $vt->simulateInput('y');
+        $tui->tick();
+        $output = $vt->consumeOutput();
+        $this->assertStringContainsString('Merged PR #1', $output);
+
+        // Verify status in DB
+        $prQuery = $container->get('test.pull_request_query');
+        $updatedPr = $prQuery->get($user, $repo->name(), 1);
+        $this->assertTrue($updatedPr->isMerged());
+
+        $tui->stop();
+    }
 }
