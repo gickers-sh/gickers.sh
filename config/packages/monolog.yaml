@@ -1,0 +1,11 @@
+monolog:
+    channels: ['ssh', 'git', 'webhook']
+    handlers:
+        main:
+            type: stream
+            path: '%kernel.logs_dir%/%kernel.environment%.log'
+            level: '%env(default:default_log_level:LOG_LEVEL)%'
+            channels: ['!event', '!doctrine']
+
+parameters:
+    default_log_level: info

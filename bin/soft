@@ -1,0 +1,43 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/*
+ * Point d'entrée `soft` : traduit la syntaxe Go (`soft admin migrate`, `soft hook update …`)
+ * vers les commandes Symfony, puis délègue à bin/console via symfony/runtime.
+ */
+
+use App\Kernel;
+use Symfony\Bundle\FrameworkBundle\Console\Application;
+
+$args = array_slice($_SERVER['argv'], 1);
+
+if ($args === ['-v'] || in_array('--version', $args, true)) {
+    echo "soft version 1.0.0 (codes.sh)\n";
+    exit(0);
+}
+
+$mapped = match ($args[0] ?? null) {
+    null => ['soft:browse'],
+    'browse', 'serve', 'tui', 'man' => ['soft:'.$args[0], ...array_slice($args, 1)],
+    'admin' => [...match ($args[1] ?? null) {
+        null => ['list', 'soft:admin'],
+        default => ['soft:admin:'.$args[1]],
+    }, ...array_slice($args, 2)],
+    'hook' => isset($args[1]) ? ['soft:hook:'.$args[1], ...array_slice($args, 2)] : ['list', 'soft:hook'],
+    default => $args,
+};
+
+$_SERVER['argv'] = [$_SERVER['argv'][0], ...$mapped];
+$_SERVER['argc'] = count($_SERVER['argv']);
+
+require_once dirname(__DIR__).'/vendor/autoload_runtime.php';
+
+return static function (array $context): Application {
+    $application = new Application(new Kernel($context['APP_ENV'], (bool) $context['APP_DEBUG']));
+    $application->setName('soft');
+    $application->setVersion('1.0.0');
+
+    return $application;
+};
