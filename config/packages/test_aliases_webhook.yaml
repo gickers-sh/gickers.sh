@@ -1,0 +1,23 @@
+when@test:
+    services:
+        test.create_webhook:
+            alias: App\Webhook\Application\CreateWebhook
+            public: true
+        test.delete_webhook:
+            alias: App\Webhook\Application\DeleteWebhook
+            public: true
+        test.webhook_query:
+            alias: App\Webhook\Application\Query\WebhookQuery
+            public: true
+        test.webhook_store:
+            alias: App\Webhook\Domain\WebhookStore
+            public: true
+        test.payload_factory:
+            alias: App\Webhook\Application\PayloadFactory
+            public: true
+        test.send_webhook_handler:
+            alias: App\Webhook\Application\SendWebhookHandler
+            public: true
+        test.webhook_event_subscriber:
+            alias: App\Webhook\Application\WebhookEventSubscriber
+            public: true

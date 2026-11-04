@@ -99,6 +99,16 @@ class PullRequest
     {
         return $this->status;
     }
+    public function isOpen(): bool
+    {
+        return PullRequestStatus::Open === $this->status;
+    }
+
+    public function isMerged(): bool
+    {
+        return PullRequestStatus::Merged === $this->status;
+    }
+
 
     public function baseRef(): string
     {
@@ -208,7 +218,8 @@ class PullRequest
     private function assertStatus(PullRequestStatus $expected): void
     {
         if ($this->status !== $expected) {
-            throw new Conflict(\sprintf('pull request #%d is not %s (current state: %s)', $this->number, $expected->value, $this->status->value));
+            // Go `pkg/backend/pr.go` surfaces plain `pull request is not open|closed`.
+            throw new Conflict(\sprintf('pull request is not %s', $expected->value));
         }
     }
 }
