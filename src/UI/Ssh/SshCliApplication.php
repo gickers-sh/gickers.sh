@@ -69,6 +69,14 @@ class SshCliApplication extends Application
         return $this->resolver;
     }
 
+    protected function configureIO(\Symfony\Component\Console\Input\InputInterface $input, OutputInterface $output): void
+    {
+        $output->setVerbosity(OutputInterface::VERBOSITY_NORMAL);
+        if ($input->hasParameterOption(['--quiet', '-q'], true)) {
+            $output->setVerbosity(OutputInterface::VERBOSITY_QUIET);
+        }
+    }
+
     protected function getDefaultInputDefinition(): \Symfony\Component\Console\Input\InputDefinition
     {
         return new \Symfony\Component\Console\Input\InputDefinition([
@@ -103,16 +111,16 @@ class SshCliApplication extends Application
         $aliases = [];
         if (str_ends_with($name, ':delete')) {
             $prefix = substr($name, 0, -7);
-            $aliases[] = $prefix . ':del';
-            $aliases[] = $prefix . ':rm';
-            $aliases[] = $prefix . ':remove';
+            $aliases[] = $prefix.':del';
+            $aliases[] = $prefix.':rm';
+            $aliases[] = $prefix.':remove';
         } elseif (str_ends_with($name, ':list')) {
             $prefix = substr($name, 0, -5);
-            $aliases[] = $prefix . ':ls';
+            $aliases[] = $prefix.':ls';
         } elseif (str_ends_with($name, ':rename')) {
             $prefix = substr($name, 0, -7);
-            $aliases[] = $prefix . ':mv';
-            $aliases[] = $prefix . ':move';
+            $aliases[] = $prefix.':mv';
+            $aliases[] = $prefix.':move';
         } elseif ('repo:blob' === $name) {
             $aliases[] = 'repo:cat';
             $aliases[] = 'repo:show';

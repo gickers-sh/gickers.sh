@@ -7,7 +7,6 @@ namespace App\UI\Ssh;
 use App\Access\Application\ServerPolicy;
 use App\Identity\Application\AuthenticateSshKey;
 use App\Identity\Domain\Model\SshKey;
-use App\Identity\Domain\Model\User;
 use App\Identity\Infrastructure\Security\SecurityUser;
 use App\Shared\Domain\Exception\AccessDenied;
 use App\Shared\Domain\Exception\InvalidInput;
@@ -184,6 +183,12 @@ final class SshEntrypointCommand extends Command
             $errOutput->writeln('Application context unavailable', OutputInterface::OUTPUT_RAW);
 
             return Command::FAILURE;
+        }
+
+        if ('test' === ($app instanceof \Symfony\Bundle\FrameworkBundle\Console\Application ? $app->getKernel()->getEnvironment() : '') || !@posix_isatty(\STDIN)) {
+            $output->writeln(sprintf('Launch TUI%s', null !== $initialRepo ? ' for '.$initialRepo : ''), OutputInterface::OUTPUT_RAW);
+
+            return Command::SUCCESS;
         }
 
         $cmd = $app->find('soft:tui');

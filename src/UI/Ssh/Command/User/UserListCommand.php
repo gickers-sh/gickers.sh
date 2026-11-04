@@ -42,7 +42,7 @@ final class UserListCommand extends AbstractSshCommand
         $this->accessGuard->assertServerAdmin($this->actor());
 
         $users = $this->userStore->all();
-        $usernames = array_map(static fn($u) => $u->username(), $users);
+        $usernames = array_map(static fn ($u) => $u->username(), $users);
         sort($usernames);
 
         foreach ($usernames as $username) {

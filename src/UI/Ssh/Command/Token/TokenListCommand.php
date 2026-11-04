@@ -53,7 +53,7 @@ final class TokenListCommand extends AbstractSshCommand
         }
 
         $now = $this->clock->now();
-        $this->line($output, sprintf("%-5s %-20s %-25s %s", 'ID', 'Name', 'Created At', 'Expires In'));
+        $this->line($output, sprintf('%-5s %-20s %-25s %s', 'ID', 'Name', 'Created At', 'Expires In'));
 
         foreach ($tokens as $token) {
             $expiresAtStr = '-';
@@ -63,7 +63,7 @@ final class TokenListCommand extends AbstractSshCommand
             }
 
             $this->line($output, sprintf(
-                "%-5d %-20s %-25s %s",
+                '%-5d %-20s %-25s %s',
                 $token->id(),
                 $token->name(),
                 $token->createdAt()->format(\DateTimeInterface::ATOM),

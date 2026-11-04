@@ -28,7 +28,8 @@ final readonly class GitTransportRunner
         private RepoStore $repoStore,
         private ServerSettings $serverSettings,
         private SshSession $sshSession,
-    ) {}
+    ) {
+    }
 
     public function run(
         string $command,
@@ -70,16 +71,20 @@ final readonly class GitTransportRunner
         }
 
         $process = new Process([$command, $repoPath]);
-        $process->setEnv([
+        $env = [
             'SOFT_SERVE_REPO_NAME' => $repoName->value,
             'SOFT_SERVE_USERNAME' => $actor?->username() ?? '',
             'SOFT_SERVE_PUBLIC_KEY' => $this->sshSession->publicKeyFingerprint() ?? '',
             'SOFT_SERVE_DATA_PATH' => $this->serverSettings->dataPath,
-        ]);
+        ];
+        if (isset($_SERVER['APP_ENV'])) {
+            $env['APP_ENV'] = (string) $_SERVER['APP_ENV'];
+        }
+        $process->setEnv($env);
         $process->setInput(\STDIN);
-        $process->setTimeout(null);
+        $process->setTimeout(60);
 
-        $process->run(function (string $type, string $buffer) use ($output, $errOutput): void {
+        $process->run(static function (string $type, string $buffer) use ($output, $errOutput): void {
             if (Process::ERR === $type) {
                 $errOutput->write($buffer, false, OutputInterface::OUTPUT_RAW);
             } else {

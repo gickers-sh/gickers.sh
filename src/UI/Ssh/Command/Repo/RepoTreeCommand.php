@@ -52,7 +52,7 @@ final class RepoTreeCommand extends AbstractSshCommand
         $entries = $this->gitReader->getTree($gitRepo, $ref, $path);
 
         // Sort: directories first, then alphabetical
-        usort($entries, function (TreeEntry $a, TreeEntry $b): int {
+        usort($entries, static function (TreeEntry $a, TreeEntry $b): int {
             if ($a->isDirectory() !== $b->isDirectory()) {
                 return $a->isDirectory() ? -1 : 1;
             }
@@ -72,7 +72,7 @@ final class RepoTreeCommand extends AbstractSshCommand
     private function humanizeBytes(int $bytes): string
     {
         if ($bytes < 1000) {
-            return $bytes . ' B';
+            return $bytes.' B';
         }
         $units = ['kB', 'MB', 'GB', 'TB'];
         $val = (float) $bytes;

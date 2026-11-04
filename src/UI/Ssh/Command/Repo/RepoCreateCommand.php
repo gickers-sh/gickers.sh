@@ -47,7 +47,6 @@ final class RepoCreateCommand extends AbstractSshCommand
         $hidden = (bool) $input->getOption('hidden');
         $description = $this->stringOption($input, 'description');
         $projectName = $this->stringOption($input, 'name');
-
         $repo = ($this->createRepo)(
             actor: $this->actor(),
             name: $name,

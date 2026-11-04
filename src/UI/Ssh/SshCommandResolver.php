@@ -12,7 +12,8 @@ final readonly class ResolvedCommand
     public function __construct(
         public string $name,
         public array $arguments,
-    ) {}
+    ) {
+    }
 }
 
 final class SshCommandResolver
@@ -24,7 +25,7 @@ final class SshCommandResolver
     private array $aliasToCanonical = [];
 
     /**
-     * @param list<string> $registeredCommandNames
+     * @param list<string>                $registeredCommandNames
      * @param array<string, list<string>> $aliasMap
      */
     public function __construct(
@@ -78,6 +79,7 @@ final class SshCommandResolver
 
     /**
      * @param list<string> $tokens
+     *
      * @return list<string>
      */
     private function normalizeTokens(array $tokens): array

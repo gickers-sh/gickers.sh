@@ -14,7 +14,8 @@ final readonly class ExceptionRenderer
 {
     public function __construct(
         private ?LoggerInterface $logger = null,
-    ) {}
+    ) {
+    }
 
     public function render(\Throwable $exception, OutputInterface $output): int
     {
