@@ -20,7 +20,8 @@ final readonly class VerifyObject
     public function __construct(
         private ObjectStorage $storage,
         private LfsObjectStore $objects,
-    ) {}
+    ) {
+    }
 
     /**
      * @throws NotFound     when the object file or its row is missing (404)

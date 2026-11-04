@@ -16,11 +16,13 @@ use App\Shared\Infrastructure\Config\ServerSettings;
  */
 final class JwtKeyGenerator
 {
-    public function __construct(private readonly ServerSettings $settings) {}
+    public function __construct(private readonly ServerSettings $settings)
+    {
+    }
 
     public function path(): string
     {
-        return rtrim($this->settings->sshPath(), '/') . '/jwt_ed25519';
+        return rtrim($this->settings->sshPath(), '/').'/jwt_ed25519';
     }
 
     /**
@@ -42,7 +44,7 @@ final class JwtKeyGenerator
         $keypair = sodium_crypto_sign_keypair();
         $secret = sodium_crypto_sign_secretkey($keypair);
 
-        $tmp = $path . '.' . bin2hex(random_bytes(6)) . '.tmp';
+        $tmp = $path.'.'.bin2hex(random_bytes(6)).'.tmp';
         if (false === file_put_contents($tmp, $secret)) {
             throw new \RuntimeException(sprintf('Failed to write JWT key "%s"', $tmp));
         }
@@ -64,7 +66,7 @@ final class JwtKeyGenerator
     {
         $path = $this->ensure();
         $secret = file_get_contents($path);
-        if (false === $secret || SODIUM_CRYPTO_SIGN_SECRETKEYBYTES !== \strlen($secret)) {
+        if (false === $secret || \SODIUM_CRYPTO_SIGN_SECRETKEYBYTES !== \strlen($secret)) {
             throw new \RuntimeException(sprintf('Invalid Ed25519 JWT signing key at "%s"', $path));
         }
 

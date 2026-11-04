@@ -5,6 +5,15 @@ security:
         app_users:
             id: App\Identity\Infrastructure\Security\SecurityUserProvider
     firewalls:
+        git:
+            pattern: ^/
+            stateless: true
+            entry_point: App\UI\Http\Security\GitAuthChallenge
+            custom_authenticators:
+                - App\UI\Http\Security\AccessTokenAuthenticator
+            access_token:
+                token_handler: App\UI\Http\Security\JwtAccessTokenHandler
+                failure_handler: App\UI\Http\Security\GitAuthChallenge
         main:
             lazy: true
             stateless: true

@@ -16,7 +16,8 @@ final readonly class BatchObjectResult
         public int $size,
         public ?int $errorCode = null,
         public ?string $errorMessage = null,
-    ) {}
+    ) {
+    }
 
     public static function ok(string $oid, int $size): self
     {

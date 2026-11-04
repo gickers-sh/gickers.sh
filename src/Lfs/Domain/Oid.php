@@ -16,7 +16,9 @@ final readonly class Oid implements \Stringable
 {
     public const PATTERN = '/^[a-f0-9]{64}$/';
 
-    private function __construct(public string $value) {}
+    private function __construct(public string $value)
+    {
+    }
 
     public static function fromString(string $raw): self
     {
@@ -52,7 +54,7 @@ final readonly class Oid implements \Stringable
      */
     public function relativePath(): string
     {
-        return substr($this->value, 0, 2) . '/' . substr($this->value, 2, 2) . '/' . $this->value;
+        return substr($this->value, 0, 2).'/'.substr($this->value, 2, 2).'/'.$this->value;
     }
 
     public function equals(self $other): bool

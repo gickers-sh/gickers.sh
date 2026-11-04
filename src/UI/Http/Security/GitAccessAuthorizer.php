@@ -28,7 +28,8 @@ final readonly class GitAccessAuthorizer
     public function __construct(
         private AccessResolver $accessResolver,
         private RepoStore $repoStore,
-    ) {}
+    ) {
+    }
 
     public function decide(
         ?User $user,

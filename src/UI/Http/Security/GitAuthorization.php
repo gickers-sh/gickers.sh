@@ -18,5 +18,6 @@ final readonly class GitAuthorization
         public GitVerdict $verdict,
         public ?Repo $repo,
         public AccessLevel $level,
-    ) {}
+    ) {
+    }
 }

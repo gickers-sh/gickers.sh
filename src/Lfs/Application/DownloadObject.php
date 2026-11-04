@@ -19,7 +19,8 @@ final readonly class DownloadObject
     public function __construct(
         private ObjectStorage $storage,
         private LfsObjectStore $objects,
-    ) {}
+    ) {
+    }
 
     /**
      * @return array{0: resource, 1: int} the object stream and its content length

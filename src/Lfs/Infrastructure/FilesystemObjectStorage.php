@@ -20,7 +20,9 @@ use Symfony\Component\DependencyInjection\Attribute\AsAlias;
 #[AsAlias(ObjectStorage::class)]
 final class FilesystemObjectStorage implements ObjectStorage
 {
-    public function __construct(private readonly ServerSettings $settings) {}
+    public function __construct(private readonly ServerSettings $settings)
+    {
+    }
 
     public function path(int $repoId, Oid $oid): string
     {
@@ -56,7 +58,7 @@ final class FilesystemObjectStorage implements ObjectStorage
     public function openRead(int $repoId, Oid $oid)
     {
         $path = $this->path($repoId, $oid);
-        $handle = @fopen($path, 'rb');
+        $handle = @fopen($path, 'r');
         if (false === $handle) {
             throw new \RuntimeException(sprintf('LFS object "%s" not found', $oid->value));
         }
@@ -70,7 +72,7 @@ final class FilesystemObjectStorage implements ObjectStorage
      *
      * @param resource $input
      *
-     * @throws InvalidInput     when the hash or size does not match
+     * @throws InvalidInput      when the hash or size does not match
      * @throws \RuntimeException on filesystem errors
      */
     public function store(int $repoId, Oid $expectedOid, int $expectedSize, $input): int
@@ -82,7 +84,7 @@ final class FilesystemObjectStorage implements ObjectStorage
         }
 
         $tmp = sprintf('%s/.tmp.%s.%s', $dir, $expectedOid->value, bin2hex(random_bytes(6)));
-        $out = @fopen($tmp, 'wb');
+        $out = @fopen($tmp, 'w');
         if (false === $out) {
             throw new \RuntimeException(sprintf('Failed to open temporary LFS file "%s"', $tmp));
         }
@@ -150,7 +152,7 @@ final class FilesystemObjectStorage implements ObjectStorage
             if ('.' === $entry || '..' === $entry) {
                 continue;
             }
-            $path = $dir . '/' . $entry;
+            $path = $dir.'/'.$entry;
             is_dir($path) ? $this->rrmdir($path) : @unlink($path);
         }
         @rmdir($dir);

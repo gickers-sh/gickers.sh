@@ -18,7 +18,9 @@ use Symfony\Component\DependencyInjection\Attribute\AsAlias;
 #[AsAlias(TokenIssuer::class)]
 final class JwtIssuer implements TokenIssuer
 {
-    public function __construct(private readonly JwtKeyGenerator $keys) {}
+    public function __construct(private readonly JwtKeyGenerator $keys)
+    {
+    }
 
     /**
      * @param list<string> $audience
@@ -30,6 +32,21 @@ final class JwtIssuer implements TokenIssuer
         \DateTimeImmutable $issuedAt,
         \DateTimeImmutable $expiresAt,
     ): string {
+        if ('' === $issuer) {
+            throw new \InvalidArgumentException('Issuer cannot be empty');
+        }
+        if ('' === $subject) {
+            throw new \InvalidArgumentException('Subject cannot be empty');
+        }
+
+        /** @var list<non-empty-string> $nonEmptyAudiences */
+        $nonEmptyAudiences = [];
+        foreach ($audience as $aud) {
+            if ('' !== $aud) {
+                $nonEmptyAudiences[] = $aud;
+            }
+        }
+
         $key = $this->keys->load();
         $config = Configuration::forAsymmetricSigner(
             new Eddsa(),
@@ -37,15 +54,19 @@ final class JwtIssuer implements TokenIssuer
             InMemory::plainText($key['public']),
         );
 
-        $token = $config->builder()
+        $builder = $config->builder()
             ->issuedBy($issuer)
-            ->permittedFor(...$audience)
             ->relatedTo($subject)
             ->issuedAt($issuedAt)
             ->canOnlyBeUsedAfter($issuedAt)
             ->expiresAt($expiresAt)
-            ->withHeader('kid', $key['kid'])
-            ->getToken($config->signer(), $config->signingKey());
+            ->withHeader('kid', $key['kid']);
+
+        if ([] !== $nonEmptyAudiences) {
+            $builder = $builder->permittedFor(...$nonEmptyAudiences);
+        }
+
+        $token = $builder->getToken($config->signer(), $config->signingKey());
 
         return $token->toString();
     }

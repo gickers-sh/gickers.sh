@@ -24,7 +24,8 @@ final readonly class LfsPointer
     public function __construct(
         public Oid $oid,
         public int $size,
-    ) {}
+    ) {
+    }
 
     /**
      * Parses an LFS pointer from raw blob content.
@@ -38,7 +39,7 @@ final readonly class LfsPointer
         }
 
         if (!str_starts_with($content, self::META_IDENTIFIER)) {
-            throw new InvalidInput('Content lacks the LFS prefix: ' . self::META_IDENTIFIER);
+            throw new InvalidInput('Content lacks the LFS prefix: '.self::META_IDENTIFIER);
         }
 
         $lines = explode("\n", $content);
@@ -48,7 +49,7 @@ final readonly class LfsPointer
 
         $oidLine = $lines[1];
         if (!str_starts_with($oidLine, self::OID_PREFIX)) {
-            throw new InvalidInput('OID line must start with "' . self::OID_PREFIX . '"');
+            throw new InvalidInput('OID line must start with "'.self::OID_PREFIX.'"');
         }
         $rawOid = substr($oidLine, \strlen(self::OID_PREFIX));
         if (!Oid::isValid($rawOid)) {
@@ -61,7 +62,7 @@ final readonly class LfsPointer
         }
         $sizeStr = substr($sizeLine, 5);
         if (1 !== preg_match('/^\d+$/', $sizeStr)) {
-            throw new InvalidInput('Size has an invalid numeric format: ' . $sizeStr);
+            throw new InvalidInput('Size has an invalid numeric format: '.$sizeStr);
         }
 
         return new self(Oid::fromString($rawOid), (int) $sizeStr);

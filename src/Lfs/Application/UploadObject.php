@@ -25,7 +25,8 @@ final readonly class UploadObject
         private ObjectStorage $storage,
         private LfsObjectStore $objects,
         private ClockInterface $clock,
-    ) {}
+    ) {
+    }
 
     /**
      * Returns false when the object already existed, so the caller drains the

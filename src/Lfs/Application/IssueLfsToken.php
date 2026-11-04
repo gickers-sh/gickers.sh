@@ -32,7 +32,8 @@ final readonly class IssueLfsToken
         private TokenIssuer $issuer,
         private ServerSettings $settings,
         private ClockInterface $clock,
-    ) {}
+    ) {
+    }
 
     /**
      * @param 'upload'|'download'|string $operation
@@ -56,13 +57,13 @@ final readonly class IssueLfsToken
         $this->accessGuard->assertRepo($actor, $name, $need);
 
         $now = $this->clock->now();
-        $expiresAt = $now->add(new \DateInterval('PT' . self::TTL_SECONDS . 'S'));
+        $expiresAt = $now->add(new \DateInterval('PT'.self::TTL_SECONDS.'S'));
         $issuer = $this->settings->httpPublicUrl;
 
         $token = $this->issuer->issue((string) $actor->id(), [$name->value], $issuer, $now, $expiresAt);
 
         return [
-            'header' => ['Authorization' => 'Bearer ' . $token],
+            'header' => ['Authorization' => 'Bearer '.$token],
             'href' => sprintf('%s/%s.git/info/lfs', rtrim($issuer, '/'), $name->value),
             'expires_in' => self::TTL_SECONDS,
         ];

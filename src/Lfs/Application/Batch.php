@@ -23,7 +23,8 @@ final readonly class Batch
         private ObjectStorage $storage,
         private LfsObjectStore $objects,
         private ClockInterface $clock,
-    ) {}
+    ) {
+    }
 
     /**
      * @param list<array{oid: string, size: int}> $objects

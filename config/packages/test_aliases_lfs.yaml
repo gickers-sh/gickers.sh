@@ -1,0 +1,44 @@
+when@test:
+    services:
+        test.lfs.issue_token:
+            alias: App\Lfs\Application\IssueLfsToken
+            public: true
+        test.lfs.batch:
+            alias: App\Lfs\Application\Batch
+            public: true
+        test.lfs.upload:
+            alias: App\Lfs\Application\UploadObject
+            public: true
+        test.lfs.download:
+            alias: App\Lfs\Application\DownloadObject
+            public: true
+        test.lfs.verify:
+            alias: App\Lfs\Application\VerifyObject
+            public: true
+        test.lfs.lock_service:
+            alias: App\Lfs\Application\LockService
+            public: true
+        test.lfs.storage:
+            alias: App\Lfs\Domain\ObjectStorage
+            public: true
+        test.lfs.token_issuer:
+            alias: App\Lfs\Domain\TokenIssuer
+            public: true
+        test.lfs.token_verifier:
+            alias: App\Lfs\Domain\TokenVerifier
+            public: true
+        test.lfs.jwt_keygen:
+            alias: App\Shared\Infrastructure\Server\JwtKeyGenerator
+            public: true
+        test.http.authorizer:
+            alias: App\UI\Http\Security\GitAccessAuthorizer
+            public: true
+        test.http.git_process:
+            alias: App\UI\Http\Git\GitServiceProcess
+            public: true
+        test.ssh_session:
+            alias: App\UI\Ssh\SshSession
+            public: true
+        test.ssh.jwt_command:
+            alias: App\UI\Ssh\Command\JwtCommand
+            public: true

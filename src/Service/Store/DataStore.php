@@ -200,7 +200,7 @@ class DataStore
         return new UserModel(
             id: $userId,
             username: (string) $row['username'],
-            isAdmin: (bool) $row['admin'],
+            isAdmin: (bool) ($row['admin'] ?? $row['is_admin'] ?? false),
             publicKeys: $keys,
             createdAt: isset($row['created_at']) ? new \DateTimeImmutable((string) $row['created_at']) : null,
             updatedAt: isset($row['updated_at']) ? new \DateTimeImmutable((string) $row['updated_at']) : null,
