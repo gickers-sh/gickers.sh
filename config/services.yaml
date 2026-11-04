@@ -20,6 +20,8 @@ services:
     # app.ssh_command tag, never exposed in bin/console. Excluded from the App\ resource above.
     App\UI\Ssh\Command\:
         resource: '../src/UI/Ssh/Command/'
+        exclude:
+            - '../src/UI/Ssh/Command/AbstractSshCommand.php'
         autoconfigure: false
         tags: ['app.ssh_command']
 

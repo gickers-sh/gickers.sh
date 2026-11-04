@@ -5,6 +5,10 @@ security:
         app_users:
             id: App\Identity\Infrastructure\Security\SecurityUserProvider
     firewalls:
+        ssh:
+            lazy: true
+            stateless: true
+            provider: app_users
         main:
             lazy: true
             stateless: true
