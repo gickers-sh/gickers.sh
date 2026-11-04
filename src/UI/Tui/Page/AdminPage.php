@@ -22,7 +22,6 @@ use App\UI\Tui\Render\Screen;
 final class AdminPage extends AbstractPage
 {
     private const TAB_OVERVIEW = 0;
-    private const TAB_USERS = 1;
 
     /** @var list<string> */
     private const TABS = ['Overview', 'Users'];
@@ -39,7 +38,8 @@ final class AdminPage extends AbstractPage
         private readonly UserStore $userStore,
         private readonly ServerSettings $settings,
         private readonly ?User $actor,
-    ) {}
+    ) {
+    }
 
     private function isAdmin(): bool
     {
@@ -119,19 +119,19 @@ final class AdminPage extends AbstractPage
     {
         $next = AccessLevel::from(($this->serverPolicy->anonAccess()->value + 1) % 4);
         $this->serverPolicy->setAnonAccess($next);
-        $this->flash = 'Anonymous access: ' . $next->toString();
+        $this->flash = 'Anonymous access: '.$next->toString();
     }
 
     private function toggleKeyless(): void
     {
         $value = !$this->serverPolicy->allowKeyless();
         $this->serverPolicy->setAllowKeyless($value);
-        $this->flash = 'Keyless access: ' . ($value ? 'enabled' : 'disabled');
+        $this->flash = 'Keyless access: '.($value ? 'enabled' : 'disabled');
     }
 
     protected function headerText(): string
     {
-        return ' Admin — ' . ($this->settings->name ?: 'Soft Serve') . ' ';
+        return ' Admin — '.($this->settings->name ?: 'Soft Serve').' ';
     }
 
     protected function tabBarText(): string
@@ -142,7 +142,7 @@ final class AdminPage extends AbstractPage
     protected function footerText(): string
     {
         if (null !== $this->flash) {
-            return ' ' . $this->flash;
+            return ' '.$this->flash;
         }
         if (!$this->isAdmin()) {
             return ' Esc: back';
@@ -171,16 +171,16 @@ final class AdminPage extends AbstractPage
     {
         $lines = [
             '',
-            '  Server         ' . ($this->settings->name ?: 'Soft Serve'),
-            '  Anon access    ' . $this->serverPolicy->anonAccess()->toString(),
-            '  Keyless access ' . ($this->serverPolicy->allowKeyless() ? 'enabled' : 'disabled'),
-            '  Users          ' . $this->userStore->count(),
+            '  Server         '.($this->settings->name ?: 'Soft Serve'),
+            '  Anon access    '.$this->serverPolicy->anonAccess()->toString(),
+            '  Keyless access '.($this->serverPolicy->allowKeyless() ? 'enabled' : 'disabled'),
+            '  Users          '.$this->userStore->count(),
             '',
             '  a  cycle anonymous access level (no-access → read-only → read-write → admin-access)',
             '  k  toggle keyless access',
         ];
 
-        return array_map(static fn(string $l): string => Screen::fit($l, $cols), $lines);
+        return array_map(static fn (string $l): string => Screen::fit($l, $cols), $lines);
     }
 
     /**
@@ -194,7 +194,7 @@ final class AdminPage extends AbstractPage
 
         $items = [];
         foreach ($this->users as $user) {
-            $meta = ($user->isAdmin() ? 'admin' : 'user') . ' · ' . \count($user->publicKeys()) . ' key(s)';
+            $meta = ($user->isAdmin() ? 'admin' : 'user').' · '.\count($user->publicKeys()).' key(s)';
             $items[] = ['label' => $user->username(), 'meta' => $meta];
         }
 

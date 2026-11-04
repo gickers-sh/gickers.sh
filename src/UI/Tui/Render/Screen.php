@@ -82,7 +82,7 @@ final class Screen
             $i += \strlen($g);
         }
 
-        return $out . self::RESET;
+        return $out.self::RESET;
     }
 
     /**
@@ -93,7 +93,7 @@ final class Screen
         $s = self::truncate($s, $width);
         $pad = $width - self::width($s);
 
-        return $pad > 0 ? $s . str_repeat(' ', $pad) : $s;
+        return $pad > 0 ? $s.str_repeat(' ', $pad) : $s;
     }
 
     /**
@@ -113,13 +113,13 @@ final class Screen
     {
         $parts = [];
         foreach ($labels as $i => $label) {
-            $cell = ' ' . $label . ' ';
+            $cell = ' '.$label.' ';
             $parts[] = $i === $active
-                ? "\e[7m" . $cell . self::RESET
-                : "\e[2m" . $cell . self::RESET;
+                ? "\e[7m".$cell.self::RESET
+                : "\e[2m".$cell.self::RESET;
         }
 
-        return self::fit(implode("\e[2m│" . self::RESET, $parts), $width);
+        return self::fit(implode("\e[2m│".self::RESET, $parts), $width);
     }
 
     /**
@@ -132,12 +132,12 @@ final class Screen
     public static function box(string $title, array $lines, int $innerWidth): array
     {
         $innerWidth = max($innerWidth, self::width($title) + 2, 4);
-        $top = '╭' . self::centerText(' ' . $title . ' ', $innerWidth, '─') . '╮';
+        $top = '╭'.self::centerText(' '.$title.' ', $innerWidth, '─').'╮';
         $out = [$top];
         foreach ($lines as $line) {
-            $out[] = '│' . self::fit($line, $innerWidth) . '│';
+            $out[] = '│'.self::fit($line, $innerWidth).'│';
         }
-        $out[] = '╰' . str_repeat('─', $innerWidth) . '╯';
+        $out[] = '╰'.str_repeat('─', $innerWidth).'╯';
 
         return $out;
     }
@@ -162,7 +162,7 @@ final class Screen
         for ($r = 0; $r < $height; ++$r) {
             $idx = $r - $top;
             if ($idx >= 0 && $idx < \count($lines)) {
-                $canvas[] = self::fit(str_repeat(' ', $left) . $lines[$idx], $width);
+                $canvas[] = self::fit(str_repeat(' ', $left).$lines[$idx], $width);
             } else {
                 $canvas[] = self::blank($width);
             }
@@ -197,13 +197,13 @@ final class Screen
             $label = $item['label'];
             $meta = $item['meta'] ?? '';
             $prefix = $idx === $selected ? '▶ ' : '  ';
-            $line = $prefix . $label;
+            $line = $prefix.$label;
             if ('' !== $meta) {
                 $metaCol = max(self::width($line) + 2, $width - self::width($meta) - 1);
-                $line = self::fit($line, $metaCol) . ' ' . "\e[2m" . $meta . self::RESET;
+                $line = self::fit($line, $metaCol).' '."\e[2m".$meta.self::RESET;
             }
             $line = self::fit($line, $width);
-            $rows[] = $idx === $selected ? "\e[7m" . self::stripReset($line) . self::RESET : $line;
+            $rows[] = $idx === $selected ? "\e[7m".self::stripReset($line).self::RESET : $line;
         }
 
         return $rows;
@@ -236,12 +236,12 @@ final class Screen
             }
             $num = str_pad((string) ($idx + 1), $gutterWidth, ' ', \STR_PAD_LEFT);
             if ($idx === $cursorLine) {
-                $gutter = "\e[7m" . $num . '▶' . self::RESET . ' ';
+                $gutter = "\e[7m".$num.'▶'.self::RESET.' ';
             } else {
-                $gutter = "\e[2m" . $num . '│' . self::RESET . ' ';
+                $gutter = "\e[2m".$num.'│'.self::RESET.' ';
             }
             $code = self::truncate($codeLines[$idx], max(0, $width - $gutterWidth - 2));
-            $rows[] = self::fit($gutter . $code, $width);
+            $rows[] = self::fit($gutter.$code, $width);
         }
 
         return $rows;
@@ -256,7 +256,7 @@ final class Screen
         $left = intdiv($width - $w, 2);
         $right = $width - $w - $left;
 
-        return str_repeat($fill, $left) . $s . str_repeat($fill, $right);
+        return str_repeat($fill, $left).$s.str_repeat($fill, $right);
     }
 
     private static function stripReset(string $s): string

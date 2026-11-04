@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "a136f98e9eeef9fd299273ba3dd83bb3",
+    "content-hash": "893a89d3d322b24379cfc4fc875b7d94",
     "packages": [
         {
             "name": "codes-sh/termstrap",
@@ -31,39 +31,6 @@
                 "MIT"
             ],
             "description": "PHP FFI binding for libtermstrap (HTML/CSS/Markdown to ANSI renderer)",
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
-        },
-        {
-            "name": "codes-sh/tui",
-            "version": "dev-main",
-            "dist": {
-                "type": "path",
-                "url": "packages/tui",
-                "reference": "b22b746b710f3c50c80f4953b69782633a9eee0c"
-            },
-            "require": {
-                "ext-mbstring": "*",
-                "ext-pcntl": "*",
-                "php": ">=8.4"
-            },
-            "type": "library",
-            "autoload": {
-                "psr-4": {
-                    "CodesSh\\Tui\\": "src/"
-                }
-            },
-            "autoload-dev": {
-                "psr-4": {
-                    "CodesSh\\Tui\\Tests\\": "tests/"
-                }
-            },
-            "license": [
-                "MIT"
-            ],
-            "description": "Terminal UI runtime, layout engine and components (Bubble Tea / Lipgloss / Bubblezone port) used by codes.sh",
             "transport-options": {
                 "symlink": true,
                 "relative": true
@@ -9832,8 +9799,7 @@
     "aliases": [],
     "minimum-stability": "stable",
     "stability-flags": {
-        "codes-sh/termstrap": 20,
-        "codes-sh/tui": 20
+        "codes-sh/termstrap": 20
     },
     "prefer-stable": true,
     "prefer-lowest": false,

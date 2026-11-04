@@ -34,7 +34,7 @@ abstract class AbstractPage implements Page
         $this->footerWidget = new TextWidget('', true);
         $this->contentWidget = new ContentWidget();
         $this->contentWidget->expandVertically(true);
-        $this->contentWidget->setPainter(fn(int $cols, int $rows): array => $this->paintBody($cols, $rows));
+        $this->contentWidget->setPainter(fn (int $cols, int $rows): array => $this->paintBody($cols, $rows));
 
         $this->root = new ContainerWidget();
         $this->root->expandVertically(true);
@@ -59,7 +59,9 @@ abstract class AbstractPage implements Page
     /**
      * Load data after the widget tree is mounted. Overridable.
      */
-    protected function load(): void {}
+    protected function load(): void
+    {
+    }
 
     abstract protected function headerText(): string;
 
@@ -79,6 +81,6 @@ abstract class AbstractPage implements Page
      */
     protected function messageBody(string $message, int $cols): array
     {
-        return [Screen::blank($cols), Screen::fit('  ' . $message, $cols)];
+        return [Screen::blank($cols), Screen::fit('  '.$message, $cols)];
     }
 }

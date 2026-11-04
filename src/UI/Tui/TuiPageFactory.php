@@ -18,6 +18,7 @@ use App\Shared\Infrastructure\Config\ServerSettings;
 use App\UI\Tui\Page\AdminPage;
 use App\UI\Tui\Page\RepoPage;
 use App\UI\Tui\Page\SelectionPage;
+use App\UI\Tui\Render\TermstrapRenderer;
 use Symfony\Component\Tui\Tui;
 
 /**
@@ -38,7 +39,8 @@ final class TuiPageFactory
         private readonly TermstrapRenderer $renderer,
         private readonly CodeIntelQuery $codeIntel,
         private readonly RepoDirectory $repoDirectory,
-    ) {}
+    ) {
+    }
 
     public function createRoot(Tui $tui, ?User $actor): RootUI
     {

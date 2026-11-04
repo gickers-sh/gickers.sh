@@ -66,7 +66,7 @@ CSS;
                 $input = $content;
                 break;
             case '.gif':
-                $input = '<img src="' . htmlspecialchars($filename, \ENT_QUOTES, 'UTF-8') . '" alt="Animated GIF" />';
+                $input = '<img src="'.htmlspecialchars($filename, \ENT_QUOTES, 'UTF-8').'" alt="Animated GIF" />';
                 break;
             default:
                 $input = $content;
@@ -125,7 +125,7 @@ CSS;
 
         $renderInput = $content;
         if ('' !== $docDefs && str_contains($content, '][')) {
-            $renderInput = $content . "\n\n" . $docDefs;
+            $renderInput = $content."\n\n".$docDefs;
         }
 
         $ext = $this->normalizeExt($filename);
@@ -154,7 +154,7 @@ CSS;
         }
 
         if (!$this->termstrapAvailable || null === $this->termstrap) {
-            return $leadIndent . $this->fallbackRender($input, $width);
+            return $leadIndent.$this->fallbackRender($input, $width);
         }
 
         $termstrapOptions = [
@@ -178,9 +178,9 @@ CSS;
                 }
             }
 
-            return $leadIndent . $target;
+            return $leadIndent.$target;
         } catch (\Throwable) {
-            return $leadIndent . $this->fallbackRender($input, $width);
+            return $leadIndent.$this->fallbackRender($input, $width);
         }
     }
 
@@ -210,7 +210,7 @@ CSS;
         $html = '<table class="table table-striped table-hover table-sm">';
         $html .= '<thead><tr>';
         foreach ($rows[0] as $col) {
-            $html .= '<th>' . htmlspecialchars((string) $col, \ENT_QUOTES, 'UTF-8') . '</th>';
+            $html .= '<th>'.htmlspecialchars((string) $col, \ENT_QUOTES, 'UTF-8').'</th>';
         }
         $html .= '</tr></thead>';
 
@@ -219,7 +219,7 @@ CSS;
             for ($i = 1; $i < count($rows); ++$i) {
                 $html .= '<tr>';
                 foreach ($rows[$i] as $col) {
-                    $html .= '<td>' . htmlspecialchars((string) $col, \ENT_QUOTES, 'UTF-8') . '</td>';
+                    $html .= '<td>'.htmlspecialchars((string) $col, \ENT_QUOTES, 'UTF-8').'</td>';
                 }
                 $html .= '</tr>';
             }
@@ -237,12 +237,12 @@ CSS;
             $lower = strtolower($filename);
 
             return match ($lower) {
-                'csv', 'tsv', 'html', 'htm', 'md', 'markdown', 'gif' => '.' . $lower,
+                'csv', 'tsv', 'html', 'htm', 'md', 'markdown', 'gif' => '.'.$lower,
                 default => '',
             };
         }
 
-        return '.' . $ext;
+        return '.'.$ext;
     }
 
     private function fallbackRender(string $content, int $width): string

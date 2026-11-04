@@ -8,7 +8,7 @@ use App\Identity\Domain\Model\User;
 use Symfony\Component\Tui\Tui;
 
 /**
- * Navigation and lifecycle surface a {@see \App\UI\Tui\Page\Page} uses to drive
+ * Navigation and lifecycle surface a {@see Page\Page} uses to drive
  * the shell: swap the active page, reach the terminal, and quit.
  */
 interface TuiHost

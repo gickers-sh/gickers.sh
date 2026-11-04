@@ -385,7 +385,7 @@ final class RepoPage extends AbstractPage
         try {
             $content = $this->reader->getBlob($this->git, $this->ref, $path);
         } catch (\Throwable $e) {
-            $this->flash = 'Cannot open ' . $path;
+            $this->flash = 'Cannot open '.$path;
 
             return;
         }
@@ -408,7 +408,7 @@ final class RepoPage extends AbstractPage
         $this->subpath = '';
         $this->sel = 0;
         $this->scroll = 0;
-        $this->flash = 'Switched to ' . $ref;
+        $this->flash = 'Switched to '.$ref;
     }
 
     private function openDiff(string $sha): void
@@ -467,7 +467,7 @@ final class RepoPage extends AbstractPage
             try {
                 $content = $this->reader->getBlob($this->git, $this->ref, $loc->path);
             } catch (\Throwable) {
-                $this->flash = 'Cannot open ' . $loc->path;
+                $this->flash = 'Cannot open '.$loc->path;
 
                 return;
             }
@@ -477,7 +477,7 @@ final class RepoPage extends AbstractPage
         }
         $this->cursorLine = max(0, min($loc->line, \count($this->fileRaw) - 1));
         $this->cursorCol = max(0, $loc->col);
-        $this->flash = '→ ' . $loc->path . ':' . ($loc->line + 1);
+        $this->flash = '→ '.$loc->path.':'.($loc->line + 1);
     }
 
     private function saveSettings(): void
@@ -496,7 +496,7 @@ final class RepoPage extends AbstractPage
                 $this->settingsForm['private'],
                 null,
             );
-        } catch (AccessDenied | NotFound | Conflict | InvalidInput $e) {
+        } catch (AccessDenied|NotFound|Conflict|InvalidInput $e) {
             $this->flash = $e->getMessage();
 
             return;
@@ -533,10 +533,10 @@ final class RepoPage extends AbstractPage
      */
     private function tree(): array
     {
-        $key = $this->ref . ':' . $this->subpath;
+        $key = $this->ref.':'.$this->subpath;
         if (!isset($this->treeCache[$key])) {
             try {
-                $this->treeCache[$key] = $this->reader->getTree($this->git, $this->ref, $this->subpath);
+                $this->treeCache[$key] = array_values($this->reader->getTree($this->git, $this->ref, $this->subpath));
             } catch (\Throwable) {
                 $this->treeCache[$key] = [];
             }
@@ -552,7 +552,7 @@ final class RepoPage extends AbstractPage
     {
         if (null === $this->commits) {
             try {
-                $this->commits = $this->reader->getCommits($this->git, $this->ref, 100, 0);
+                $this->commits = array_values($this->reader->getCommits($this->git, $this->ref, 100, 0));
             } catch (\Throwable) {
                 $this->commits = [];
             }
@@ -611,7 +611,7 @@ final class RepoPage extends AbstractPage
      */
     private function readmeLines(int $cols): array
     {
-        $key = $this->ref . ':' . $cols;
+        $key = $this->ref.':'.$cols;
         if (null === $this->readmeCache || $this->readmeCache['key'] !== $key) {
             $doc = $this->reader->readme($this->git, $this->ref);
             if (null === $doc) {
@@ -641,7 +641,7 @@ final class RepoPage extends AbstractPage
     {
         $vis = $this->db?->isPrivate() ? ' (private)' : '';
 
-        return ' ' . $this->name . $vis . ' @ ' . $this->ref . ' ';
+        return ' '.$this->name.$vis.' @ '.$this->ref.' ';
     }
 
     protected function tabBarText(): string
@@ -652,7 +652,7 @@ final class RepoPage extends AbstractPage
     protected function footerText(): string
     {
         if (null !== $this->flash) {
-            return ' ' . $this->flash;
+            return ' '.$this->flash;
         }
         if ($this->refsOpen) {
             return ' ↑/↓ move · Enter: jump · Esc: back';
@@ -713,8 +713,8 @@ final class RepoPage extends AbstractPage
     private function paintFiles(int $cols, int $rows): array
     {
         $entries = $this->tree();
-        $crumb = '  /' . $this->subpath;
-        $header = "\e[2m" . Screen::fit($crumb, $cols) . "\e[0m";
+        $crumb = '  /'.$this->subpath;
+        $header = "\e[2m".Screen::fit($crumb, $cols)."\e[0m";
         $bodyRows = max(1, $rows - 1);
 
         if ([] === $entries) {
@@ -723,7 +723,7 @@ final class RepoPage extends AbstractPage
 
         $items = [];
         foreach ($entries as $entry) {
-            $label = $entry->isDirectory() ? $entry->name . '/' : $entry->name;
+            $label = $entry->isDirectory() ? $entry->name.'/' : $entry->name;
             $meta = $entry->isFile() && null !== $entry->size ? $this->humanSize($entry->size) : '';
             $items[] = ['label' => $label, 'meta' => $meta];
         }
@@ -743,7 +743,7 @@ final class RepoPage extends AbstractPage
 
         $items = [];
         foreach ($commits as $commit) {
-            $meta = $commit->shortHash . '  ' . $this->relativeTime($commit->timestamp);
+            $meta = $commit->shortHash.'  '.$this->relativeTime($commit->timestamp);
             $items[] = ['label' => $commit->subject, 'meta' => $meta];
         }
 
@@ -786,11 +786,11 @@ final class RepoPage extends AbstractPage
     private function paintSettings(int $cols, int $rows): array
     {
         if (null === $this->db) {
-            return array_map(static fn(string $l): string => Screen::fit($l, $cols), [
+            return array_map(static fn (string $l): string => Screen::fit($l, $cols), [
                 '',
                 '  Local repository (not registered on this server).',
-                '  Name         ' . $this->name,
-                '  Default ref  ' . $this->git->defaultBranch,
+                '  Name         '.$this->name,
+                '  Default ref  '.$this->git->defaultBranch,
             ]);
         }
 
@@ -801,21 +801,21 @@ final class RepoPage extends AbstractPage
                 $this->toggleRow('Private', $this->settingsForm['private'], 1 === $this->settingsField),
             ];
 
-            return array_map(static fn(string $l): string => Screen::fit($l, $cols), $lines);
+            return array_map(static fn (string $l): string => Screen::fit($l, $cols), $lines);
         }
 
         $lines = [
             '',
-            '  Name         ' . $this->name,
-            '  Project      ' . ($this->db->projectName() ?: '—'),
-            '  Description  ' . ($this->db->description() ?: '—'),
-            '  Private      ' . ($this->db->isPrivate() ? 'yes' : 'no'),
-            '  Default ref  ' . $this->ref,
+            '  Name         '.$this->name,
+            '  Project      '.($this->db->projectName() ?: '—'),
+            '  Description  '.($this->db->description() ?: '—'),
+            '  Private      '.($this->db->isPrivate() ? 'yes' : 'no'),
+            '  Default ref  '.$this->ref,
             '',
             $this->canEditSettings() ? '  Press e to edit.' : '  Read-only (write access required to edit).',
         ];
 
-        return array_map(static fn(string $l): string => Screen::fit($l, $cols), $lines);
+        return array_map(static fn (string $l): string => Screen::fit($l, $cols), $lines);
     }
 
     /**
@@ -825,9 +825,9 @@ final class RepoPage extends AbstractPage
     {
         $items = [];
         foreach ($this->refs as $loc) {
-            $items[] = ['label' => $loc->path, 'meta' => ($loc->line + 1) . ':' . ($loc->col + 1)];
+            $items[] = ['label' => $loc->path, 'meta' => ($loc->line + 1).':'.($loc->col + 1)];
         }
-        $header = "\e[2m" . Screen::fit('  ' . \count($this->refs) . ' reference(s)', $cols) . "\e[0m";
+        $header = "\e[2m".Screen::fit('  '.\count($this->refs).' reference(s)', $cols)."\e[0m";
 
         return array_merge([$header], Screen::listView($items, $this->refSel, max(1, $rows - 1), $cols));
     }
@@ -855,11 +855,11 @@ final class RepoPage extends AbstractPage
                 : $raw;
             $num = str_pad((string) ($idx + 1), $gutter, ' ', \STR_PAD_LEFT);
             if ($idx === $this->cursorLine) {
-                $g = "\e[7m" . $num . '▶' . "\e[0m" . ' ';
+                $g = "\e[7m".$num.'▶'."\e[0m".' ';
             } else {
-                $g = "\e[2m" . $num . '│' . "\e[0m" . ' ';
+                $g = "\e[2m".$num.'│'."\e[0m".' ';
             }
-            $rowsOut[] = Screen::fit($g . Screen::truncate($code, $codeWidth), $cols);
+            $rowsOut[] = Screen::fit($g.Screen::truncate($code, $codeWidth), $cols);
         }
 
         return $rowsOut;
@@ -892,13 +892,13 @@ final class RepoPage extends AbstractPage
     {
         return array_map(static function (string $line): string {
             if (str_starts_with($line, '+') && !str_starts_with($line, '+++')) {
-                return "\e[32m" . $line . "\e[0m";
+                return "\e[32m".$line."\e[0m";
             }
             if (str_starts_with($line, '-') && !str_starts_with($line, '---')) {
-                return "\e[31m" . $line . "\e[0m";
+                return "\e[31m".$line."\e[0m";
             }
             if (str_starts_with($line, '@@')) {
-                return "\e[36m" . $line . "\e[0m";
+                return "\e[36m".$line."\e[0m";
             }
 
             return $line;
@@ -909,38 +909,38 @@ final class RepoPage extends AbstractPage
     {
         $text = sprintf('  %-12s %s%s', $label, $value, $active ? '▏' : '');
 
-        return $active ? "\e[1m" . $text . "\e[0m" : $text;
+        return $active ? "\e[1m".$text."\e[0m" : $text;
     }
 
     private function toggleRow(string $label, bool $value, bool $active): string
     {
         $text = sprintf('  %-12s %s', $label, $value ? '[x]' : '[ ]');
 
-        return $active ? "\e[1m" . $text . '  (space)' . "\e[0m" : $text;
+        return $active ? "\e[1m".$text.'  (space)'."\e[0m" : $text;
     }
 
     private function humanSize(int $bytes): string
     {
         if ($bytes < 1024) {
-            return $bytes . ' B';
+            return $bytes.' B';
         }
         if ($bytes < 1024 * 1024) {
-            return round($bytes / 1024, 1) . ' KB';
+            return round($bytes / 1024, 1).' KB';
         }
 
-        return round($bytes / (1024 * 1024), 1) . ' MB';
+        return round($bytes / (1024 * 1024), 1).' MB';
     }
 
     private function relativeTime(int $timestamp): string
     {
         $diff = max(0, time() - $timestamp);
         if ($diff < 3600) {
-            return max(1, intdiv($diff, 60)) . 'm ago';
+            return max(1, intdiv($diff, 60)).'m ago';
         }
         if ($diff < 86400) {
-            return intdiv($diff, 3600) . 'h ago';
+            return intdiv($diff, 3600).'h ago';
         }
 
-        return intdiv($diff, 86400) . 'd ago';
+        return intdiv($diff, 86400).'d ago';
     }
 }

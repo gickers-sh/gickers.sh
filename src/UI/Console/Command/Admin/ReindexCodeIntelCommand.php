@@ -2,27 +2,32 @@
 
 declare(strict_types=1);
 
-namespace App\Command;
+namespace App\UI\Console\Command\Admin;
 
-use App\Service\Backend\BackendService;
-use App\Service\CodeIntel\CodeIntelService;
+use App\CodeIntel\Application\IndexCommitHandler;
+use App\CodeIntel\Application\Message\IndexCommit;
+use App\Repo\Domain\RepoDirectory;
+use App\Repo\Domain\RepoName;
+use App\Repo\Domain\RepoStore;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Process\Process;
 
 #[AsCommand(
     name: 'soft:admin:reindex-codeintel',
     description: 'Index repositories for code navigation (Go To Def/Ref)',
-    aliases: ['admin:reindex-codeintel']
+    aliases: ['admin:reindex-codeintel'],
 )]
-final class AdminReindexCodeintelCommand extends Command
+final class ReindexCodeIntelCommand extends Command
 {
     public function __construct(
-        private readonly BackendService $backend,
-        private readonly CodeIntelService $codeIntel,
+        private readonly RepoStore $repoStore,
+        private readonly RepoDirectory $repoDirectory,
+        private readonly IndexCommitHandler $indexHandler,
     ) {
         parent::__construct();
     }
@@ -33,7 +38,7 @@ final class AdminReindexCodeintelCommand extends Command
             'repo',
             InputArgument::OPTIONAL,
             'Name of the repository to index (omit to index all repositories)',
-            null
+            null,
         );
     }
 
@@ -43,9 +48,9 @@ final class AdminReindexCodeintelCommand extends Command
         $repoName = $input->getArgument('repo');
 
         try {
-            if (null !== $repoName && '' !== trim((string) $repoName)) {
-                $cleanName = trim((string) $repoName);
-                $repo = $this->backend->getRepository($cleanName);
+            if (\is_string($repoName) && '' !== trim($repoName)) {
+                $cleanName = trim($repoName);
+                $repo = $this->repoStore->byName(RepoName::fromInput($cleanName));
                 if (null === $repo) {
                     $errOutput->writeln(sprintf('<error>Repository "%s": not found</error>', $cleanName));
 
@@ -53,7 +58,7 @@ final class AdminReindexCodeintelCommand extends Command
                 }
                 $repos = [$repo];
             } else {
-                $repos = $this->backend->listRepositories();
+                $repos = $this->repoStore->all();
             }
         } catch (\Throwable $e) {
             $errOutput->writeln(sprintf('<error>Failed to list repositories: %s</error>', $e->getMessage()));
@@ -62,29 +67,30 @@ final class AdminReindexCodeintelCommand extends Command
         }
 
         foreach ($repos as $repo) {
-            if (!is_array($repo)) {
-                continue;
-            }
-            $name = $repo['name'] ?? 'unknown';
-            $path = $repo['path'] ?? (method_exists($this->backend, 'getRepoPath') ? $this->backend->getRepoPath($name) : null);
-            if (null === $path || !is_dir($path)) {
+            $name = $repo->nameString();
+            $path = $this->repoDirectory->pathFor($repo->name());
+            if (!is_dir($path)) {
                 $output->writeln(sprintf('<comment>Skipping %s: invalid path</comment>', $name));
                 continue;
             }
 
             // Get HEAD commit SHA
-            $headSha = trim((string) shell_exec(sprintf('git -C %s rev-parse HEAD 2>/dev/null', escapeshellarg($path))));
-            if ('' === $headSha) {
+            $process = new Process(['git', 'rev-parse', 'HEAD'], $path);
+            $process->run();
+            $headSha = trim($process->getOutput());
+            if (!$process->isSuccessful() || '' === $headSha) {
                 $output->writeln(sprintf('<comment>Skipping %s: no HEAD commit</comment>', $name));
                 continue;
             }
 
-            $refShort = trim((string) shell_exec(sprintf('git -C %s rev-parse --abbrev-ref HEAD 2>/dev/null', escapeshellarg($path)))) ?: 'HEAD';
+            $refProcess = new Process(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], $path);
+            $refProcess->run();
+            $refShort = trim($refProcess->getOutput()) ?: 'HEAD';
             $shortSha = substr($headSha, 0, min(7, strlen($headSha)));
             $output->writeln(sprintf('Indexing <info>%s</info> at %s (%s)...', $name, $refShort, $shortSha));
 
             try {
-                $this->codeIntel->indexCommit($path, $name, $headSha);
+                ($this->indexHandler)(new IndexCommit($name, $headSha));
                 $output->writeln(sprintf('  -> <info>%s: OK</info>', $name));
             } catch (\Throwable $e) {
                 $errOutput->writeln(sprintf('  -> <error>%s: %s</error>', $name, $e->getMessage()));

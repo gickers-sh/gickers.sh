@@ -58,7 +58,8 @@ final class SelectionPage extends AbstractPage
         private readonly CreateRepo $createRepo,
         private readonly ServerSettings $settings,
         private readonly ?User $actor,
-    ) {}
+    ) {
+    }
 
     protected function load(): void
     {
@@ -202,7 +203,7 @@ final class SelectionPage extends AbstractPage
                 trim($this->form['description']),
                 '',
             );
-        } catch (InvalidInput | Conflict | AccessDenied $e) {
+        } catch (InvalidInput|Conflict|AccessDenied $e) {
             $this->error = $e->getMessage();
 
             return;
@@ -212,7 +213,7 @@ final class SelectionPage extends AbstractPage
         $this->form = ['name' => '', 'description' => '', 'private' => false];
         $this->field = 0;
         $this->error = null;
-        $this->flash = 'Created ' . $repo->nameString();
+        $this->flash = 'Created '.$repo->nameString();
         $this->tab = self::TAB_REPOS;
         $this->load();
         $this->selectByName(self::TAB_REPOS, $repo->nameString());
@@ -278,7 +279,7 @@ final class SelectionPage extends AbstractPage
 
     protected function headerText(): string
     {
-        return ' codes.sh — ' . ($this->settings->name ?: 'Soft Serve') . ' ';
+        return ' codes.sh — '.($this->settings->name ?: 'Soft Serve').' ';
     }
 
     protected function tabBarText(): string
@@ -289,7 +290,7 @@ final class SelectionPage extends AbstractPage
     protected function footerText(): string
     {
         if (null !== $this->flash) {
-            return ' ' . $this->flash;
+            return ' '.$this->flash;
         }
         if ($this->newRepoOpen) {
             return ' Enter: create · Tab: next field · Esc: cancel';
@@ -299,7 +300,7 @@ final class SelectionPage extends AbstractPage
         }
         $admin = $this->actor?->isAdmin() ? ' · A: admin' : '';
 
-        return ' ↑/↓ move · Enter: open · n: new' . $admin . ' · ?: help · q: quit';
+        return ' ↑/↓ move · Enter: open · n: new'.$admin.' · ?: help · q: quit';
     }
 
     protected function paintBody(int $cols, int $rows): array
@@ -359,15 +360,15 @@ final class SelectionPage extends AbstractPage
     {
         $lines = [
             '',
-            '  ' . ($this->settings->name ?: 'Soft Serve'),
+            '  '.($this->settings->name ?: 'Soft Serve'),
             '',
             '  A self-hostable Git server for the command line.',
             '',
-            '  SSH   ' . $this->settings->sshPublicUrl,
-            '  HTTP  ' . $this->settings->httpPublicUrl,
+            '  SSH   '.$this->settings->sshPublicUrl,
+            '  HTTP  '.$this->settings->httpPublicUrl,
         ];
 
-        return array_map(static fn(string $l): string => Screen::fit($l, $cols), $lines);
+        return array_map(static fn (string $l): string => Screen::fit($l, $cols), $lines);
     }
 
     /**
@@ -381,12 +382,12 @@ final class SelectionPage extends AbstractPage
 
         $lines = [
             '',
-            '  Username  ' . $this->actor->username(),
-            '  Role      ' . ($this->actor->isAdmin() ? 'administrator' : 'user'),
-            '  Keys      ' . \count($this->actor->publicKeys()),
+            '  Username  '.$this->actor->username(),
+            '  Role      '.($this->actor->isAdmin() ? 'administrator' : 'user'),
+            '  Keys      '.\count($this->actor->publicKeys()),
         ];
 
-        return array_map(static fn(string $l): string => Screen::fit($l, $cols), $lines);
+        return array_map(static fn (string $l): string => Screen::fit($l, $cols), $lines);
     }
 
     /**
@@ -401,7 +402,7 @@ final class SelectionPage extends AbstractPage
             '',
         ];
         $lines[] = null !== $this->error
-            ? "\e[31m! " . $this->error . "\e[0m"
+            ? "\e[31m! ".$this->error."\e[0m"
             : 'Enter: create · Tab: next · Esc: cancel';
 
         return $lines;
@@ -412,14 +413,14 @@ final class SelectionPage extends AbstractPage
         $cursor = $active ? '▏' : '';
         $text = sprintf('%-12s %s%s', $label, $value, $cursor);
 
-        return $active ? "\e[1m" . $text . "\e[0m" : $text;
+        return $active ? "\e[1m".$text."\e[0m" : $text;
     }
 
     private function toggleRow(string $label, bool $value, bool $active): string
     {
         $text = sprintf('%-12s %s', $label, $value ? '[x]' : '[ ]');
 
-        return $active ? "\e[1m" . $text . '  (space to toggle)' . "\e[0m" : $text;
+        return $active ? "\e[1m".$text.'  (space to toggle)'."\e[0m" : $text;
     }
 
     /**

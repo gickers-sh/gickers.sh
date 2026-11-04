@@ -27,7 +27,7 @@ final class ContentWidget extends AbstractWidget implements VerticallyExpandable
 
     public function __construct()
     {
-        $this->painter = static fn(int $cols, int $rows): array => [];
+        $this->painter = static fn (int $cols, int $rows): array => [];
     }
 
     /**

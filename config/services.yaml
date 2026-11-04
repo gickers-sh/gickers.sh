@@ -25,5 +25,3 @@ services:
 
     App\UI\Tui\Render\TermstrapRenderer:
         lazy: true
-
-    CodesSh\Tui\Runtime\TerminalRunner: ~
