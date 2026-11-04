@@ -167,23 +167,15 @@ final class GitDaemonCommand extends Command
             pcntl_async_signals(true);
         }
 
-        pcntl_signal(\SIGCHLD, fn(): null => $this->onChildExit());
-        pcntl_signal(\SIGTERM, fn(): null => $this->onShutdown());
-        pcntl_signal(\SIGINT, fn(): null => $this->onShutdown());
-    }
-
-    private function onChildExit(): null
-    {
-        $this->reapChildren();
-
-        return null;
-    }
-
-    private function onShutdown(): null
-    {
-        $this->running = false;
-
-        return null;
+        pcntl_signal(\SIGCHLD, function (int $signo): void {
+            $this->reapChildren();
+        });
+        pcntl_signal(\SIGTERM, function (int $signo): void {
+            $this->running = false;
+        });
+        pcntl_signal(\SIGINT, function (int $signo): void {
+            $this->running = false;
+        });
     }
 
     /** Non-blocking reap of finished children, keeping the active counter honest. */
