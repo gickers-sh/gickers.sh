@@ -1,0 +1,29 @@
+when@test:
+    services:
+        test.open_pull_request:
+            alias: App\PullRequest\Application\OpenPullRequest
+            public: true
+        test.merge_pull_request:
+            alias: App\PullRequest\Application\MergePullRequest
+            public: true
+        test.close_pull_request:
+            alias: App\PullRequest\Application\ClosePullRequest
+            public: true
+        test.reopen_pull_request:
+            alias: App\PullRequest\Application\ReopenPullRequest
+            public: true
+        test.delete_pull_request:
+            alias: App\PullRequest\Application\DeletePullRequest
+            public: true
+        test.comment_pull_request:
+            alias: App\PullRequest\Application\CommentPullRequest
+            public: true
+        test.pull_request_query:
+            alias: App\PullRequest\Application\Query\PullRequestQuery
+            public: true
+        test.pull_request_git:
+            alias: App\PullRequest\Infrastructure\Git\PullRequestGit
+            public: true
+        test.pull_request_store:
+            alias: App\PullRequest\Domain\PullRequestStore
+            public: true
