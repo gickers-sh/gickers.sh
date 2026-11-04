@@ -17,17 +17,23 @@ use App\Webhook\Domain\Model\Webhook;
 use App\Webhook\Domain\WebhookEvent;
 use App\Webhook\Domain\WebhookStore;
 use Psr\Clock\ClockInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 /**
  * Creates a new webhook for a repository. Requires repository admin permissions.
  */
 final readonly class CreateWebhook
 {
+    /**
+     * @param list<string> $allowedSubnets IPs/CIDRs from SOFT_SERVE_WEBHOOK_ALLOW_LIST, also honoured at delivery
+     */
     public function __construct(
         private AccessGuard $accessGuard,
         private WebhookStore $webhookStore,
         private SsrfGuard $ssrfGuard,
         private ClockInterface $clock,
+        #[Autowire(env: 'csv:SOFT_SERVE_WEBHOOK_ALLOW_LIST')]
+        private array $allowedSubnets = [],
     ) {
     }
 
@@ -50,7 +56,7 @@ final readonly class CreateWebhook
         }
 
         $url = trim($url);
-        $this->ssrfGuard->assertPublicUrl($url);
+        $this->ssrfGuard->assertPublicUrl($url, $this->allowedSubnets);
 
         $existing = $this->webhookStore->findByUrl($repo, $url);
         if (null !== $existing) {

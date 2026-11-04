@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Shared\Infrastructure\Security;
 
 use App\Shared\Domain\Exception\InvalidInput;
+use Symfony\Component\HttpFoundation\IpUtils;
 
 /**
  * Rejects outbound URLs that resolve to private, loopback, link-local, multicast,
@@ -25,20 +26,25 @@ final class SsrfGuard
     }
 
     /**
+     * @param list<string> $allowedSubnets operator-approved IPs/CIDRs that bypass the private-address check
+     *
      * @throws InvalidInput when the URL is not a public HTTP(S) destination
      */
-    public function assertPublicUrl(string $url): void
+    public function assertPublicUrl(string $url, array $allowedSubnets = []): void
     {
-        if (!$this->isPublicUrl($url)) {
+        if (!$this->isPublicUrl($url, $allowedSubnets)) {
             throw new InvalidInput(sprintf('refusing to access non-public or invalid URL "%s"', $url));
         }
     }
 
     /**
      * Reports whether a URL is safe to make outbound HTTP(S) requests to.
-     * Rejects non-HTTP(S) schemes, localhost, and destinations resolving to private/blocked IPs.
+     * Rejects non-HTTP(S) schemes, localhost, and destinations resolving to private/blocked IPs
+     * unless they fall within `$allowedSubnets`.
+     *
+     * @param list<string> $allowedSubnets
      */
-    public function isPublicUrl(string $url): bool
+    public function isPublicUrl(string $url, array $allowedSubnets = []): bool
     {
         $url = trim($url);
         if ('' === $url) {
@@ -67,7 +73,7 @@ final class SsrfGuard
 
         // Host is already an IP literal.
         if (false !== @inet_pton($host)) {
-            return $this->isPublicIp($host);
+            return $this->isPublicIp($host) || IpUtils::checkIp($host, $allowedSubnets);
         }
 
         $resolvedIps = $this->resolveHost($host);
@@ -76,7 +82,7 @@ final class SsrfGuard
         }
 
         foreach ($resolvedIps as $resolvedIp) {
-            if (!$this->isPublicIp($resolvedIp)) {
+            if (!$this->isPublicIp($resolvedIp) && !IpUtils::checkIp($resolvedIp, $allowedSubnets)) {
                 return false;
             }
         }

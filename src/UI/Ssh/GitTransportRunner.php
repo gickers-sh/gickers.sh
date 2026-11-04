@@ -79,7 +79,8 @@ final readonly class GitTransportRunner
         ];
         $process->setEnv($env);
         $process->setInput(\STDIN);
-        $process->setTimeout(60);
+        // Like Go's git transport: no wall-clock limit, large pushes/clones may run for minutes.
+        $process->setTimeout(null);
 
         $process->run(static function (string $type, string $buffer) use ($output, $errOutput): void {
             if (Process::ERR === $type) {

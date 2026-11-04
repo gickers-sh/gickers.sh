@@ -57,6 +57,8 @@ final class ServeCommand extends Command
         private readonly string $databaseUrl,
         #[Autowire(env: 'MESSENGER_TRANSPORT_DSN')]
         private readonly string $messengerDsn,
+        #[Autowire(env: 'SOFT_SERVE_WEBHOOK_ALLOW_LIST')]
+        private readonly string $webhookAllowList,
     ) {
         parent::__construct();
     }
@@ -73,7 +75,9 @@ final class ServeCommand extends Command
         $errOutput = $output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output;
 
         $this->dataDirectory->initialize();
-        $this->migrateDatabase($output);
+        $this->runConsole('doctrine:migrations:migrate', ['--allow-no-migration' => true], $output);
+        // Every SSH session and git hook boots bin/console: warm the cache once, up front.
+        $this->runConsole('cache:warmup', [], $output);
         ($this->bootstrapServer)();
 
         if ($this->hostKeys->ensure()) {
@@ -89,6 +93,7 @@ final class ServeCommand extends Command
             'APP_ENV' => $this->environment,
             'DATABASE_URL' => $this->databaseUrl,
             'MESSENGER_TRANSPORT_DSN' => $this->messengerDsn,
+            'SOFT_SERVE_WEBHOOK_ALLOW_LIST' => $this->webhookAllowList,
             ...$this->settings->toEnvironment(),
         ]);
 
@@ -131,15 +136,17 @@ final class ServeCommand extends Command
         });
     }
 
-    private function migrateDatabase(OutputInterface $output): void
+    /**
+     * @param array<string, bool|string> $options
+     */
+    private function runConsole(string $name, array $options, OutputInterface $output): void
     {
         $application = $this->getApplication() ?? throw new \LogicException('soft:serve must run inside the console application');
-        $migrate = new ArrayInput(['command' => 'doctrine:migrations:migrate', '--allow-no-migration' => true]);
-        $migrate->setInteractive(false);
+        $input = new ArrayInput(['command' => $name, ...$options]);
+        $input->setInteractive(false);
 
-        $status = $application->find('doctrine:migrations:migrate')->run($migrate, $output);
-        if (Command::SUCCESS !== $status) {
-            throw new \RuntimeException('Database migration failed');
+        if (Command::SUCCESS !== $application->find($name)->run($input, $output)) {
+            throw new \RuntimeException(sprintf('"%s" failed', $name));
         }
     }
 
@@ -172,7 +179,7 @@ final class ServeCommand extends Command
             'sshd' => new Process([$sshd, '-D', '-e', '-f', $sshdConfigPath], $this->projectDir),
             'http' => $http,
             'git' => new Process([\PHP_BINARY, $console, 'soft:git-daemon'], $this->projectDir),
-            'worker' => new Process([\PHP_BINARY, $console, 'messenger:consume', 'async', '--time-limit=3600'], $this->projectDir),
+            'worker' => new Process([\PHP_BINARY, $console, 'messenger:consume', 'async', '--time-limit=3600', '--memory-limit=128M'], $this->projectDir),
         ];
     }
 }

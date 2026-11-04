@@ -74,7 +74,7 @@ debug: build
 
 ## e2e: End-to-end run on throwaway ports/data: ssh repo create, git push over SSH, clone over HTTP and git://
 e2e: build
-	./scripts/e2e.sh
+	./tests/e2e/run.sh
 
 ## browse: Launch the codes.sh terminal UI repository browser
 browse: build

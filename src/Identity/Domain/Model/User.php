@@ -29,7 +29,6 @@ class User
 
     /** @var Collection<int, PublicKey> */
     #[ORM\OneToMany(targetEntity: PublicKey::class, mappedBy: 'user', cascade: ['persist'], orphanRemoval: true)]
-    #[ORM\OrderBy(['id' => 'ASC'])]
     private Collection $publicKeys;
 
     public function __construct(
@@ -96,7 +95,11 @@ class User
     /** @return list<PublicKey> */
     public function publicKeys(): array
     {
-        return array_values($this->publicKeys->toArray());
+        // Sorted here: ORM 3.7 deprecates string directions in #[OrderBy] without a usable replacement.
+        $keys = array_values($this->publicKeys->toArray());
+        usort($keys, static fn (PublicKey $a, PublicKey $b): int => ($a->id() ?? \PHP_INT_MAX) <=> ($b->id() ?? \PHP_INT_MAX));
+
+        return $keys;
     }
 
     public function rename(string $username, \DateTimeImmutable $now): void
