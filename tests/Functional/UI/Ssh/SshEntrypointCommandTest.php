@@ -96,7 +96,7 @@ final class SshEntrypointCommandTest extends KernelTestCase
 
     private function getOutputText(CommandTester $tester): string
     {
-        return $tester->getDisplay() . $tester->getErrorOutput();
+        return $tester->getDisplay().$tester->getErrorOutput();
     }
 
     // --- Key parsing & fingerprint tests (cases 1-7) ---
@@ -228,7 +228,7 @@ final class SshEntrypointCommandTest extends KernelTestCase
         $barePath = $storage->pathFor(\App\Repo\Domain\RepoName::fromInput('fixturetree'));
 
         $blob = trim((string) shell_exec(sprintf('git -C %s hash-object -w --stdin <<< "# Test Repo\nHello from SSH dispatcher\n"', escapeshellarg($barePath))));
-        $tmpIdx = sys_get_temp_dir() . '/idx_' . uniqid();
+        $tmpIdx = sys_get_temp_dir().'/idx_'.uniqid();
         shell_exec(sprintf('GIT_INDEX_FILE=%s git -C %s update-index --add --cacheinfo 100644 %s README.md', escapeshellarg($tmpIdx), escapeshellarg($barePath), escapeshellarg($blob)));
         $tree = trim((string) shell_exec(sprintf('GIT_INDEX_FILE=%s git -C %s write-tree', escapeshellarg($tmpIdx), escapeshellarg($barePath))));
         $commit = trim((string) shell_exec(sprintf('GIT_INDEX_FILE=%s GIT_AUTHOR_NAME=Tester GIT_AUTHOR_EMAIL=t@c.sh GIT_COMMITTER_NAME=Tester GIT_COMMITTER_EMAIL=t@c.sh git -C %s commit-tree %s -m "initial commit"', escapeshellarg($tmpIdx), escapeshellarg($barePath), escapeshellarg($tree))));
@@ -248,7 +248,7 @@ final class SshEntrypointCommandTest extends KernelTestCase
         $barePath = $storage->pathFor(\App\Repo\Domain\RepoName::fromInput('fixtureblob'));
 
         $blob = trim((string) shell_exec(sprintf('git -C %s hash-object -w --stdin <<< "Hello from SSH dispatcher"', escapeshellarg($barePath))));
-        $tmpIdx = sys_get_temp_dir() . '/idx_' . uniqid();
+        $tmpIdx = sys_get_temp_dir().'/idx_'.uniqid();
         shell_exec(sprintf('GIT_INDEX_FILE=%s git -C %s update-index --add --cacheinfo 100644 %s README.md', escapeshellarg($tmpIdx), escapeshellarg($barePath), escapeshellarg($blob)));
         $tree = trim((string) shell_exec(sprintf('GIT_INDEX_FILE=%s git -C %s write-tree', escapeshellarg($tmpIdx), escapeshellarg($barePath))));
         $commit = trim((string) shell_exec(sprintf('GIT_INDEX_FILE=%s GIT_AUTHOR_NAME=Tester GIT_AUTHOR_EMAIL=t@c.sh GIT_COMMITTER_NAME=Tester GIT_COMMITTER_EMAIL=t@c.sh git -C %s commit-tree %s -m "initial commit"', escapeshellarg($tmpIdx), escapeshellarg($barePath), escapeshellarg($tree))));
@@ -268,7 +268,7 @@ final class SshEntrypointCommandTest extends KernelTestCase
         $barePath = $storage->pathFor(\App\Repo\Domain\RepoName::fromInput('fixturebranch'));
 
         $blob = trim((string) shell_exec(sprintf('git -C %s hash-object -w --stdin <<< "Initial"', escapeshellarg($barePath))));
-        $tmpIdx = sys_get_temp_dir() . '/idx_' . uniqid();
+        $tmpIdx = sys_get_temp_dir().'/idx_'.uniqid();
         shell_exec(sprintf('GIT_INDEX_FILE=%s git -C %s update-index --add --cacheinfo 100644 %s README.md', escapeshellarg($tmpIdx), escapeshellarg($barePath), escapeshellarg($blob)));
         $tree = trim((string) shell_exec(sprintf('GIT_INDEX_FILE=%s git -C %s write-tree', escapeshellarg($tmpIdx), escapeshellarg($barePath))));
         $commit = trim((string) shell_exec(sprintf('GIT_INDEX_FILE=%s GIT_AUTHOR_NAME=Tester GIT_AUTHOR_EMAIL=t@c.sh GIT_COMMITTER_NAME=Tester GIT_COMMITTER_EMAIL=t@c.sh git -C %s commit-tree %s -m "init"', escapeshellarg($tmpIdx), escapeshellarg($barePath), escapeshellarg($tree))));
@@ -337,7 +337,7 @@ final class SshEntrypointCommandTest extends KernelTestCase
         $barePath = $storage->pathFor(\App\Repo\Domain\RepoName::fromInput('bopsrepo'));
 
         $blob = trim((string) shell_exec(sprintf('git -C %s hash-object -w --stdin <<< "Init"', escapeshellarg($barePath))));
-        $tmpIdx = sys_get_temp_dir() . '/idx_' . uniqid();
+        $tmpIdx = sys_get_temp_dir().'/idx_'.uniqid();
         shell_exec(sprintf('GIT_INDEX_FILE=%s git -C %s update-index --add --cacheinfo 100644 %s README.md', escapeshellarg($tmpIdx), escapeshellarg($barePath), escapeshellarg($blob)));
         $tree = trim((string) shell_exec(sprintf('GIT_INDEX_FILE=%s git -C %s write-tree', escapeshellarg($tmpIdx), escapeshellarg($barePath))));
         $commit = trim((string) shell_exec(sprintf('GIT_INDEX_FILE=%s GIT_AUTHOR_NAME=Tester GIT_AUTHOR_EMAIL=t@c.sh GIT_COMMITTER_NAME=Tester GIT_COMMITTER_EMAIL=t@c.sh git -C %s commit-tree %s -m "init"', escapeshellarg($tmpIdx), escapeshellarg($barePath), escapeshellarg($tree))));
@@ -367,7 +367,7 @@ final class SshEntrypointCommandTest extends KernelTestCase
         $barePath = $storage->pathFor(\App\Repo\Domain\RepoName::fromInput('topsrepo'));
 
         $blob = trim((string) shell_exec(sprintf('git -C %s hash-object -w --stdin <<< "Tag Init"', escapeshellarg($barePath))));
-        $tmpIdx = sys_get_temp_dir() . '/idx_' . uniqid();
+        $tmpIdx = sys_get_temp_dir().'/idx_'.uniqid();
         shell_exec(sprintf('GIT_INDEX_FILE=%s git -C %s update-index --add --cacheinfo 100644 %s README.md', escapeshellarg($tmpIdx), escapeshellarg($barePath), escapeshellarg($blob)));
         $tree = trim((string) shell_exec(sprintf('GIT_INDEX_FILE=%s git -C %s write-tree', escapeshellarg($tmpIdx), escapeshellarg($barePath))));
         $commit = trim((string) shell_exec(sprintf('GIT_INDEX_FILE=%s GIT_AUTHOR_NAME=Tester GIT_AUTHOR_EMAIL=t@c.sh GIT_COMMITTER_NAME=Tester GIT_COMMITTER_EMAIL=t@c.sh git -C %s commit-tree %s -m "init"', escapeshellarg($tmpIdx), escapeshellarg($barePath), escapeshellarg($tree))));
@@ -391,7 +391,7 @@ final class SshEntrypointCommandTest extends KernelTestCase
         $barePath = $storage->pathFor(\App\Repo\Domain\RepoName::fromInput('commitrepo'));
 
         $blob = trim((string) shell_exec(sprintf('git -C %s hash-object -w --stdin <<< "Commit Info"', escapeshellarg($barePath))));
-        $tmpIdx = sys_get_temp_dir() . '/idx_' . uniqid();
+        $tmpIdx = sys_get_temp_dir().'/idx_'.uniqid();
         shell_exec(sprintf('GIT_INDEX_FILE=%s git -C %s update-index --add --cacheinfo 100644 %s README.md', escapeshellarg($tmpIdx), escapeshellarg($barePath), escapeshellarg($blob)));
         $tree = trim((string) shell_exec(sprintf('GIT_INDEX_FILE=%s git -C %s write-tree', escapeshellarg($tmpIdx), escapeshellarg($barePath))));
         $sha = trim((string) shell_exec(sprintf('GIT_INDEX_FILE=%s GIT_AUTHOR_NAME=Tester GIT_AUTHOR_EMAIL=t@c.sh GIT_COMMITTER_NAME=Tester GIT_COMMITTER_EMAIL=t@c.sh git -C %s commit-tree %s -m "initial commit message"', escapeshellarg($tmpIdx), escapeshellarg($barePath), escapeshellarg($tree))));
@@ -446,7 +446,7 @@ final class SshEntrypointCommandTest extends KernelTestCase
 
     public function testUserCommandsAdminGated(): void
     {
-        $create = $this->dispatch('user create userbob -k "' . self::KEY_ED25519_B . '"', $this->adminFp);
+        $create = $this->dispatch('user create userbob -k "'.self::KEY_ED25519_B.'"', $this->adminFp);
         $this->assertSame(0, $create->getStatusCode());
 
         $list = $this->dispatch('user list', $this->adminFp);

@@ -6,9 +6,9 @@ namespace App\UI\Ssh;
 
 use App\Access\Application\ServerPolicy;
 use App\Identity\Application\AuthenticateSshKey;
-use App\Lfs\Application\IssueLfsToken;
 use App\Identity\Domain\Model\SshKey;
 use App\Identity\Infrastructure\Security\SecurityUser;
+use App\Lfs\Application\IssueLfsToken;
 use App\Shared\Domain\Exception\AccessDenied;
 use App\Shared\Domain\Exception\InvalidInput;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -197,7 +197,7 @@ final class SshEntrypointCommand extends Command
         }
 
         if ('test' === ($app instanceof \Symfony\Bundle\FrameworkBundle\Console\Application ? $app->getKernel()->getEnvironment() : '') || !@posix_isatty(\STDIN)) {
-            $output->writeln(sprintf('Launch TUI%s', null !== $initialRepo ? ' for ' . $initialRepo : ''), OutputInterface::OUTPUT_RAW);
+            $output->writeln(sprintf('Launch TUI%s', null !== $initialRepo ? ' for '.$initialRepo : ''), OutputInterface::OUTPUT_RAW);
 
             return Command::SUCCESS;
         }
