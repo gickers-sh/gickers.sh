@@ -99,6 +99,16 @@ class PullRequest
     {
         return $this->status;
     }
+    public function isOpen(): bool
+    {
+        return PullRequestStatus::Open === $this->status;
+    }
+
+    public function isMerged(): bool
+    {
+        return PullRequestStatus::Merged === $this->status;
+    }
+
 
     public function baseRef(): string
     {

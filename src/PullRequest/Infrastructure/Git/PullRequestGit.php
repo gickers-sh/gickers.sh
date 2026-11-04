@@ -137,6 +137,18 @@ final class PullRequestGit
             $authorEmail,
         );
     }
+    public function canMerge(PullRequest $pr): bool
+    {
+        try {
+            $gitRepo = $this->reader->openRepository($this->repoDirectory->pathFor($pr->repo()->name()));
+            $pullRef = \sprintf('refs/pull/%d/head', $pr->number());
+
+            return $this->writer->canMerge($gitRepo, $pr->baseRef(), $pullRef);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
 
     private function revParse(string $repoPath, string $ref): ?string
     {
