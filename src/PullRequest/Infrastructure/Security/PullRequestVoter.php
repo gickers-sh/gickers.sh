@@ -24,7 +24,9 @@ use Symfony\Component\Security\Core\Authorization\Voter\Voter;
  */
 final class PullRequestVoter extends Voter
 {
-    public function __construct(private AccessResolver $accessResolver) {}
+    public function __construct(private AccessResolver $accessResolver)
+    {
+    }
 
     protected function supports(string $attribute, mixed $subject): bool
     {
@@ -40,7 +42,6 @@ final class PullRequestVoter extends Voter
 
     protected function voteOnAttribute(string $attribute, mixed $subject, TokenInterface $token, ?Vote $vote = null): bool
     {
-
         $securityUser = $token->getUser();
         $user = match (true) {
             $securityUser instanceof SecurityUser => $securityUser->user(),

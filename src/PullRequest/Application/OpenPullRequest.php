@@ -34,7 +34,8 @@ final readonly class OpenPullRequest
         private PullRequestGit $git,
         private ClockInterface $clock,
         private EventDispatcherInterface $eventDispatcher,
-    ) {}
+    ) {
+    }
 
     public function __invoke(
         ?User $actor,

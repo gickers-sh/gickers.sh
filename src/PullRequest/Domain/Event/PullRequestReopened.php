@@ -11,5 +11,6 @@ final readonly class PullRequestReopened
         public int $pullRequestId,
         public int $number,
         public ?int $actorId,
-    ) {}
+    ) {
+    }
 }

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\PullRequest\Application;
 
-use App\Access\Application\AccessResolver;
 use App\Identity\Domain\Model\User;
 use App\PullRequest\Domain\Model\PullRequest;
 use App\Repo\Domain\Model\Repo;

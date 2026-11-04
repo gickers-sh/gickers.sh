@@ -82,11 +82,11 @@ final class PostUpdateCommand extends Command
         if ($process->isSuccessful()) {
             $timestamp = trim($process->getOutput());
             if ('' !== $timestamp) {
-                $infoDir = $repoPath . '/info';
+                $infoDir = $repoPath.'/info';
                 if (!is_dir($infoDir)) {
                     @mkdir($infoDir, 0755, true);
                 }
-                @file_put_contents($infoDir . '/last-modified', $timestamp . "\n");
+                @file_put_contents($infoDir.'/last-modified', $timestamp."\n");
             }
         }
     }

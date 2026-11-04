@@ -28,7 +28,8 @@ final readonly class CreateWebhook
         private WebhookStore $webhookStore,
         private SsrfGuard $ssrfGuard,
         private ClockInterface $clock,
-    ) {}
+    ) {
+    }
 
     /**
      * @param list<WebhookEvent|string> $events

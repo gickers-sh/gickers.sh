@@ -19,7 +19,8 @@ final readonly class DeleteWebhook
     public function __construct(
         private AccessGuard $accessGuard,
         private WebhookStore $webhookStore,
-    ) {}
+    ) {
+    }
 
     public function __invoke(?User $actor, RepoName|string $repoName, int $id): void
     {

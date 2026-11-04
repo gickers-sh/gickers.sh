@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Tests\Functional\Hook;
 
-use App\Identity\Application\CreateUser;
-use App\Repo\Application\CreateRepo;
 use App\Repo\Domain\Model\Repo;
 use App\Repo\Domain\RepoName;
 use App\Repo\Domain\RepoStore;
@@ -34,7 +32,7 @@ final class HookCommandTest extends KernelTestCase
         $user = new \App\Identity\Domain\Model\User('hookowner', true, new \DateTimeImmutable());
         $userStore->save($user);
         $storage = $container->get(BareRepositoryStorage::class);
-        $repoName = RepoName::fromInput('hook-test-' . uniqid());
+        $repoName = RepoName::fromInput('hook-test-'.uniqid());
         $storage->init($repoName);
         $repo = new Repo($repoName, $user, 'project', 'desc', false, false, false, null, new \DateTimeImmutable());
         $repoStore = $container->get(RepoStore::class);
@@ -58,13 +56,13 @@ final class HookCommandTest extends KernelTestCase
         // 2. With custom hook
         $hooksDir = $this->settings->hooksPath();
         @mkdir($hooksDir, 0755, true);
-        $customHook = $hooksDir . '/pre-receive';
+        $customHook = $hooksDir.'/pre-receive';
         file_put_contents($customHook, "#!/bin/sh\necho 'custom-pre-receive-output'\nexit 0\n");
         chmod($customHook, 0755);
 
         try {
             $tester->execute(['--stdin' => "0000 1111 refs/heads/main\n"]);
-            $this->assertSame(0, $tester->getStatusCode());
+            $this->assertSame(\Symfony\Component\Console\Command\Command::SUCCESS, $tester->getStatusCode());
             $this->assertStringContainsString('custom-pre-receive-output', $tester->getDisplay());
         } finally {
             @unlink($customHook);
@@ -88,7 +86,7 @@ final class HookCommandTest extends KernelTestCase
         // With custom hook
         $hooksDir = $this->settings->hooksPath();
         @mkdir($hooksDir, 0755, true);
-        $customHook = $hooksDir . '/update';
+        $customHook = $hooksDir.'/update';
         file_put_contents($customHook, "#!/bin/sh\necho \"args: \$1 \$2 \$3\"\nexit 0\n");
         chmod($customHook, 0755);
 
@@ -98,7 +96,7 @@ final class HookCommandTest extends KernelTestCase
                 'old-rev' => '0000',
                 'new-rev' => '1111',
             ]);
-            $this->assertSame(0, $tester->getStatusCode());
+            $this->assertSame(\Symfony\Component\Console\Command\Command::SUCCESS, $tester->getStatusCode());
             $this->assertStringContainsString('args: refs/heads/feature 0000 1111', $tester->getDisplay());
         } finally {
             @unlink($customHook);
@@ -149,7 +147,7 @@ final class HookCommandTest extends KernelTestCase
         ]);
         $this->assertSame(0, $tester->getStatusCode());
 
-        $lastModFile = $this->repoPath . '/info/last-modified';
+        $lastModFile = $this->repoPath.'/info/last-modified';
         $this->assertFileExists($lastModFile);
         $this->assertNotEmpty(trim((string) file_get_contents($lastModFile)));
     }

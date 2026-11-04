@@ -26,7 +26,8 @@ final readonly class SendWebhookHandler
         private Signer $signer,
         private HttpClientInterface $webhookHttpClient,
         private ClockInterface $clock,
-    ) {}
+    ) {
+    }
 
     public function __invoke(SendWebhook $message): void
     {

@@ -6,7 +6,6 @@ namespace App\UI\Ssh\Command\Repo\Webhook;
 
 use App\UI\Ssh\SshSession;
 use App\Webhook\Application\CreateWebhook;
-use App\Webhook\Domain\ContentType;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;

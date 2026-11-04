@@ -34,7 +34,8 @@ final readonly class WebhookEventSubscriber implements EventSubscriberInterface
         private CollaboratorStore $collaboratorStore,
         private PayloadFactory $payloadFactory,
         private MessageBusInterface $messageBus,
-    ) {}
+    ) {
+    }
 
     public static function getSubscribedEvents(): array
     {

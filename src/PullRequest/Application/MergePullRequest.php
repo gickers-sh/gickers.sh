@@ -48,7 +48,8 @@ final readonly class MergePullRequest
         private ServerSettings $settings,
         private ClockInterface $clock,
         private EventDispatcherInterface $eventDispatcher,
-    ) {}
+    ) {
+    }
 
     public function __invoke(
         ?User $actor,
