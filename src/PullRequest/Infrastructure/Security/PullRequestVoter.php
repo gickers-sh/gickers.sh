@@ -40,7 +40,6 @@ final class PullRequestVoter extends Voter
 
     protected function voteOnAttribute(string $attribute, mixed $subject, TokenInterface $token, ?Vote $vote = null): bool
     {
-        \assert($subject instanceof PullRequest);
 
         $securityUser = $token->getUser();
         $user = match (true) {
