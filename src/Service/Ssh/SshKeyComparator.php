@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\Ssh;
 
-use InvalidArgumentException;
-
 /**
  * Parses and compares OpenSSH public keys according to RFC 4253 / OpenSSH authorized_keys format.
  * Provides constant-time key comparison and SHA-256 fingerprint calculation matching Go's gossh.FingerprintSHA256.
@@ -31,13 +29,13 @@ final class SshKeyComparator
     public function parse(string $authorizedKeyLine): ?array
     {
         $line = trim($authorizedKeyLine);
-        if ($line === '' || str_starts_with($line, '#')) {
+        if ('' === $line || str_starts_with($line, '#')) {
             return null;
         }
 
         // Tokenize line respecting quoted strings in options
         $tokens = $this->tokenizeKeyLine($line);
-        if (count($tokens) === 0) {
+        if (0 === count($tokens)) {
             return null;
         }
 
@@ -56,18 +54,18 @@ final class SshKeyComparator
             $type = $tokens[1];
             $keyBody = $tokens[2] ?? null;
             $comment = isset($tokens[3]) ? implode(' ', array_slice($tokens, 3)) : null;
-        } elseif (count($tokens) === 1 && $this->isValidBase64($tokens[0])) {
+        } elseif (1 === count($tokens) && $this->isValidBase64($tokens[0])) {
             // Bare base64 key
             $keyBody = $tokens[0];
             $type = 'unknown';
         }
 
-        if ($keyBody === null || $keyBody === '') {
+        if (null === $keyBody || '' === $keyBody) {
             return null;
         }
 
         $wire = base64_decode($keyBody, true);
-        if ($wire === false || $wire === '') {
+        if (false === $wire || '' === $wire) {
             return null;
         }
 
@@ -89,13 +87,13 @@ final class SshKeyComparator
     {
         $keyBody = $this->extractKeyBody($authorizedKey);
         $wire = base64_decode($keyBody, true);
-        if ($wire === false || $wire === '') {
-            throw new InvalidArgumentException('Invalid base64 encoded SSH key wire format.');
+        if (false === $wire || '' === $wire) {
+            throw new \InvalidArgumentException('Invalid base64 encoded SSH key wire format.');
         }
 
         $hash = hash('sha256', $wire, true);
 
-        return 'SHA256:' . rtrim(base64_encode($hash), '=');
+        return 'SHA256:'.rtrim(base64_encode($hash), '=');
     }
 
     /**
@@ -107,11 +105,11 @@ final class SshKeyComparator
         try {
             $wireA = base64_decode($this->extractKeyBody($keyA), true);
             $wireB = base64_decode($this->extractKeyBody($keyB), true);
-        } catch (InvalidArgumentException) {
+        } catch (\InvalidArgumentException) {
             return false;
         }
 
-        if ($wireA === false || $wireB === false) {
+        if (false === $wireA || false === $wireB) {
             return false;
         }
 
@@ -124,7 +122,7 @@ final class SshKeyComparator
     public function extractKeyBody(string $authorizedKey): string
     {
         $parsed = $this->parse($authorizedKey);
-        if ($parsed !== null) {
+        if (null !== $parsed) {
             return $parsed['key'];
         }
 
@@ -133,7 +131,7 @@ final class SshKeyComparator
             return $trimmed;
         }
 
-        throw new InvalidArgumentException(sprintf('Cannot extract SSH key body from: "%s"', $authorizedKey));
+        throw new \InvalidArgumentException(sprintf('Cannot extract SSH key body from: "%s"', $authorizedKey));
     }
 
     /**
@@ -160,26 +158,26 @@ final class SshKeyComparator
         $quoteChar = '';
         $currentToken = '';
 
-        for ($i = 0; $i < $len; $i++) {
+        for ($i = 0; $i < $len; ++$i) {
             $char = $line[$i];
 
             if ($inQuote) {
                 if ($char === $quoteChar) {
                     $inQuote = false;
                     $currentToken .= $char;
-                } elseif ($char === '\\' && $i + 1 < $len && $line[$i + 1] === $quoteChar) {
+                } elseif ('\\' === $char && $i + 1 < $len && $line[$i + 1] === $quoteChar) {
                     $currentToken .= $quoteChar;
-                    $i++;
+                    ++$i;
                 } else {
                     $currentToken .= $char;
                 }
             } else {
-                if ($char === '"' || $char === "'") {
+                if ('"' === $char || "'" === $char) {
                     $inQuote = true;
                     $quoteChar = $char;
                     $currentToken .= $char;
-                } elseif ($char === ' ' || $char === "\t") {
-                    if ($currentToken !== '') {
+                } elseif (' ' === $char || "\t" === $char) {
+                    if ('' !== $currentToken) {
                         $tokens[] = $currentToken;
                         $currentToken = '';
                     }
@@ -189,7 +187,7 @@ final class SshKeyComparator
             }
         }
 
-        if ($currentToken !== '') {
+        if ('' !== $currentToken) {
             $tokens[] = $currentToken;
         }
 
@@ -199,12 +197,12 @@ final class SshKeyComparator
     private function isValidBase64(string $str): bool
     {
         $cleaned = trim($str);
-        if ($cleaned === '') {
+        if ('' === $cleaned) {
             return false;
         }
 
         $decoded = base64_decode($cleaned, true);
-        if ($decoded === false) {
+        if (false === $decoded) {
             return false;
         }
 

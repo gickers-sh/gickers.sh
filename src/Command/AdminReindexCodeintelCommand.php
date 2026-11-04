@@ -12,7 +12,6 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use Throwable;
 
 #[AsCommand(
     name: 'soft:admin:reindex-codeintel',
@@ -44,19 +43,21 @@ final class AdminReindexCodeintelCommand extends Command
         $repoName = $input->getArgument('repo');
 
         try {
-            if ($repoName !== null && trim((string) $repoName) !== '') {
+            if (null !== $repoName && '' !== trim((string) $repoName)) {
                 $cleanName = trim((string) $repoName);
                 $repo = $this->backend->getRepository($cleanName);
-                if ($repo === null) {
+                if (null === $repo) {
                     $errOutput->writeln(sprintf('<error>Repository "%s": not found</error>', $cleanName));
+
                     return Command::FAILURE;
                 }
                 $repos = [$repo];
             } else {
                 $repos = $this->backend->listRepositories();
             }
-        } catch (Throwable $e) {
+        } catch (\Throwable $e) {
             $errOutput->writeln(sprintf('<error>Failed to list repositories: %s</error>', $e->getMessage()));
+
             return Command::FAILURE;
         }
 
@@ -66,14 +67,14 @@ final class AdminReindexCodeintelCommand extends Command
             }
             $name = $repo['name'] ?? 'unknown';
             $path = $repo['path'] ?? (method_exists($this->backend, 'getRepoPath') ? $this->backend->getRepoPath($name) : null);
-            if ($path === null || !is_dir($path)) {
+            if (null === $path || !is_dir($path)) {
                 $output->writeln(sprintf('<comment>Skipping %s: invalid path</comment>', $name));
                 continue;
             }
 
             // Get HEAD commit SHA
             $headSha = trim((string) shell_exec(sprintf('git -C %s rev-parse HEAD 2>/dev/null', escapeshellarg($path))));
-            if ($headSha === '') {
+            if ('' === $headSha) {
                 $output->writeln(sprintf('<comment>Skipping %s: no HEAD commit</comment>', $name));
                 continue;
             }
@@ -85,7 +86,7 @@ final class AdminReindexCodeintelCommand extends Command
             try {
                 $this->codeIntel->indexCommit($path, $name, $headSha);
                 $output->writeln(sprintf('  -> <info>%s: OK</info>', $name));
-            } catch (Throwable $e) {
+            } catch (\Throwable $e) {
                 $errOutput->writeln(sprintf('  -> <error>%s: %s</error>', $name, $e->getMessage()));
             }
         }

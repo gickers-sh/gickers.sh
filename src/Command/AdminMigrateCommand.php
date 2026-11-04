@@ -10,7 +10,6 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use Throwable;
 
 #[AsCommand(
     name: 'soft:admin:migrate',
@@ -33,9 +32,11 @@ final class AdminMigrateCommand extends Command
             $output->writeln('<comment>Running database migrations...</comment>');
             $applied = $this->dbManager->migrate();
             $output->writeln(sprintf('<info>Database migrations completed (%d applied).</info>', $applied));
+
             return Command::SUCCESS;
-        } catch (Throwable $e) {
+        } catch (\Throwable $e) {
             $errOutput->writeln(sprintf('<error>Migration failed: %s</error>', $e->getMessage()));
+
             return Command::FAILURE;
         }
     }

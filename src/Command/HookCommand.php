@@ -30,13 +30,14 @@ final class HookCommand extends Command
     {
         $hookName = (string) $input->getArgument('hook-name');
         $app = $this->getApplication();
-        if ($app === null) {
+        if (null === $app) {
             return Command::FAILURE;
         }
 
-        $commandName = 'soft:hook:' . $hookName;
+        $commandName = 'soft:hook:'.$hookName;
         if (!$app->has($commandName)) {
             $output->writeln(sprintf('<error>Unknown hook: %s</error>', $hookName));
+
             return Command::FAILURE;
         }
 
@@ -45,7 +46,7 @@ final class HookCommand extends Command
         $rawArgs = (array) $input->getArgument('hook-args');
         $params = ['command' => $commandName];
 
-        if ($hookName === 'update') {
+        if ('update' === $hookName) {
             if (isset($rawArgs[0])) {
                 $params['ref-name'] = $rawArgs[0];
             }
@@ -55,7 +56,7 @@ final class HookCommand extends Command
             if (isset($rawArgs[2])) {
                 $params['new-rev'] = $rawArgs[2];
             }
-        } elseif ($hookName === 'post-update') {
+        } elseif ('post-update' === $hookName) {
             $params['refs'] = $rawArgs;
         }
 

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Service\Ssh\SshKeyComparator;
-use InvalidArgumentException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -72,19 +71,21 @@ final class SshAuthorizedKeysCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $binConsole = $input->getOption('console-bin');
-        if ($binConsole === null || !is_string($binConsole) || trim($binConsole) === '') {
-            $binConsole = dirname(__DIR__, 2) . '/bin/console';
+        if (null === $binConsole || !is_string($binConsole) || '' === trim($binConsole)) {
+            $binConsole = dirname(__DIR__, 2).'/bin/console';
         }
 
         // 1. Direct single key line option
         $keyLine = $input->getOption('key-line');
-        if ($keyLine !== null && is_string($keyLine) && trim($keyLine) !== '') {
+        if (null !== $keyLine && is_string($keyLine) && '' !== trim($keyLine)) {
             try {
                 $line = $this->formatAuthorizedKeyLine(trim($keyLine), $binConsole);
                 $output->writeln($line);
+
                 return Command::SUCCESS;
-            } catch (InvalidArgumentException $e) {
+            } catch (\InvalidArgumentException $e) {
                 $output->writeln(sprintf('# Error formatting key: %s', $e->getMessage()), OutputInterface::VERBOSITY_VERBOSE);
+
                 return Command::FAILURE;
             }
         }
@@ -92,40 +93,41 @@ final class SshAuthorizedKeysCommand extends Command
         // 2. Direct key passed as argument (OpenSSH %k %t)
         $keyArg = $input->getArgument('key');
         $keyTypeArg = $input->getArgument('key-type');
-        if ($keyArg !== null && is_string($keyArg) && trim($keyArg) !== '') {
-            $fullKey = ($keyTypeArg ? trim($keyTypeArg) . ' ' : '') . trim($keyArg);
+        if (null !== $keyArg && is_string($keyArg) && '' !== trim($keyArg)) {
+            $fullKey = ($keyTypeArg ? trim($keyTypeArg).' ' : '').trim($keyArg);
             try {
                 $line = $this->formatAuthorizedKeyLine($fullKey, $binConsole);
                 $output->writeln($line);
+
                 return Command::SUCCESS;
-            } catch (InvalidArgumentException) {
+            } catch (\InvalidArgumentException) {
                 // If %k alone is not a full line, continue to search keys-file
             }
         }
 
         // 3. Keys file specified or auto-discovered
         $keysFile = $input->getOption('keys-file');
-        if ($keysFile === null || !is_string($keysFile) || !file_exists($keysFile)) {
-            $dataPath = getenv('SOFT_SERVE_DATA_PATH') ?: dirname(__DIR__, 3) . '/.data';
-            $defaultFile = rtrim($dataPath, '/') . '/authorized_keys';
+        if (null === $keysFile || !is_string($keysFile) || !file_exists($keysFile)) {
+            $dataPath = getenv('SOFT_SERVE_DATA_PATH') ?: dirname(__DIR__, 3).'/.data';
+            $defaultFile = rtrim($dataPath, '/').'/authorized_keys';
             if (file_exists($defaultFile)) {
                 $keysFile = $defaultFile;
             }
         }
 
-        if ($keysFile !== null && is_string($keysFile) && file_exists($keysFile)) {
-            $lines = file($keysFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-            if ($lines !== false) {
+        if (null !== $keysFile && is_string($keysFile) && file_exists($keysFile)) {
+            $lines = file($keysFile, \FILE_IGNORE_NEW_LINES | \FILE_SKIP_EMPTY_LINES);
+            if (false !== $lines) {
                 foreach ($lines as $rawLine) {
                     $trimmed = trim($rawLine);
-                    if ($trimmed === '' || str_starts_with($trimmed, '#')) {
+                    if ('' === $trimmed || str_starts_with($trimmed, '#')) {
                         continue;
                     }
 
                     try {
                         $formatted = $this->formatAuthorizedKeyLine($trimmed, $binConsole);
                         $output->writeln($formatted);
-                    } catch (InvalidArgumentException) {
+                    } catch (\InvalidArgumentException) {
                         // Skip malformed key lines
                     }
                 }
@@ -143,18 +145,18 @@ final class SshAuthorizedKeysCommand extends Command
      */
     public function formatAuthorizedKeyLine(string $pubkey, ?string $binConsole = null): string
     {
-        $bin = $binConsole !== null && trim($binConsole) !== '' ? trim($binConsole) : dirname(__DIR__, 2) . '/bin/console';
+        $bin = null !== $binConsole && '' !== trim($binConsole) ? trim($binConsole) : dirname(__DIR__, 2).'/bin/console';
 
         $parsed = $this->comparator->parse($pubkey);
-        if ($parsed === null) {
-            throw new InvalidArgumentException(sprintf('Cannot parse public key: "%s"', $pubkey));
+        if (null === $parsed) {
+            throw new \InvalidArgumentException(sprintf('Cannot parse public key: "%s"', $pubkey));
         }
 
         $fp = $this->comparator->fingerprintSha256($pubkey);
 
-        $cleanPubkey = $parsed['type'] . ' ' . $parsed['key'];
-        if ($parsed['comment'] !== null && $parsed['comment'] !== '') {
-            $cleanPubkey .= ' ' . $parsed['comment'];
+        $cleanPubkey = $parsed['type'].' '.$parsed['key'];
+        if (null !== $parsed['comment'] && '' !== $parsed['comment']) {
+            $cleanPubkey .= ' '.$parsed['comment'];
         }
 
         return sprintf(

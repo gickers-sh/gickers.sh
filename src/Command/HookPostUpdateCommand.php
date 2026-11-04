@@ -40,7 +40,7 @@ final class HookPostUpdateCommand extends Command
 
         $rawRepoName = getenv('SOFT_SERVE_REPO_NAME');
         $repoPath = getenv('SOFT_SERVE_REPO_PATH') ?: (getenv('CODES_SH_REPO_PATH') ?: (getcwd() ?: '.'));
-        if ($rawRepoName === false || $rawRepoName === '') {
+        if (false === $rawRepoName || '' === $rawRepoName) {
             $repoName = basename($repoPath);
             if (str_ends_with($repoName, '.git')) {
                 $repoName = substr($repoName, 0, -4);
@@ -61,7 +61,7 @@ final class HookPostUpdateCommand extends Command
         $headProc->run();
         if ($headProc->isSuccessful()) {
             $headSha = trim($headProc->getOutput());
-            if ($headSha !== '') {
+            if ('' !== $headSha) {
                 try {
                     $this->codeIntel->indexCommit($repoPath, $repoName, $headSha);
                 } catch (\Throwable) {
@@ -72,9 +72,9 @@ final class HookPostUpdateCommand extends Command
 
         // 3. Run custom hook $DATA_PATH/hooks/post-update if executable
         $dataPath = getenv('SOFT_SERVE_DATA_PATH') ?: (getenv('DATA_PATH') ?: $this->backend->getDataPath());
-        $customHookPath = rtrim($dataPath, '/') . '/hooks/post-update';
+        $customHookPath = rtrim($dataPath, '/').'/hooks/post-update';
         $exitCode = $this->runCustomHook($customHookPath, null, $refs, $output);
-        if ($exitCode !== 0) {
+        if (0 !== $exitCode) {
             return $exitCode;
         }
 

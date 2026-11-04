@@ -7,17 +7,9 @@ namespace App\Service\CodeIntel;
 use App\Model\CodeIntel\OccurrenceModel;
 use App\Model\CodeIntel\SymbolInfoModel;
 use App\Model\CodeIntel\SymbolLocationModel;
-use FilesystemIterator;
-use PharData;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
-use RecursiveCallbackFilterIterator;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
-use RuntimeException;
-use SplFileInfo;
 use Symfony\Component\Process\Process;
-use Throwable;
 
 final class CodeIntelService
 {
@@ -38,7 +30,7 @@ final class CodeIntelService
         ?LoggerInterface $logger = null,
     ) {
         $this->logger = $logger ?? new NullLogger();
-        $this->storageDir = $storageDir ?? (dirname(__DIR__, 3) . '/var/codeintel');
+        $this->storageDir = $storageDir ?? (dirname(__DIR__, 3).'/var/codeintel');
     }
 
     /**
@@ -55,7 +47,8 @@ final class CodeIntelService
     public function getStoragePath(string $repo, string $sha): string
     {
         $repoClean = trim(str_replace(['..', '\\'], ['', '/'], $repo), '/');
-        return $this->storageDir . '/' . $repoClean . '/' . $sha . '.scip';
+
+        return $this->storageDir.'/'.$repoClean.'/'.$sha.'.scip';
     }
 
     /**
@@ -79,11 +72,11 @@ final class CodeIntelService
         $filePath = $this->getStoragePath($repo, $sha);
         $dir = dirname($filePath);
         if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
-            throw new RuntimeException(sprintf('Failed to create storage directory "%s"', $dir));
+            throw new \RuntimeException(sprintf('Failed to create storage directory "%s"', $dir));
         }
 
-        if (file_put_contents($filePath, $scipBinary) === false) {
-            throw new RuntimeException(sprintf('Failed to write SCIP index to "%s"', $filePath));
+        if (false === file_put_contents($filePath, $scipBinary)) {
+            throw new \RuntimeException(sprintf('Failed to write SCIP index to "%s"', $filePath));
         }
 
         $parsed = $this->parseIndex($scipBinary);
@@ -108,7 +101,7 @@ final class CodeIntelService
         }
 
         $binary = @file_get_contents($filePath);
-        if ($binary === false) {
+        if (false === $binary) {
             return null;
         }
 
@@ -149,7 +142,7 @@ final class CodeIntelService
             foreach ($doc['occurrences'] ?? [] as $occ) {
                 $symbol = (string) ($occ['symbol'] ?? '');
                 // Skip empty symbols and local scoped symbols ("local ")
-                if ($symbol === '' || str_starts_with($symbol, 'local ')) {
+                if ('' === $symbol || str_starts_with($symbol, 'local ')) {
                     continue;
                 }
 
@@ -181,7 +174,7 @@ final class CodeIntelService
                         $definitions[$symbol] = $loc;
                     }
                 } else {
-                    $refKey = $symbol . '|' . $cleanPath . '|' . $rangeCoords['startLine'] . '|' . $rangeCoords['startCol'];
+                    $refKey = $symbol.'|'.$cleanPath.'|'.$rangeCoords['startLine'].'|'.$rangeCoords['startCol'];
                     if (!isset($seenRefs[$refKey])) {
                         $seenRefs[$refKey] = true;
                         if (!isset($references[$symbol])) {
@@ -197,6 +190,7 @@ final class CodeIntelService
                 if ($a->startLine !== $b->startLine) {
                     return $a->startLine <=> $b->startLine;
                 }
+
                 return $a->startCol <=> $b->startCol;
             });
         }
@@ -216,11 +210,12 @@ final class CodeIntelService
     public function getDocumentOccurrences(string $repo, string $sha, string $filePath): array
     {
         $idx = $this->getIndex($repo, $sha);
-        if ($idx === null) {
+        if (null === $idx) {
             return [];
         }
 
         $clean = $this->cleanPath($filePath);
+
         return $idx['docOccurrences'][$clean] ?? [];
     }
 
@@ -246,12 +241,12 @@ final class CodeIntelService
     public function findDefinition(string $repo, string $sha, string $filePath, int $line, int $col): ?SymbolLocationModel
     {
         $idx = $this->getIndex($repo, $sha);
-        if ($idx === null) {
+        if (null === $idx) {
             return null;
         }
 
         $sym = $this->symbolAt($repo, $sha, $filePath, $line, $col);
-        if ($sym === null) {
+        if (null === $sym) {
             return null;
         }
 
@@ -266,12 +261,12 @@ final class CodeIntelService
     public function findReferences(string $repo, string $sha, string $filePath, int $line, int $col): array
     {
         $idx = $this->getIndex($repo, $sha);
-        if ($idx === null) {
+        if (null === $idx) {
             return [];
         }
 
         $sym = $this->symbolAt($repo, $sha, $filePath, $line, $col);
-        if ($sym === null) {
+        if (null === $sym) {
             return [];
         }
 
@@ -284,7 +279,7 @@ final class CodeIntelService
     public function findDefinitionForSymbol(string $repo, string $sha, string $symbol): ?SymbolLocationModel
     {
         $idx = $this->getIndex($repo, $sha);
-        if ($idx === null || $symbol === '') {
+        if (null === $idx || '' === $symbol) {
             return null;
         }
 
@@ -299,7 +294,7 @@ final class CodeIntelService
     public function findReferencesForSymbol(string $repo, string $sha, string $symbol): array
     {
         $idx = $this->getIndex($repo, $sha);
-        if ($idx === null || $symbol === '') {
+        if (null === $idx || '' === $symbol) {
             return [];
         }
 
@@ -312,12 +307,12 @@ final class CodeIntelService
     public function getSymbolInfo(string $repo, string $sha, string $symbol): ?SymbolInfoModel
     {
         $idx = $this->getIndex($repo, $sha);
-        if ($idx === null || $symbol === '') {
+        if (null === $idx || '' === $symbol) {
             return null;
         }
 
         $def = $idx['definitions'][$symbol] ?? null;
-        $defs = $def !== null ? [$def] : [];
+        $defs = null !== $def ? [$def] : [];
         $refs = $idx['references'][$symbol] ?? [];
 
         if (empty($defs) && empty($refs)) {
@@ -334,7 +329,7 @@ final class CodeIntelService
      */
     public function isPhpProject(string $dir): bool
     {
-        if (file_exists($dir . '/composer.json') || file_exists($dir . '/symfony.lock') || file_exists($dir . '/bin/console')) {
+        if (file_exists($dir.'/composer.json') || file_exists($dir.'/symfony.lock') || file_exists($dir.'/bin/console')) {
             return true;
         }
 
@@ -343,14 +338,16 @@ final class CodeIntelService
         }
 
         try {
-            $iter = new RecursiveIteratorIterator(
-                new RecursiveCallbackFilterIterator(
-                    new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),
-                    static function (SplFileInfo $cur): bool {
+            $iter = new \RecursiveIteratorIterator(
+                new \RecursiveCallbackFilterIterator(
+                    new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+                    static function (\SplFileInfo $cur): bool {
                         if ($cur->isDir()) {
                             $name = $cur->getFilename();
+
                             return !in_array($name, ['.git', 'vendor', 'var', 'cache'], true);
                         }
+
                         return true;
                     }
                 )
@@ -361,7 +358,7 @@ final class CodeIntelService
                     return true;
                 }
             }
-        } catch (Throwable) {
+        } catch (\Throwable) {
             return false;
         }
 
@@ -373,14 +370,14 @@ final class CodeIntelService
      */
     public function isSymfonyProject(string $dir): bool
     {
-        if (file_exists($dir . '/symfony.lock') || file_exists($dir . '/bin/console') || file_exists($dir . '/config/bundles.php')) {
+        if (file_exists($dir.'/symfony.lock') || file_exists($dir.'/bin/console') || file_exists($dir.'/config/bundles.php')) {
             return true;
         }
 
-        $composerPath = $dir . '/composer.json';
+        $composerPath = $dir.'/composer.json';
         if (file_exists($composerPath)) {
             $data = @file_get_contents($composerPath);
-            if ($data !== false) {
+            if (false !== $data) {
                 $c = json_decode($data, true);
                 if (is_array($c)) {
                     $reqs = array_merge($c['require'] ?? [], $c['require-dev'] ?? []);
@@ -407,7 +404,7 @@ final class CodeIntelService
         $pkgName = 'app';
         $version = 'dev';
 
-        $cpath = $projectRoot . '/composer.json';
+        $cpath = $projectRoot.'/composer.json';
         if (file_exists($cpath)) {
             $cdata = json_decode((string) @file_get_contents($cpath), true);
             if (is_array($cdata)) {
@@ -422,14 +419,16 @@ final class CodeIntelService
 
         $phpFiles = [];
         try {
-            $iter = new RecursiveIteratorIterator(
-                new RecursiveCallbackFilterIterator(
-                    new RecursiveDirectoryIterator($projectRoot, FilesystemIterator::SKIP_DOTS),
-                    static function (SplFileInfo $cur): bool {
+            $iter = new \RecursiveIteratorIterator(
+                new \RecursiveCallbackFilterIterator(
+                    new \RecursiveDirectoryIterator($projectRoot, \FilesystemIterator::SKIP_DOTS),
+                    static function (\SplFileInfo $cur): bool {
                         if ($cur->isDir()) {
                             $name = $cur->getFilename();
+
                             return !in_array($name, ['.git', 'vendor', 'var', 'cache'], true);
                         }
+
                         return true;
                     }
                 )
@@ -441,14 +440,14 @@ final class CodeIntelService
                     $phpFiles[] = $rel;
                 }
             }
-        } catch (Throwable $e) {
-            $this->logger->warning('Error scanning directory for PHP files: ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            $this->logger->warning('Error scanning directory for PHP files: '.$e->getMessage());
         }
 
         /** @var array<int, array{relPath: string, tokens: array<int, array{id: ?int, text: string, line: int, startCol: int, endLine: int, endCol: int}>}> $allFiles */
         $allFiles = [];
         foreach ($phpFiles as $rel) {
-            $content = (string) @file_get_contents($projectRoot . '/' . $rel);
+            $content = (string) @file_get_contents($projectRoot.'/'.$rel);
             $rawTokens = token_get_all($content);
             $tokenList = [];
             $line = 0;
@@ -483,11 +482,13 @@ final class CodeIntelService
 
         $makeClassSymbol = static function (string $fqn) use ($pkgName, $version): string {
             $norm = str_replace('\\', '/', ltrim($fqn, '\\'));
+
             return "scip-php composer {$pkgName} {$version} {$norm}#";
         };
 
         $makeMethodSymbol = static function (string $classFQN, string $meth) use ($pkgName, $version): string {
             $norm = str_replace('\\', '/', ltrim($classFQN, '\\'));
+
             return "scip-php composer {$pkgName} {$version} {$norm}#{$meth}().";
         };
 
@@ -501,48 +502,48 @@ final class CodeIntelService
 
             for ($i = 0; $i < $n; ++$i) {
                 $t = $tokens[$i];
-                if ($t['text'] === '{') {
-                    $braceDepth++;
+                if ('{' === $t['text']) {
+                    ++$braceDepth;
                     continue;
                 }
-                if ($t['text'] === '}') {
-                    $braceDepth--;
-                    if ($classBraceDepth !== -1 && $braceDepth <= $classBraceDepth) {
+                if ('}' === $t['text']) {
+                    --$braceDepth;
+                    if (-1 !== $classBraceDepth && $braceDepth <= $classBraceDepth) {
                         $curClass = '';
                         $classBraceDepth = -1;
                     }
                     continue;
                 }
 
-                if ($t['id'] === T_NAMESPACE) {
+                if (\T_NAMESPACE === $t['id']) {
                     $j = $i + 1;
-                    while ($j < $n && $tokens[$j]['id'] === T_WHITESPACE) {
-                        $j++;
+                    while ($j < $n && \T_WHITESPACE === $tokens[$j]['id']) {
+                        ++$j;
                     }
-                    if ($j < $n && in_array($tokens[$j]['id'], [T_STRING, T_NAME_QUALIFIED], true)) {
+                    if ($j < $n && in_array($tokens[$j]['id'], [\T_STRING, \T_NAME_QUALIFIED], true)) {
                         $curNamespace = $tokens[$j]['text'];
                         $i = $j;
                     }
                     continue;
                 }
 
-                if (in_array($t['id'], [T_CLASS, T_INTERFACE, T_TRAIT, defined('T_ENUM') ? T_ENUM : -1], true)) {
+                if (in_array($t['id'], [\T_CLASS, \T_INTERFACE, \T_TRAIT, defined('T_ENUM') ? \T_ENUM : -1], true)) {
                     // Ignore ::class
                     $prev = $i - 1;
-                    while ($prev >= 0 && $tokens[$prev]['id'] === T_WHITESPACE) {
-                        $prev--;
+                    while ($prev >= 0 && \T_WHITESPACE === $tokens[$prev]['id']) {
+                        --$prev;
                     }
-                    if ($prev >= 0 && $tokens[$prev]['id'] === T_DOUBLE_COLON) {
+                    if ($prev >= 0 && \T_DOUBLE_COLON === $tokens[$prev]['id']) {
                         continue;
                     }
 
                     $j = $i + 1;
-                    while ($j < $n && $tokens[$j]['id'] === T_WHITESPACE) {
-                        $j++;
+                    while ($j < $n && \T_WHITESPACE === $tokens[$j]['id']) {
+                        ++$j;
                     }
-                    if ($j < $n && $tokens[$j]['id'] === T_STRING) {
+                    if ($j < $n && \T_STRING === $tokens[$j]['id']) {
                         $className = $tokens[$j]['text'];
-                        $fqn = $curNamespace !== '' ? $curNamespace . '\\' . $className : $className;
+                        $fqn = '' !== $curNamespace ? $curNamespace.'\\'.$className : $className;
                         $definitions[$fqn] = [
                             'symbol' => $makeClassSymbol($fqn),
                             'fqn' => $fqn,
@@ -560,15 +561,15 @@ final class CodeIntelService
                     continue;
                 }
 
-                if ($t['id'] === T_FUNCTION) {
+                if (\T_FUNCTION === $t['id']) {
                     $j = $i + 1;
-                    while ($j < $n && $tokens[$j]['id'] === T_WHITESPACE) {
-                        $j++;
+                    while ($j < $n && \T_WHITESPACE === $tokens[$j]['id']) {
+                        ++$j;
                     }
-                    if ($j < $n && $tokens[$j]['id'] === T_STRING) {
+                    if ($j < $n && \T_STRING === $tokens[$j]['id']) {
                         $methName = $tokens[$j]['text'];
-                        if ($curClass !== '') {
-                            $methKey = $curClass . '#' . $methName;
+                        if ('' !== $curClass) {
+                            $methKey = $curClass.'#'.$methName;
                             $definitions[$methKey] = [
                                 'symbol' => $makeMethodSymbol($curClass, $methName),
                                 'fqn' => $methKey,
@@ -601,36 +602,36 @@ final class CodeIntelService
             // Scan namespace and use imports
             for ($i = 0; $i < $n; ++$i) {
                 $t = $tokens[$i];
-                if ($t['id'] === T_NAMESPACE) {
+                if (\T_NAMESPACE === $t['id']) {
                     $j = $i + 1;
-                    while ($j < $n && $tokens[$j]['id'] === T_WHITESPACE) {
-                        $j++;
+                    while ($j < $n && \T_WHITESPACE === $tokens[$j]['id']) {
+                        ++$j;
                     }
-                    if ($j < $n && in_array($tokens[$j]['id'], [T_STRING, T_NAME_QUALIFIED], true)) {
+                    if ($j < $n && in_array($tokens[$j]['id'], [\T_STRING, \T_NAME_QUALIFIED], true)) {
                         $curNamespace = $tokens[$j]['text'];
                     }
                 }
-                if ($t['id'] === T_USE) {
+                if (\T_USE === $t['id']) {
                     $j = $i + 1;
-                    while ($j < $n && $tokens[$j]['id'] === T_WHITESPACE) {
-                        $j++;
+                    while ($j < $n && \T_WHITESPACE === $tokens[$j]['id']) {
+                        ++$j;
                     }
-                    if ($j < $n && in_array($tokens[$j]['id'], [T_STRING, T_NAME_QUALIFIED], true)) {
+                    if ($j < $n && in_array($tokens[$j]['id'], [\T_STRING, \T_NAME_QUALIFIED], true)) {
                         $fullFQN = $tokens[$j]['text'];
                         $parts = explode('\\', $fullFQN);
                         $short = end($parts);
                         $alias = $short;
 
                         $k = $j + 1;
-                        while ($k < $n && $tokens[$k]['id'] === T_WHITESPACE) {
-                            $k++;
+                        while ($k < $n && \T_WHITESPACE === $tokens[$k]['id']) {
+                            ++$k;
                         }
-                        if ($k < $n && $tokens[$k]['id'] === T_AS) {
+                        if ($k < $n && \T_AS === $tokens[$k]['id']) {
                             $l = $k + 1;
-                            while ($l < $n && $tokens[$l]['id'] === T_WHITESPACE) {
-                                $l++;
+                            while ($l < $n && \T_WHITESPACE === $tokens[$l]['id']) {
+                                ++$l;
                             }
-                            if ($l < $n && $tokens[$l]['id'] === T_STRING) {
+                            if ($l < $n && \T_STRING === $tokens[$l]['id']) {
                                 $alias = $tokens[$l]['text'];
                             }
                         }
@@ -644,8 +645,8 @@ final class CodeIntelService
                 if (isset($imports[$clean])) {
                     return $imports[$clean];
                 }
-                if ($curNamespace !== '') {
-                    $same = $curNamespace . '\\' . $clean;
+                if ('' !== $curNamespace) {
+                    $same = $curNamespace.'\\'.$clean;
                     if (isset($definitions[$same])) {
                         return $same;
                     }
@@ -653,9 +654,10 @@ final class CodeIntelService
                 if (isset($definitions[$clean])) {
                     return $clean;
                 }
-                if (isset($shortNameToFQNs[$clean]) && count($shortNameToFQNs[$clean]) === 1) {
+                if (isset($shortNameToFQNs[$clean]) && 1 === count($shortNameToFQNs[$clean])) {
                     return $shortNameToFQNs[$clean][0];
                 }
+
                 return null;
             };
 
@@ -676,13 +678,13 @@ final class CodeIntelService
 
             for ($i = 0; $i < $n; ++$i) {
                 $t = $tokens[$i];
-                if ($t['text'] === '{') {
-                    $braceDepth++;
+                if ('{' === $t['text']) {
+                    ++$braceDepth;
                     continue;
                 }
-                if ($t['text'] === '}') {
-                    $braceDepth--;
-                    if ($classBraceDepth !== -1 && $braceDepth <= $classBraceDepth) {
+                if ('}' === $t['text']) {
+                    --$braceDepth;
+                    if (-1 !== $classBraceDepth && $braceDepth <= $classBraceDepth) {
                         $curClass = '';
                         $classBraceDepth = -1;
                     }
@@ -690,22 +692,22 @@ final class CodeIntelService
                 }
 
                 // Class def
-                if (in_array($t['id'], [T_CLASS, T_INTERFACE, T_TRAIT, defined('T_ENUM') ? T_ENUM : -1], true)) {
+                if (in_array($t['id'], [\T_CLASS, \T_INTERFACE, \T_TRAIT, defined('T_ENUM') ? \T_ENUM : -1], true)) {
                     $prev = $i - 1;
-                    while ($prev >= 0 && $tokens[$prev]['id'] === T_WHITESPACE) {
-                        $prev--;
+                    while ($prev >= 0 && \T_WHITESPACE === $tokens[$prev]['id']) {
+                        --$prev;
                     }
-                    if ($prev >= 0 && $tokens[$prev]['id'] === T_DOUBLE_COLON) {
+                    if ($prev >= 0 && \T_DOUBLE_COLON === $tokens[$prev]['id']) {
                         continue;
                     }
 
                     $j = $i + 1;
-                    while ($j < $n && $tokens[$j]['id'] === T_WHITESPACE) {
-                        $j++;
+                    while ($j < $n && \T_WHITESPACE === $tokens[$j]['id']) {
+                        ++$j;
                     }
-                    if ($j < $n && $tokens[$j]['id'] === T_STRING) {
+                    if ($j < $n && \T_STRING === $tokens[$j]['id']) {
                         $className = $tokens[$j]['text'];
-                        $fqn = $curNamespace !== '' ? $curNamespace . '\\' . $className : $className;
+                        $fqn = '' !== $curNamespace ? $curNamespace.'\\'.$className : $className;
                         $addOcc($makeClassSymbol($fqn), $tokens[$j]['line'], $tokens[$j]['startCol'], $tokens[$j]['endCol'], true);
                         $curClass = $fqn;
                         $classBraceDepth = $braceDepth;
@@ -715,13 +717,13 @@ final class CodeIntelService
                 }
 
                 // Method def
-                if ($t['id'] === T_FUNCTION) {
+                if (\T_FUNCTION === $t['id']) {
                     $j = $i + 1;
-                    while ($j < $n && $tokens[$j]['id'] === T_WHITESPACE) {
-                        $j++;
+                    while ($j < $n && \T_WHITESPACE === $tokens[$j]['id']) {
+                        ++$j;
                     }
-                    if ($j < $n && $tokens[$j]['id'] === T_STRING) {
-                        if ($curClass !== '') {
+                    if ($j < $n && \T_STRING === $tokens[$j]['id']) {
+                        if ('' !== $curClass) {
                             $addOcc($makeMethodSymbol($curClass, $tokens[$j]['text']), $tokens[$j]['line'], $tokens[$j]['startCol'], $tokens[$j]['endCol'], true);
                         }
                         $i = $j;
@@ -730,9 +732,9 @@ final class CodeIntelService
                 }
 
                 // Reference to class
-                if (in_array($t['id'], [T_STRING, T_NAME_QUALIFIED], true)) {
+                if (in_array($t['id'], [\T_STRING, \T_NAME_QUALIFIED], true)) {
                     $fqn = $resolveClass($t['text']);
-                    if ($fqn !== null) {
+                    if (null !== $fqn) {
                         $addOcc($makeClassSymbol($fqn), $t['line'], $t['startCol'], $t['endCol'], false);
                         continue;
                     }
@@ -760,9 +762,10 @@ final class CodeIntelService
      */
     public function indexCommit(string $repoPath, string $repoName, string $sha): bool
     {
-        $tmpDir = sys_get_temp_dir() . '/soft_serve_codeintel_' . bin2hex(random_bytes(8));
+        $tmpDir = sys_get_temp_dir().'/soft_serve_codeintel_'.bin2hex(random_bytes(8));
         if (!mkdir($tmpDir, 0755, true) && !is_dir($tmpDir)) {
             $this->logger->error('Failed to create temporary directory for codeintel indexing');
+
             return false;
         }
 
@@ -771,20 +774,21 @@ final class CodeIntelService
             $archiveProcess = new Process(['git', 'archive', '--format=tar', $sha], $repoPath);
             $archiveProcess->run();
             if (!$archiveProcess->isSuccessful()) {
-                $this->logger->error('git archive failed: ' . $archiveProcess->getErrorOutput());
+                $this->logger->error('git archive failed: '.$archiveProcess->getErrorOutput());
+
                 return false;
             }
 
-            $tarFile = $tmpDir . '/archive.tar';
+            $tarFile = $tmpDir.'/archive.tar';
             file_put_contents($tarFile, $archiveProcess->getOutput());
 
             // Extract tar
             $extracted = false;
             try {
-                $phar = new PharData($tarFile);
+                $phar = new \PharData($tarFile);
                 $phar->extractTo($tmpDir);
                 $extracted = true;
-            } catch (Throwable) {
+            } catch (\Throwable) {
                 // Fallback to tar -xf
                 $extractProcess = new Process(['tar', '-xf', $tarFile, '-C', $tmpDir]);
                 $extractProcess->run();
@@ -796,31 +800,34 @@ final class CodeIntelService
             @unlink($tarFile);
             if (!$extracted) {
                 $this->logger->error('Failed to extract git archive tarball');
+
                 return false;
             }
 
-            $outputIndex = $tmpDir . '/index.scip';
+            $outputIndex = $tmpDir.'/index.scip';
 
             // 2. Language check and indexing
-            if (file_exists($tmpDir . '/go.mod')) {
+            if (file_exists($tmpDir.'/go.mod')) {
                 // Go project
                 $scipGoPath = $this->findExecutable('scip-go');
-                if ($scipGoPath === null) {
+                if (null === $scipGoPath) {
                     $this->logger->debug('scip-go not found in PATH, skipping indexing', ['repo' => $repoName, 'sha' => $sha]);
+
                     return false;
                 }
 
                 $cmd = new Process([$scipGoPath, '--output', $outputIndex], $tmpDir);
                 $cmd->run();
                 if (!$cmd->isSuccessful() || !file_exists($outputIndex)) {
-                    $this->logger->error('scip-go execution failed: ' . $cmd->getErrorOutput());
+                    $this->logger->error('scip-go execution failed: '.$cmd->getErrorOutput());
+
                     return false;
                 }
             } elseif ($this->isPhpProject($tmpDir)) {
                 // PHP / Symfony project
                 $indexed = false;
                 $scipPhpPath = $this->findExecutable('scip-php');
-                if ($scipPhpPath !== null) {
+                if (null !== $scipPhpPath) {
                     $cmd = new Process([$scipPhpPath], $tmpDir);
                     $cmd->run();
                     if ($cmd->isSuccessful() && file_exists($outputIndex)) {
@@ -836,6 +843,7 @@ final class CodeIntelService
                 }
             } else {
                 $this->logger->debug('Unsupported project type, skipping indexing', ['repo' => $repoName, 'sha' => $sha]);
+
                 return false;
             }
 
@@ -848,8 +856,9 @@ final class CodeIntelService
             $this->logger->info('Successfully indexed commit with SCIP', ['repo' => $repoName, 'sha' => $sha]);
 
             return true;
-        } catch (Throwable $e) {
-            $this->logger->error('Exception during indexCommit: ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            $this->logger->error('Exception during indexCommit: '.$e->getMessage());
+
             return false;
         } finally {
             $this->removeDirectory($tmpDir);
@@ -861,24 +870,26 @@ final class CodeIntelService
         $p = str_replace('\\', '/', $p);
         $p = ltrim($p, './');
         $p = preg_replace('#/{2,}#', '/', $p) ?? $p;
+
         return trim($p, '/');
     }
 
     private function cacheKey(string $repo, string $sha): string
     {
-        return $repo . ':' . $sha;
+        return $repo.':'.$sha;
     }
 
     private function findExecutable(string $name): ?string
     {
         $pathEnv = getenv('PATH') ?: '';
-        $dirs = explode(PATH_SEPARATOR, $pathEnv);
+        $dirs = explode(\PATH_SEPARATOR, $pathEnv);
         foreach ($dirs as $d) {
-            $candidate = rtrim($d, '/\\') . DIRECTORY_SEPARATOR . $name;
+            $candidate = rtrim($d, '/\\').\DIRECTORY_SEPARATOR.$name;
             if (is_file($candidate) && is_executable($candidate)) {
                 return $candidate;
             }
         }
+
         return null;
     }
 
@@ -889,9 +900,9 @@ final class CodeIntelService
         }
 
         try {
-            $files = new RecursiveIteratorIterator(
-                new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),
-                RecursiveIteratorIterator::CHILD_FIRST
+            $files = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::CHILD_FIRST
             );
 
             foreach ($files as $fileinfo) {
@@ -902,7 +913,7 @@ final class CodeIntelService
                 }
             }
             @rmdir($dir);
-        } catch (Throwable) {
+        } catch (\Throwable) {
             // Best effort
         }
     }

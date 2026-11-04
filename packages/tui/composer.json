@@ -1,0 +1,17 @@
+{
+    "name": "codes-sh/tui",
+    "description": "Terminal UI runtime, layout engine and components (Bubble Tea / Lipgloss / Bubblezone port) used by codes.sh",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.4",
+        "ext-mbstring": "*",
+        "ext-pcntl": "*"
+    },
+    "autoload": {
+        "psr-4": { "CodesSh\\Tui\\": "src/" }
+    },
+    "autoload-dev": {
+        "psr-4": { "CodesSh\\Tui\\Tests\\": "tests/" }
+    }
+}

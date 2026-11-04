@@ -1,0 +1,39 @@
+deptrac:
+    paths:
+        - ./src
+    exclude_files:
+        - '#.*Kernel\.php$#'
+    layers:
+        - name: Domain
+          collectors:
+              - { type: directory, value: 'src/[^/]+/Domain/.*' }
+        - name: Application
+          collectors:
+              - { type: directory, value: 'src/[^/]+/Application/.*' }
+        - name: Infrastructure
+          collectors:
+              - { type: directory, value: 'src/[^/]+/Infrastructure/.*' }
+        - name: UI
+          collectors:
+              - { type: directory, value: 'src/UI/.*' }
+        - name: UiTui
+          collectors:
+              - { type: directory, value: 'src/UI/Tui/.*' }
+        - name: UiHttp
+          collectors:
+              - { type: directory, value: 'src/UI/Http/.*' }
+        - name: Doctrine
+          collectors:
+              - { type: directory, value: 'src/[^/]+/Infrastructure/Doctrine/.*' }
+        - name: Legacy
+          collectors:
+              - { type: directory, value: 'src/(Command|Model|Service|Tui)/.*' }
+    ruleset:
+        Domain: []
+        Application: [Domain]
+        Infrastructure: [Domain, Application]
+        Doctrine: [Domain, Application, Infrastructure]
+        UI: [Domain, Application, UI, Legacy]
+        UiHttp: [Domain, Application, UI]
+        UiTui: [Domain, Application, UI, Legacy]
+        Legacy: [Domain, Application, Infrastructure, Doctrine, UI, Legacy]

@@ -35,7 +35,7 @@ final class HookPostReceiveCommand extends Command
 
         $rawRepoName = getenv('SOFT_SERVE_REPO_NAME');
         $repoPath = getenv('SOFT_SERVE_REPO_PATH') ?: (getenv('CODES_SH_REPO_PATH') ?: (getcwd() ?: '.'));
-        if ($rawRepoName === false || $rawRepoName === '') {
+        if (false === $rawRepoName || '' === $rawRepoName) {
             $repoName = basename($repoPath);
             if (str_ends_with($repoName, '.git')) {
                 $repoName = substr($repoName, 0, -4);
@@ -50,7 +50,7 @@ final class HookPostReceiveCommand extends Command
 
         // Parse stdin lines: <old-rev> <new-rev> <ref-name>
         $changes = [];
-        if (trim($inputData) !== '') {
+        if ('' !== trim($inputData)) {
             $lines = explode("\n", trim($inputData));
             foreach ($lines as $line) {
                 $parts = preg_split('/\s+/', trim($line));
@@ -65,7 +65,7 @@ final class HookPostReceiveCommand extends Command
                 ];
 
                 // Trigger code intelligence indexing on each non-zero new-sha
-                if ($this->codeIntel !== null && !WebhookDispatcher::isZeroHash($newRev)) {
+                if (null !== $this->codeIntel && !WebhookDispatcher::isZeroHash($newRev)) {
                     try {
                         $this->codeIntel->indexCommit($repoPath, $repoName, $newRev);
                     } catch (\Throwable) {
@@ -80,9 +80,9 @@ final class HookPostReceiveCommand extends Command
             $user = null;
             $pubkey = getenv('SOFT_SERVE_PUBLIC_KEY');
             $username = getenv('SOFT_SERVE_USERNAME');
-            if ($pubkey !== false && $pubkey !== '') {
+            if (false !== $pubkey && '' !== $pubkey) {
                 $user = $this->backend->getUserByPublicKey($pubkey);
-            } elseif ($username !== false && $username !== '') {
+            } elseif (false !== $username && '' !== $username) {
                 $user = $this->backend->getUserByUsername($username);
             }
 
@@ -91,9 +91,9 @@ final class HookPostReceiveCommand extends Command
 
         // Run custom hook $DATA_PATH/hooks/post-receive if executable
         $dataPath = getenv('SOFT_SERVE_DATA_PATH') ?: (getenv('DATA_PATH') ?: $this->backend->getDataPath());
-        $customHookPath = rtrim($dataPath, '/') . '/hooks/post-receive';
+        $customHookPath = rtrim($dataPath, '/').'/hooks/post-receive';
         $exitCode = $this->runCustomHook($customHookPath, $inputData, [], $output);
-        if ($exitCode !== 0) {
+        if (0 !== $exitCode) {
             return $exitCode;
         }
 

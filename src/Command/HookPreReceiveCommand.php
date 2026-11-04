@@ -30,7 +30,7 @@ final class HookPreReceiveCommand extends Command
         $inputData = $this->getStdinData();
 
         $opts = [];
-        if (trim($inputData) !== '') {
+        if ('' !== trim($inputData)) {
             $lines = explode("\n", trim($inputData));
             foreach ($lines as $line) {
                 $parts = preg_split('/\s+/', trim($line));
@@ -51,7 +51,7 @@ final class HookPreReceiveCommand extends Command
 
         $rawRepoName = getenv('SOFT_SERVE_REPO_NAME');
         $repoPath = getenv('SOFT_SERVE_REPO_PATH') ?: (getenv('CODES_SH_REPO_PATH') ?: (getcwd() ?: '.'));
-        if ($rawRepoName === false || $rawRepoName === '') {
+        if (false === $rawRepoName || '' === $rawRepoName) {
             $repoName = basename($repoPath);
             if (str_ends_with($repoName, '.git')) {
                 $repoName = substr($repoName, 0, -4);
@@ -65,9 +65,9 @@ final class HookPreReceiveCommand extends Command
 
         // Run custom hook $DATA_PATH/hooks/pre-receive if executable
         $dataPath = getenv('SOFT_SERVE_DATA_PATH') ?: (getenv('DATA_PATH') ?: $this->backend->getDataPath());
-        $customHookPath = rtrim($dataPath, '/') . '/hooks/pre-receive';
+        $customHookPath = rtrim($dataPath, '/').'/hooks/pre-receive';
         $exitCode = $this->runCustomHook($customHookPath, $inputData, [], $output);
-        if ($exitCode !== 0) {
+        if (0 !== $exitCode) {
             return $exitCode;
         }
 

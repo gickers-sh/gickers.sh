@@ -10,7 +10,6 @@ use App\Service\Daemon\GitDaemonService;
 use App\Service\Lfs\LfsPointer;
 use App\Service\Lfs\LfsStorageService;
 use App\Service\Web\GitHttpBackendService;
-use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Tester\CommandTester;
 
@@ -20,7 +19,7 @@ class GitHttpAndLfsTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->tempDir = sys_get_temp_dir() . '/codes_sh_test_' . bin2hex(random_bytes(6));
+        $this->tempDir = sys_get_temp_dir().'/codes_sh_test_'.bin2hex(random_bytes(6));
         mkdir($this->tempDir, 0755, true);
     }
 
@@ -36,8 +35,8 @@ class GitHttpAndLfsTest extends TestCase
     public function testParseValidPointer(): void
     {
         $content = "version https://git-lfs.github.com/spec/v1\n"
-            . "oid sha256:1234567890123456789012345678901234567890123456789012345678901234\n"
-            . "size 1234\n";
+            ."oid sha256:1234567890123456789012345678901234567890123456789012345678901234\n"
+            ."size 1234\n";
 
         $pointer = LfsPointer::parse($content);
 
@@ -51,10 +50,10 @@ class GitHttpAndLfsTest extends TestCase
     public function testParseInvalidPrefix(): void
     {
         $content = "version https://foobar/spec/v2\n"
-            . "oid sha256:1234567890123456789012345678901234567890123456789012345678901234\n"
-            . "size 1234\n";
+            ."oid sha256:1234567890123456789012345678901234567890123456789012345678901234\n"
+            ."size 1234\n";
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Content lacks the LFS prefix');
         LfsPointer::parse($content);
     }
@@ -62,10 +61,10 @@ class GitHttpAndLfsTest extends TestCase
     public function testParseInvalidOid(): void
     {
         $content = "version https://git-lfs.github.com/spec/v1\n"
-            . "oid sha256:&2345a78$012345678901234567890123456789012345678901234567890123\n"
-            . "size 1234\n";
+            ."oid sha256:&2345a78$012345678901234567890123456789012345678901234567890123\n"
+            ."size 1234\n";
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('OID has an invalid format');
         LfsPointer::parse($content);
     }
@@ -73,10 +72,10 @@ class GitHttpAndLfsTest extends TestCase
     public function testParseInvalidSize(): void
     {
         $content = "version https://git-lfs.github.com/spec/v1\n"
-            . "oid sha256:1234567890123456789012345678901234567890123456789012345678901234\n"
-            . "size abc\n";
+            ."oid sha256:1234567890123456789012345678901234567890123456789012345678901234\n"
+            ."size abc\n";
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Size has an invalid numeric format');
         LfsPointer::parse($content);
     }
@@ -85,23 +84,23 @@ class GitHttpAndLfsTest extends TestCase
     {
         $content = "version https://git-lfs.github.com/spec/v1\n";
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('fewer than 3 lines');
         LfsPointer::parse($content);
     }
 
     public function testParseEmptyPointer(): void
     {
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Content lacks the LFS prefix');
         LfsPointer::parse('');
     }
 
     public function testParseExceedsMaxSize(): void
     {
-        $largeContent = "version https://git-lfs.github.com/spec/v1\n" . str_repeat('a', 1050);
+        $largeContent = "version https://git-lfs.github.com/spec/v1\n".str_repeat('a', 1050);
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('exceeds maximum allowed size');
         LfsPointer::parse($largeContent);
     }
@@ -128,9 +127,9 @@ class GitHttpAndLfsTest extends TestCase
 
     public function testPutAndGetObject(): void
     {
-        $storage = new LfsStorageService($this->tempDir . '/lfs');
+        $storage = new LfsStorageService($this->tempDir.'/lfs');
 
-        $data = "Hello LFS World! This is an arbitrary payload.";
+        $data = 'Hello LFS World! This is an arbitrary payload.';
         $oid = hash('sha256', $data);
         $size = strlen($data);
 
@@ -145,33 +144,33 @@ class GitHttpAndLfsTest extends TestCase
 
     public function testPutObjectShaMismatchRejection(): void
     {
-        $storage = new LfsStorageService($this->tempDir . '/lfs');
+        $storage = new LfsStorageService($this->tempDir.'/lfs');
 
-        $data = "Valid content";
+        $data = 'Valid content';
         $wrongOid = str_repeat('a', 64);
         $size = strlen($data);
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('hash mismatch');
         $storage->putObject($wrongOid, $size, $data);
     }
 
     public function testPutObjectSizeMismatchRejection(): void
     {
-        $storage = new LfsStorageService($this->tempDir . '/lfs');
+        $storage = new LfsStorageService($this->tempDir.'/lfs');
 
-        $data = "Valid content";
+        $data = 'Valid content';
         $oid = hash('sha256', $data);
         $wrongSize = strlen($data) + 10;
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('size mismatch');
         $storage->putObject($oid, $wrongSize, $data);
     }
 
     public function testHandleBatchRequestUpload(): void
     {
-        $storage = new LfsStorageService($this->tempDir . '/lfs');
+        $storage = new LfsStorageService($this->tempDir.'/lfs');
         $oid = str_repeat('b', 64);
 
         $response = $storage->handleBatchRequest(
@@ -191,13 +190,13 @@ class GitHttpAndLfsTest extends TestCase
         $this->assertArrayHasKey('actions', $firstObj);
         $this->assertArrayHasKey('upload', $firstObj['actions']);
         $this->assertArrayHasKey('verify', $firstObj['actions']);
-        $this->assertSame('https://git.codes.sh/repo.git/info/lfs/objects/basic/' . $oid, $firstObj['actions']['upload']['href']);
+        $this->assertSame('https://git.codes.sh/repo.git/info/lfs/objects/basic/'.$oid, $firstObj['actions']['upload']['href']);
         $this->assertSame('https://git.codes.sh/repo.git/info/lfs/objects/basic/verify', $firstObj['actions']['verify']['href']);
     }
 
     public function testHandleBatchRequestDownloadExistingAndMissing(): void
     {
-        $storage = new LfsStorageService($this->tempDir . '/lfs');
+        $storage = new LfsStorageService($this->tempDir.'/lfs');
 
         $data = 'Object 1 Content';
         $oid1 = hash('sha256', $data);
@@ -223,7 +222,7 @@ class GitHttpAndLfsTest extends TestCase
         $this->assertSame($oid1, $response['objects'][0]['oid']);
         $this->assertArrayHasKey('actions', $response['objects'][0]);
         $this->assertSame(
-            'https://git.codes.sh/my-repo.git/info/lfs/objects/basic/' . $oid1,
+            'https://git.codes.sh/my-repo.git/info/lfs/objects/basic/'.$oid1,
             $response['objects'][0]['actions']['download']['href']
         );
 
@@ -235,7 +234,7 @@ class GitHttpAndLfsTest extends TestCase
 
     public function testHandleBatchRequestInvalidObjectError422(): void
     {
-        $storage = new LfsStorageService($this->tempDir . '/lfs');
+        $storage = new LfsStorageService($this->tempDir.'/lfs');
 
         $response = $storage->handleBatchRequest(
             'my-repo',
@@ -254,7 +253,7 @@ class GitHttpAndLfsTest extends TestCase
 
     public function testHandleBatchRequestAuthHeaderPropagation(): void
     {
-        $storage = new LfsStorageService($this->tempDir . '/lfs');
+        $storage = new LfsStorageService($this->tempDir.'/lfs');
         $oid = str_repeat('e', 64);
 
         $response = $storage->handleBatchRequest(
@@ -272,7 +271,7 @@ class GitHttpAndLfsTest extends TestCase
 
     public function testHandleBatchDownloadSizeMismatch(): void
     {
-        $storage = new LfsStorageService($this->tempDir . '/lfs');
+        $storage = new LfsStorageService($this->tempDir.'/lfs');
         $data = 'Original content for size check';
         $oid = hash('sha256', $data);
         $storage->putObject($oid, strlen($data), $data);
@@ -290,7 +289,7 @@ class GitHttpAndLfsTest extends TestCase
 
     public function testLfsBasicDownloadAndUpload(): void
     {
-        $storage = new LfsStorageService($this->tempDir . '/lfs');
+        $storage = new LfsStorageService($this->tempDir.'/lfs');
         $data = 'Binary payload content';
         $oid = hash('sha256', $data);
 
@@ -319,7 +318,7 @@ class GitHttpAndLfsTest extends TestCase
 
     public function testLfsLocksLifecycle(): void
     {
-        $storage = new LfsStorageService($this->tempDir . '/lfs');
+        $storage = new LfsStorageService($this->tempDir.'/lfs');
         $repoId = 1;
         $userId = 42;
         $username = 'alice';
@@ -379,7 +378,7 @@ class GitHttpAndLfsTest extends TestCase
 
     public function testGetInfoRefsWithBareRepo(): void
     {
-        $bareRepoPath = $this->tempDir . '/test-repo.git';
+        $bareRepoPath = $this->tempDir.'/test-repo.git';
         mkdir($bareRepoPath, 0755, true);
 
         // Initialize bare repository
@@ -393,13 +392,13 @@ class GitHttpAndLfsTest extends TestCase
         $this->assertSame('application/x-git-upload-pack-advertisement', $result['headers']['Content-Type']);
         $this->assertSame('no-cache', $result['headers']['Cache-Control']);
 
-        $expectedHeader = $service->encodePktLine("# service=git-upload-pack\n") . $service->flushPkt();
+        $expectedHeader = $service->encodePktLine("# service=git-upload-pack\n").$service->flushPkt();
         $this->assertStringStartsWith($expectedHeader, $result['body']);
     }
 
     public function testGetInfoRefsDumbHttp(): void
     {
-        $bareRepoPath = $this->tempDir . '/dumb-repo.git';
+        $bareRepoPath = $this->tempDir.'/dumb-repo.git';
         mkdir($bareRepoPath, 0755, true);
         exec(sprintf('git init --bare -b main %s 2>&1', escapeshellarg($bareRepoPath)), $output, $status);
         $this->assertSame(0, $status);
@@ -414,7 +413,7 @@ class GitHttpAndLfsTest extends TestCase
 
     public function testGetInfoRefsUploadArchiveFallsBackToDumbHttp(): void
     {
-        $bareRepoPath = $this->tempDir . '/archive-repo.git';
+        $bareRepoPath = $this->tempDir.'/archive-repo.git';
         mkdir($bareRepoPath, 0755, true);
         exec(sprintf('git init --bare -b main %s 2>&1', escapeshellarg($bareRepoPath)), $output, $status);
         $this->assertSame(0, $status);
@@ -430,17 +429,17 @@ class GitHttpAndLfsTest extends TestCase
     {
         $service = new GitHttpBackendService();
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Invalid git service');
         $service->getInfoRefs($this->tempDir, 'invalid-service');
     }
 
     public function testHandleDumbFiles(): void
     {
-        $bareRepoPath = $this->tempDir . '/static-repo.git';
-        mkdir($bareRepoPath . '/objects/12', 0755, true);
-        file_put_contents($bareRepoPath . '/HEAD', "ref: refs/heads/main\n");
-        file_put_contents($bareRepoPath . '/objects/12/' . str_repeat('a', 38), 'fake object');
+        $bareRepoPath = $this->tempDir.'/static-repo.git';
+        mkdir($bareRepoPath.'/objects/12', 0755, true);
+        file_put_contents($bareRepoPath.'/HEAD', "ref: refs/heads/main\n");
+        file_put_contents($bareRepoPath.'/objects/12/'.str_repeat('a', 38), 'fake object');
 
         $service = new GitHttpBackendService();
 
@@ -450,7 +449,7 @@ class GitHttpAndLfsTest extends TestCase
         $this->assertSame('text/plain; charset=utf-8', $head['headers']['Content-Type']);
 
         // Loose object
-        $obj = $service->handleDumbFile($bareRepoPath, 'objects/12/' . str_repeat('a', 38));
+        $obj = $service->handleDumbFile($bareRepoPath, 'objects/12/'.str_repeat('a', 38));
         $this->assertSame(200, $obj['status']);
         $this->assertSame('application/x-git-loose-object', $obj['headers']['Content-Type']);
         $this->assertStringContainsString('immutable', $obj['headers']['Cache-Control']);
@@ -482,19 +481,19 @@ class GitHttpAndLfsTest extends TestCase
         $publicUrl = 'https://codes.sh:23232';
 
         // Direct repo match
-        $res = $service->handleGoGet('org/project', $publicUrl, fn(string $r) => $r === 'org/project');
+        $res = $service->handleGoGet('org/project', $publicUrl, static fn (string $r) => 'org/project' === $r);
         $this->assertNotNull($res);
         $this->assertSame(200, $res['status']);
         $this->assertStringContainsString('codes.sh/org/project', $res['body']);
 
         // Subpackage walking up to repository root
-        $resSub = $service->handleGoGet('org/project/pkg/util', $publicUrl, fn(string $r) => $r === 'org/project');
+        $resSub = $service->handleGoGet('org/project/pkg/util', $publicUrl, static fn (string $r) => 'org/project' === $r);
         $this->assertNotNull($resSub);
         $this->assertSame(200, $resSub['status']);
         $this->assertStringContainsString('codes.sh/org/project', $resSub['body']);
 
         // No readable repo
-        $resMissing = $service->handleGoGet('unknown/repo', $publicUrl, fn(string $r) => false);
+        $resMissing = $service->handleGoGet('unknown/repo', $publicUrl, static fn (string $r) => false);
         $this->assertNull($resMissing);
     }
 
@@ -503,7 +502,7 @@ class GitHttpAndLfsTest extends TestCase
         $service = new GitHttpBackendService();
 
         // Basic
-        $basic = $service->parseAuthHeader('Basic ' . base64_encode('bob:secret123'));
+        $basic = $service->parseAuthHeader('Basic '.base64_encode('bob:secret123'));
         $this->assertSame('basic', $basic['type']);
         $this->assertSame('bob', $basic['username']);
         $this->assertSame('secret123', $basic['password']);
@@ -575,7 +574,7 @@ class GitHttpAndLfsTest extends TestCase
 
         $raw = "0035git-upload-pack /../secret.git\0host=example.com\0";
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('directory traversal');
         $daemon->readPktLine($raw);
     }
@@ -586,7 +585,7 @@ class GitHttpAndLfsTest extends TestCase
 
         $raw = "0033git-receive-pack /repo.git\0host=example.com\0";
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('git daemon only supports "git-upload-pack"');
         $daemon->readPktLine($raw);
     }
@@ -649,7 +648,7 @@ class GitHttpAndLfsTest extends TestCase
 
     public function testServerConfigDefaultWritingAndLoading(): void
     {
-        $configPath = $this->tempDir . '/config.yaml';
+        $configPath = $this->tempDir.'/config.yaml';
         $cfg = new ServerConfig($this->tempDir);
 
         $written = $cfg->writeDefaultConfig($configPath);
@@ -671,7 +670,7 @@ class GitHttpAndLfsTest extends TestCase
         $tester = new CommandTester($command);
 
         $exitCode = $tester->execute([
-            '--data-dir' => $this->tempDir . '/server_data',
+            '--data-dir' => $this->tempDir.'/server_data',
             '--port' => '2222',
             '--dry-run' => true,
         ]);
@@ -682,15 +681,15 @@ class GitHttpAndLfsTest extends TestCase
         $this->assertStringContainsString('Dry-run complete', $display);
 
         // Check created files
-        $this->assertFileExists($this->tempDir . '/server_data/config.yaml');
-        $this->assertFileExists($this->tempDir . '/server_data/hooks/update.sample');
-        $this->assertFileExists($this->tempDir . '/server_data/ssh/soft_serve_host_ed25519');
-        $this->assertFileExists($this->tempDir . '/server_data/ssh/authorized_keys');
-        $this->assertFileExists($this->tempDir . '/server_data/ssh/sshd_config');
+        $this->assertFileExists($this->tempDir.'/server_data/config.yaml');
+        $this->assertFileExists($this->tempDir.'/server_data/hooks/update.sample');
+        $this->assertFileExists($this->tempDir.'/server_data/ssh/soft_serve_host_ed25519');
+        $this->assertFileExists($this->tempDir.'/server_data/ssh/authorized_keys');
+        $this->assertFileExists($this->tempDir.'/server_data/ssh/sshd_config');
 
         // Check forced command in authorized_keys
-        $authKeys = (string) file_get_contents($this->tempDir . '/server_data/ssh/authorized_keys');
-        if (trim($authKeys) !== '') {
+        $authKeys = (string) file_get_contents($this->tempDir.'/server_data/ssh/authorized_keys');
+        if ('' !== trim($authKeys)) {
             $this->assertStringContainsString('soft:ssh:dispatch', $authKeys);
         }
     }
@@ -702,15 +701,15 @@ class GitHttpAndLfsTest extends TestCase
         }
 
         $items = scandir($dir);
-        if ($items === false) {
+        if (false === $items) {
             return;
         }
 
         foreach ($items as $item) {
-            if ($item === '.' || $item === '..') {
+            if ('.' === $item || '..' === $item) {
                 continue;
             }
-            $path = $dir . '/' . $item;
+            $path = $dir.'/'.$item;
             if (is_dir($path)) {
                 $this->removeDirectory($path);
             } else {

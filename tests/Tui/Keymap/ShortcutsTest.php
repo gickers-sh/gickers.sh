@@ -4,23 +4,19 @@ declare(strict_types=1);
 
 namespace App\Tests\Tui\Keymap;
 
-use App\Model\GitRepositoryModel;
-use App\Service\Git\GitService;
-use App\Service\Render\TermstrapRenderer;
-use App\Tui\Component\CodeViewerComponent;
-use App\Tui\Component\EditorComponent;
-use App\Tui\Component\Field\TextInputField;
-use App\Tui\Component\Field\ToggleField;
-use App\Tui\Component\FormComponent;
-use App\Tui\Component\SelectorComponent;
-use App\Tui\Event\KeyMsg;
-use App\Tui\Keymap\KeyBinding;
-use App\Tui\Keymap\KeyMap;
-use App\Tui\Page\AdminPage;
-use App\Tui\Page\RepoPage;
-use App\Tui\Page\RootUI;
-use App\Tui\Page\SelectionPage;
-use App\Tui\Runtime\InputParser;
+use App\Repo\Infrastructure\Git\GitRepositoryReader;
+use App\UI\Tui\Page\RepoPage;
+use App\UI\Tui\Page\SelectionPage;
+use App\UI\Tui\Render\TermstrapRenderer;
+use CodesSh\Tui\Component\CodeViewerComponent;
+use CodesSh\Tui\Component\EditorComponent;
+use CodesSh\Tui\Component\Field\TextInputField;
+use CodesSh\Tui\Component\Field\ToggleField;
+use CodesSh\Tui\Component\FormComponent;
+use CodesSh\Tui\Component\SelectorComponent;
+use CodesSh\Tui\Event\KeyMsg;
+use CodesSh\Tui\Keymap\KeyMap;
+use CodesSh\Tui\Runtime\InputParser;
 use PHPUnit\Framework\TestCase;
 
 final class ShortcutsTest extends TestCase
@@ -55,12 +51,12 @@ final class ShortcutsTest extends TestCase
     {
         $parser = new InputParser();
 
-        $events = $parser->parse("gd");
+        $events = $parser->parse('gd');
         $this->assertCount(1, $events);
         $this->assertInstanceOf(KeyMsg::class, $events[0]);
         $this->assertSame('gd', $events[0]->key);
 
-        $events2 = $parser->parse("gr");
+        $events2 = $parser->parse('gr');
         $this->assertCount(1, $events2);
         $this->assertInstanceOf(KeyMsg::class, $events2[0]);
         $this->assertSame('gr', $events2[0]->key);
@@ -186,13 +182,13 @@ final class ShortcutsTest extends TestCase
 
     public function testSelectionPageGlobalShortcuts(): void
     {
-        $gitService = new GitService();
+        $gitService = new GitRepositoryReader();
         $renderer = new TermstrapRenderer();
         $page = new SelectionPage($gitService, $renderer);
         $page->init();
 
         $adminTriggered = false;
-        $page->setOnAdmin(function () use (&$adminTriggered) {
+        $page->setOnAdmin(static function () use (&$adminTriggered) {
             $adminTriggered = true;
         });
 
@@ -207,11 +203,11 @@ final class ShortcutsTest extends TestCase
 
     public function testRepoPageGlobalShortcuts(): void
     {
-        $tmpDir = sys_get_temp_dir() . '/test_repo_shortcuts_' . uniqid();
+        $tmpDir = sys_get_temp_dir().'/test_repo_shortcuts_'.uniqid();
         mkdir($tmpDir, 0755, true);
-        shell_exec('git -C ' . escapeshellarg($tmpDir) . ' init --bare 2>/dev/null');
+        shell_exec('git -C '.escapeshellarg($tmpDir).' init --bare 2>/dev/null');
 
-        $gitService = new GitService();
+        $gitService = new GitRepositoryReader();
         $repo = $gitService->openRepository($tmpDir);
         $renderer = new TermstrapRenderer();
         $repoPage = new RepoPage($repo, $gitService, $renderer);
@@ -228,6 +224,6 @@ final class ShortcutsTest extends TestCase
         $this->assertStringContainsString('Navigate', $viewWithHelp);
 
         // Cleanup
-        shell_exec('rm -rf ' . escapeshellarg($tmpDir));
+        shell_exec('rm -rf '.escapeshellarg($tmpDir));
     }
 }

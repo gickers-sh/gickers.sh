@@ -1,0 +1,18 @@
+<?php
+
+declare(strict_types=1);
+
+$finder = (new PhpCsFixer\Finder())
+    ->in([__DIR__.'/src', __DIR__.'/tests', __DIR__.'/config', __DIR__.'/public'])
+    ->append([__DIR__.'/bin/console', __DIR__.'/bin/soft']);
+
+return (new PhpCsFixer\Config())
+    ->setRiskyAllowed(true)
+    ->setRules([
+        '@Symfony' => true,
+        '@Symfony:risky' => true,
+        'declare_strict_types' => true,
+        'native_function_invocation' => false,
+        'phpdoc_to_comment' => false,
+    ])
+    ->setFinder($finder);

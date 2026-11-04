@@ -1,0 +1,23 @@
+parameters:
+    codes_sh.default_data_path: '%kernel.project_dir%/.data'
+    env(SOFT_SERVE_DATA_PATH): '%codes_sh.default_data_path%'
+
+services:
+    App\Shared\Infrastructure\Config\ServerSettings:
+        arguments:
+            $name: '%env(SOFT_SERVE_NAME)%'
+            $dataPath: '%env(resolve:SOFT_SERVE_DATA_PATH)%'
+            $sshListenAddr: '%env(SOFT_SERVE_SSH_LISTEN_ADDR)%'
+            $sshPublicUrl: '%env(SOFT_SERVE_SSH_PUBLIC_URL)%'
+            $httpListenAddr: '%env(SOFT_SERVE_HTTP_LISTEN_ADDR)%'
+            $httpPublicUrl: '%env(SOFT_SERVE_HTTP_PUBLIC_URL)%'
+            $gitListenAddr: '%env(SOFT_SERVE_GIT_LISTEN_ADDR)%'
+            $gitMaxConnections: '%env(int:SOFT_SERVE_GIT_MAX_CONNECTIONS)%'
+            $lfsEnabled: '%env(bool:SOFT_SERVE_LFS_ENABLED)%'
+            $anonAccess: '%env(SOFT_SERVE_ANON_ACCESS)%'
+            $allowKeyless: '%env(bool:SOFT_SERVE_ALLOW_KEYLESS)%'
+            $initialAdminKeys: '%env(SOFT_SERVE_INITIAL_ADMIN_KEYS)%'
+
+when@test:
+    parameters:
+        env(SOFT_SERVE_DATA_PATH): '%kernel.project_dir%/var/test-data'

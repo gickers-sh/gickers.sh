@@ -2,12 +2,13 @@ security:
     password_hashers:
         Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface: 'auto'
     providers:
-        users_in_memory: { memory: null }
+        app_users:
+            id: App\Identity\Infrastructure\Security\SecurityUserProvider
     firewalls:
         main:
             lazy: true
             stateless: true
-            provider: users_in_memory
+            provider: app_users
 
 when@test:
     security:
@@ -17,3 +18,46 @@ when@test:
                 cost: 4
                 time_cost: 3
                 memory_cost: 10
+    services:
+        test.access_guard:
+            alias: App\Access\Application\AccessGuard
+            public: true
+        test.create_user:
+            alias: App\Identity\Application\CreateUser
+            public: true
+        test.delete_user:
+            alias: App\Identity\Application\DeleteUser
+            public: true
+        test.rename_user:
+            alias: App\Identity\Application\RenameUser
+            public: true
+        test.set_admin:
+            alias: App\Identity\Application\SetAdmin
+            public: true
+        test.add_public_key:
+            alias: App\Identity\Application\AddPublicKey
+            public: true
+        test.remove_public_key:
+            alias: App\Identity\Application\RemovePublicKey
+            public: true
+        test.set_password:
+            alias: App\Identity\Application\SetPassword
+            public: true
+        test.issue_access_token:
+            alias: App\Identity\Application\IssueAccessToken
+            public: true
+        test.revoke_access_token:
+            alias: App\Identity\Application\RevokeAccessToken
+            public: true
+        test.authenticate_ssh_key:
+            alias: App\Identity\Application\AuthenticateSshKey
+            public: true
+        test.authenticate_access_token:
+            alias: App\Identity\Application\AuthenticateAccessToken
+            public: true
+        test.bootstrap_server:
+            alias: App\Identity\Application\BootstrapServer
+            public: true
+        test.authorized_keys_writer:
+            alias: App\Identity\Infrastructure\Ssh\AuthorizedKeysFileWriter
+            public: true

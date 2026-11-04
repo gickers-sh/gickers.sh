@@ -25,6 +25,6 @@ final class PullRequestCommentModel
 
     public function isLineComment(): bool
     {
-        return $this->filePath !== null && $this->line !== null;
+        return null !== $this->filePath && null !== $this->line;
     }
 }

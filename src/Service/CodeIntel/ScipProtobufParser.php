@@ -38,7 +38,7 @@ final class ScipProtobufParser
             $fieldNumber = $tag >> 3;
             $wireType = $tag & 0x07;
 
-            if ($fieldNumber === 3 && $wireType === self::WIRE_LENGTH_DELIMITED) {
+            if (3 === $fieldNumber && self::WIRE_LENGTH_DELIMITED === $wireType) {
                 // Repeated Document
                 $docLen = $this->readVarint($binary, $offset, $limit);
                 $docBytes = substr($binary, $offset, $docLen);
@@ -92,18 +92,18 @@ final class ScipProtobufParser
             $fieldNumber = $tag >> 3;
             $wireType = $tag & 0x07;
 
-            if ($fieldNumber === 1 && $wireType === self::WIRE_LENGTH_DELIMITED) {
+            if (1 === $fieldNumber && self::WIRE_LENGTH_DELIMITED === $wireType) {
                 // relative_path
                 $len = $this->readVarint($bytes, $offset, $limit);
                 $relativePath = substr($bytes, $offset, $len);
                 $offset += $len;
-            } elseif ($fieldNumber === 2 && $wireType === self::WIRE_LENGTH_DELIMITED) {
+            } elseif (2 === $fieldNumber && self::WIRE_LENGTH_DELIMITED === $wireType) {
                 // repeated Occurrence
                 $occLen = $this->readVarint($bytes, $offset, $limit);
                 $occBytes = substr($bytes, $offset, $occLen);
                 $offset += $occLen;
                 $occurrences[] = $this->decodeOccurrence($occBytes);
-            } elseif ($fieldNumber === 4 && $wireType === self::WIRE_LENGTH_DELIMITED) {
+            } elseif (4 === $fieldNumber && self::WIRE_LENGTH_DELIMITED === $wireType) {
                 // language
                 $len = $this->readVarint($bytes, $offset, $limit);
                 $language = substr($bytes, $offset, $len);
@@ -133,7 +133,7 @@ final class ScipProtobufParser
         $occurrences = (array) ($doc['occurrences'] ?? []);
 
         // Field 1: relative_path
-        if ($relativePath !== '') {
+        if ('' !== $relativePath) {
             $bytes .= $this->writeLengthDelimited(1, $relativePath);
         }
 
@@ -144,7 +144,7 @@ final class ScipProtobufParser
         }
 
         // Field 4: language
-        if ($language !== '') {
+        if ('' !== $language) {
             $bytes .= $this->writeLengthDelimited(4, $language);
         }
 
@@ -169,25 +169,25 @@ final class ScipProtobufParser
             $fieldNumber = $tag >> 3;
             $wireType = $tag & 0x07;
 
-            if ($fieldNumber === 1) {
+            if (1 === $fieldNumber) {
                 // range (packed or non-packed repeated int32)
-                if ($wireType === self::WIRE_LENGTH_DELIMITED) {
+                if (self::WIRE_LENGTH_DELIMITED === $wireType) {
                     $len = $this->readVarint($bytes, $offset, $limit);
                     $end = min($limit, $offset + $len);
                     while ($offset < $end) {
                         $range[] = $this->readVarint($bytes, $offset, $end);
                     }
-                } elseif ($wireType === self::WIRE_VARINT) {
+                } elseif (self::WIRE_VARINT === $wireType) {
                     $range[] = $this->readVarint($bytes, $offset, $limit);
                 } else {
                     $this->skipField($wireType, $bytes, $offset, $limit);
                 }
-            } elseif ($fieldNumber === 2 && $wireType === self::WIRE_LENGTH_DELIMITED) {
+            } elseif (2 === $fieldNumber && self::WIRE_LENGTH_DELIMITED === $wireType) {
                 // symbol
                 $len = $this->readVarint($bytes, $offset, $limit);
                 $symbol = substr($bytes, $offset, $len);
                 $offset += $len;
-            } elseif ($fieldNumber === 3 && $wireType === self::WIRE_VARINT) {
+            } elseif (3 === $fieldNumber && self::WIRE_VARINT === $wireType) {
                 // symbol_roles
                 $symbolRoles = $this->readVarint($bytes, $offset, $limit);
             } else {
@@ -233,13 +233,13 @@ final class ScipProtobufParser
         }
 
         // Field 2: symbol (string, length-delimited)
-        if ($symbol !== '') {
+        if ('' !== $symbol) {
             $bytes .= $this->writeLengthDelimited(2, $symbol);
         }
 
         // Field 3: symbol_roles (int32 varint)
-        if ($roles !== 0) {
-            $bytes .= $this->writeTag(3, self::WIRE_VARINT) . $this->writeVarint($roles);
+        if (0 !== $roles) {
+            $bytes .= $this->writeTag(3, self::WIRE_VARINT).$this->writeVarint($roles);
         }
 
         return $bytes;
@@ -248,15 +248,16 @@ final class ScipProtobufParser
     /**
      * Converts a raw SCIP int32 range array into structured start/end coordinates.
      * 3-int: [startLine, startCol, endCol] (single line)
-     * 4-int: [startLine, startCol, endLine, endCol] (multiline)
+     * 4-int: [startLine, startCol, endLine, endCol] (multiline).
      *
      * @param int[] $range
+     *
      * @return array{startLine: int, startCol: int, endLine: int, endCol: int}
      */
     public static function parseRange(array $range): array
     {
         $count = count($range);
-        if ($count === 3) {
+        if (3 === $count) {
             return [
                 'startLine' => (int) $range[0],
                 'startCol' => (int) $range[1],
@@ -287,7 +288,7 @@ final class ScipProtobufParser
      */
     public function writeVarint(int $value): string
     {
-        if ($value === 0) {
+        if (0 === $value) {
             return "\x00";
         }
 
@@ -298,6 +299,7 @@ final class ScipProtobufParser
                 $value >>= 7;
                 $buf .= chr($i < 9 ? ($byte | 0x80) : ($byte & 0x7F));
             }
+
             return $buf;
         }
 
@@ -348,8 +350,8 @@ final class ScipProtobufParser
     public function writeLengthDelimited(int $fieldNumber, string $data): string
     {
         return $this->writeTag($fieldNumber, self::WIRE_LENGTH_DELIMITED)
-            . $this->writeVarint(strlen($data))
-            . $data;
+            .$this->writeVarint(strlen($data))
+            .$data;
     }
 
     /**

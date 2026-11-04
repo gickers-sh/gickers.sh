@@ -15,36 +15,36 @@ use Symfony\Component\Console\Output\OutputInterface;
 #[AsCommand(name: 'soft:man', description: 'Print the soft(1) manual page')]
 final class ManCommand extends Command
 {
- protected function execute(InputInterface $input, OutputInterface $output): int
- {
-  $application = $this->getApplication();
-  \assert(null !== $application);
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        $application = $this->getApplication();
+        \assert(null !== $application);
 
-  $lines = [
-   '.TH SOFT 1 "' . date('F Y') . '" "codes.sh" "Soft Serve Manual"',
-   '.SH NAME',
-   'soft \- A self-hostable Git server for the command line',
-   '.SH SYNOPSIS',
-   '\fBsoft\fR [\fIcommand\fR] [\fIflags\fR]',
-   '.SH COMMANDS',
-  ];
+        $lines = [
+            '.TH SOFT 1 "'.date('F Y').'" "codes.sh" "Soft Serve Manual"',
+            '.SH NAME',
+            'soft \- A self-hostable Git server for the command line',
+            '.SH SYNOPSIS',
+            '\fBsoft\fR [\fIcommand\fR] [\fIflags\fR]',
+            '.SH COMMANDS',
+        ];
 
-  foreach ($application->all('soft') as $name => $command) {
-   if ($command->isHidden() || $name !== $command->getName()) {
-    continue;
-   }
-   $lines[] = '.TP';
-   $lines[] = '\fB' . str_replace(':', ' ', substr($name, 5)) . '\fR ' . $this->escape($command->getSynopsis(true));
-   $lines[] = $this->escape($command->getDescription());
-  }
+        foreach ($application->all('soft') as $name => $command) {
+            if ($command->isHidden() || $name !== $command->getName()) {
+                continue;
+            }
+            $lines[] = '.TP';
+            $lines[] = '\fB'.str_replace(':', ' ', substr($name, 5)).'\fR '.$this->escape($command->getDefinition()->getSynopsis(true));
+            $lines[] = $this->escape($command->getDescription());
+        }
 
-  $output->writeln($lines, OutputInterface::OUTPUT_RAW);
+        $output->writeln($lines, OutputInterface::OUTPUT_RAW);
 
-  return Command::SUCCESS;
- }
+        return Command::SUCCESS;
+    }
 
- private function escape(string $text): string
- {
-  return str_replace(['\\', '-'], ['\\\\', '\-'], $text);
- }
+    private function escape(string $text): string
+    {
+        return str_replace(['\\', '-'], ['\\\\', '\-'], $text);
+    }
 }

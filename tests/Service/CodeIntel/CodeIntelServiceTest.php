@@ -4,15 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\CodeIntel;
 
-use App\Model\CodeIntel\OccurrenceModel;
 use App\Model\CodeIntel\SymbolInfoModel;
-use App\Model\CodeIntel\SymbolLocationModel;
 use App\Service\CodeIntel\CodeIntelService;
 use App\Service\CodeIntel\ScipProtobufParser;
-use FilesystemIterator;
 use PHPUnit\Framework\TestCase;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
 use Symfony\Component\Process\Process;
 
 final class CodeIntelServiceTest extends TestCase
@@ -173,31 +168,31 @@ final class CodeIntelServiceTest extends TestCase
         self::assertFalse($this->service->isPhpProject($dir));
 
         // composer.json
-        file_put_contents($dir . '/composer.json', '{}');
+        file_put_contents($dir.'/composer.json', '{}');
         self::assertTrue($this->service->isPhpProject($dir));
-        unlink($dir . '/composer.json');
+        unlink($dir.'/composer.json');
 
         // symfony.lock
-        file_put_contents($dir . '/symfony.lock', '{}');
+        file_put_contents($dir.'/symfony.lock', '{}');
         self::assertTrue($this->service->isPhpProject($dir));
-        unlink($dir . '/symfony.lock');
+        unlink($dir.'/symfony.lock');
 
         // bin/console
-        mkdir($dir . '/bin', 0755, true);
-        file_put_contents($dir . '/bin/console', '#!/usr/bin/env php');
+        mkdir($dir.'/bin', 0755, true);
+        file_put_contents($dir.'/bin/console', '#!/usr/bin/env php');
         self::assertTrue($this->service->isPhpProject($dir));
-        unlink($dir . '/bin/console');
+        unlink($dir.'/bin/console');
 
         // Only vendor or .git should be ignored
-        mkdir($dir . '/vendor/bundle', 0755, true);
-        file_put_contents($dir . '/vendor/bundle/Foo.php', '<?php');
-        mkdir($dir . '/.git/hooks', 0755, true);
-        file_put_contents($dir . '/.git/hooks/pre-commit.php', '<?php');
+        mkdir($dir.'/vendor/bundle', 0755, true);
+        file_put_contents($dir.'/vendor/bundle/Foo.php', '<?php');
+        mkdir($dir.'/.git/hooks', 0755, true);
+        file_put_contents($dir.'/.git/hooks/pre-commit.php', '<?php');
         self::assertFalse($this->service->isPhpProject($dir));
 
         // Actual application php file
-        mkdir($dir . '/src', 0755, true);
-        file_put_contents($dir . '/src/Kernel.php', '<?php');
+        mkdir($dir.'/src', 0755, true);
+        file_put_contents($dir.'/src/Kernel.php', '<?php');
         self::assertTrue($this->service->isPhpProject($dir));
     }
 
@@ -210,17 +205,17 @@ final class CodeIntelServiceTest extends TestCase
 
         self::assertFalse($this->service->isSymfonyProject($dir));
 
-        file_put_contents($dir . '/composer.json', json_encode([
+        file_put_contents($dir.'/composer.json', json_encode([
             'require' => ['symfony/framework-bundle' => '7.4.*'],
         ]));
         self::assertTrue($this->service->isSymfonyProject($dir));
 
-        file_put_contents($dir . '/composer.json', json_encode([
+        file_put_contents($dir.'/composer.json', json_encode([
             'require' => ['monolog/monolog' => '^3.0'],
         ]));
         self::assertFalse($this->service->isSymfonyProject($dir));
 
-        file_put_contents($dir . '/symfony.lock', '{}');
+        file_put_contents($dir.'/symfony.lock', '{}');
         self::assertTrue($this->service->isSymfonyProject($dir));
     }
 
@@ -232,17 +227,17 @@ final class CodeIntelServiceTest extends TestCase
     {
         $dir = $this->createTempDir('symfony_proj_');
 
-        file_put_contents($dir . '/composer.json', json_encode([
+        file_put_contents($dir.'/composer.json', json_encode([
             'name' => 'acme/symfony-demo',
             'require' => ['symfony/framework-bundle' => '7.4.*'],
         ]));
 
-        mkdir($dir . '/src/Entity', 0755, true);
-        mkdir($dir . '/src/Repository', 0755, true);
-        mkdir($dir . '/src/Controller', 0755, true);
+        mkdir($dir.'/src/Entity', 0755, true);
+        mkdir($dir.'/src/Repository', 0755, true);
+        mkdir($dir.'/src/Controller', 0755, true);
 
         // User.php
-        file_put_contents($dir . '/src/Entity/User.php', <<<'PHP'
+        file_put_contents($dir.'/src/Entity/User.php', <<<'PHP'
 <?php
 namespace App\Entity;
 
@@ -259,7 +254,7 @@ PHP
         );
 
         // UserRepository.php
-        file_put_contents($dir . '/src/Repository/UserRepository.php', <<<'PHP'
+        file_put_contents($dir.'/src/Repository/UserRepository.php', <<<'PHP'
 <?php
 namespace App\Repository;
 
@@ -276,7 +271,7 @@ PHP
         );
 
         // UserController.php
-        file_put_contents($dir . '/src/Controller/UserController.php', <<<'PHP'
+        file_put_contents($dir.'/src/Controller/UserController.php', <<<'PHP'
 <?php
 namespace App\Controller;
 
@@ -322,10 +317,10 @@ PHP
         $foundRepoRef = false;
         $foundCtrlRef = false;
         foreach ($refs as $ref) {
-            if ($ref->path === 'src/Repository/UserRepository.php') {
+            if ('src/Repository/UserRepository.php' === $ref->path) {
                 $foundRepoRef = true;
             }
-            if ($ref->path === 'src/Controller/UserController.php') {
+            if ('src/Controller/UserController.php' === $ref->path) {
                 $foundCtrlRef = true;
             }
         }
@@ -344,6 +339,7 @@ PHP
         $runGit = static function (array $args, string $cwd): string {
             $process = new Process(array_merge(['git'], $args), $cwd);
             $process->mustRun();
+
             return trim($process->getOutput());
         };
 
@@ -351,12 +347,12 @@ PHP
         $runGit(['config', 'user.name', 'Test'], $repoDir);
         $runGit(['config', 'user.email', 'test@example.com'], $repoDir);
 
-        mkdir($repoDir . '/src/Entity', 0755, true);
-        mkdir($repoDir . '/src/Controller', 0755, true);
+        mkdir($repoDir.'/src/Entity', 0755, true);
+        mkdir($repoDir.'/src/Controller', 0755, true);
 
-        file_put_contents($repoDir . '/composer.json', json_encode(['name' => 'acme/commit-test']));
-        file_put_contents($repoDir . '/src/Entity/User.php', "<?php\nnamespace App\\Entity;\nclass User {}\n");
-        file_put_contents($repoDir . '/src/Controller/UserController.php', <<<'PHP'
+        file_put_contents($repoDir.'/composer.json', json_encode(['name' => 'acme/commit-test']));
+        file_put_contents($repoDir.'/src/Entity/User.php', "<?php\nnamespace App\\Entity;\nclass User {}\n");
+        file_put_contents($repoDir.'/src/Controller/UserController.php', <<<'PHP'
 <?php
 namespace App\Controller;
 use App\Entity\User;
@@ -387,9 +383,10 @@ PHP
 
     private function createTempDir(string $prefix): string
     {
-        $dir = sys_get_temp_dir() . '/' . $prefix . bin2hex(random_bytes(6));
+        $dir = sys_get_temp_dir().'/'.$prefix.bin2hex(random_bytes(6));
         mkdir($dir, 0755, true);
         $this->tempDirs[] = $dir;
+
         return $dir;
     }
 
@@ -400,9 +397,9 @@ PHP
         }
 
         try {
-            $files = new RecursiveIteratorIterator(
-                new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),
-                RecursiveIteratorIterator::CHILD_FIRST
+            $files = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::CHILD_FIRST
             );
 
             foreach ($files as $fileinfo) {

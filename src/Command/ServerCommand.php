@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use App\Repo\Infrastructure\Git\HookInstaller;
 use App\Service\Config\ServerConfig;
 use App\Service\Database\DatabaseManager;
-use App\Service\Git\GitPlumbingService;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -69,7 +69,7 @@ BASH;
 
     public function __construct(
         private readonly ?DatabaseManager $databaseManager = null,
-        private readonly ?GitPlumbingService $gitPlumbing = null,
+        private readonly ?HookInstaller $hookInstaller = null,
     ) {
         parent::__construct();
     }
@@ -98,8 +98,8 @@ BASH;
         $errOutput = $output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output;
 
         // 1. Resolve Data Path and Config
-        $dataDir = $input->getOption('data-dir') ?: (getenv('SOFT_SERVE_DATA_PATH') ?: (dirname(__DIR__, 2) . '/.data'));
-        $configPath = $input->getOption('config') ?: (getenv('SOFT_SERVE_CONFIG_LOCATION') ?: ($dataDir . '/config.yaml'));
+        $dataDir = $input->getOption('data-dir') ?: (getenv('SOFT_SERVE_DATA_PATH') ?: (dirname(__DIR__, 2).'/.data'));
+        $configPath = $input->getOption('config') ?: (getenv('SOFT_SERVE_CONFIG_LOCATION') ?: ($dataDir.'/config.yaml'));
 
         $cfg = new ServerConfig($dataDir);
         if (!file_exists($configPath)) {
@@ -125,11 +125,11 @@ BASH;
         // 3. Create Required Server Directories
         $dirs = [
             $dataDir,
-            $dataDir . '/ssh',
-            $dataDir . '/hooks',
-            $dataDir . '/log',
-            $dataDir . '/repos',
-            $dataDir . '/lfs',
+            $dataDir.'/ssh',
+            $dataDir.'/hooks',
+            $dataDir.'/log',
+            $dataDir.'/repos',
+            $dataDir.'/lfs',
         ];
         foreach ($dirs as $dir) {
             if (!is_dir($dir)) {
@@ -138,14 +138,14 @@ BASH;
         }
 
         // 4. Generate update hook sample if not present
-        $sampleHookPath = $dataDir . '/hooks/update.sample';
+        $sampleHookPath = $dataDir.'/hooks/update.sample';
         if (!file_exists($sampleHookPath)) {
             file_put_contents($sampleHookPath, self::UPDATE_HOOK_SAMPLE);
             chmod($sampleHookPath, 0744);
         }
 
         // 5. Run Database Migrations
-        if ($this->databaseManager !== null) {
+        if (null !== $this->databaseManager) {
             try {
                 $this->databaseManager->migrate();
             } catch (\Throwable $e) {
@@ -156,13 +156,13 @@ BASH;
         // 6. Check for Anon Admin Access
         $allowKeyless = $cfg->allowKeyless ?? true;
         $anonAccess = $cfg->anonAccess ?? 'read-only';
-        if ($allowKeyless && strtolower((string) $anonAccess) === 'admin') {
+        if ($allowKeyless && 'admin' === strtolower((string) $anonAccess)) {
             $output->writeln('<comment>WARNING: Server allows keyless connections with anonymous admin access!</comment>');
         }
 
         // 7. SSH Host Key
-        $sshDir = $dataDir . '/ssh';
-        $hostKey = $sshDir . '/soft_serve_host_ed25519';
+        $sshDir = $dataDir.'/ssh';
+        $hostKey = $sshDir.'/soft_serve_host_ed25519';
         if (!file_exists($hostKey)) {
             $output->writeln('<comment>Generating SSH host key...</comment>');
             exec(sprintf('ssh-keygen -q -N "" -t ed25519 -f %s', escapeshellarg($hostKey)));
@@ -183,9 +183,9 @@ BASH;
         }
 
         $home = getenv('HOME') ?: '';
-        if ($home !== '') {
+        if ('' !== $home) {
             foreach (['id_ed25519.pub', 'id_rsa.pub', 'id_ecdsa.pub'] as $pubName) {
-                $pubPath = $home . '/.ssh/' . $pubName;
+                $pubPath = $home.'/.ssh/'.$pubName;
                 if (file_exists($pubPath)) {
                     $keys[] = trim((string) file_get_contents($pubPath));
                 }
@@ -194,25 +194,25 @@ BASH;
         $keys = array_values(array_unique(array_filter($keys)));
 
         // 9. Generate authorized_keys with forced command
-        $consoleBin = realpath(dirname(__DIR__, 2) . '/bin/console') ?: (dirname(__DIR__, 2) . '/bin/console');
-        $authorizedKeysPath = $sshDir . '/authorized_keys';
+        $consoleBin = realpath(dirname(__DIR__, 2).'/bin/console') ?: (dirname(__DIR__, 2).'/bin/console');
+        $authorizedKeysPath = $sshDir.'/authorized_keys';
         $authLines = [];
 
         foreach ($keys as $k) {
             $authLines[] = sprintf(
                 'command="%s %s soft:ssh:dispatch",no-port-forwarding,no-X11-forwarding,no-agent-forwarding %s',
-                PHP_BINARY,
+                \PHP_BINARY,
                 escapeshellarg($consoleBin),
                 $k
             );
         }
 
-        file_put_contents($authorizedKeysPath, implode("\n", $authLines) . "\n");
+        file_put_contents($authorizedKeysPath, implode("\n", $authLines)."\n");
         chmod($authorizedKeysPath, 0600);
 
         // 10. Generate sshd_config
-        $sshdConfigPath = $sshDir . '/sshd_config';
-        $pidFile = $sshDir . '/sshd.pid';
+        $sshdConfigPath = $sshDir.'/sshd_config';
+        $pidFile = $sshDir.'/sshd.pid';
 
         $sshdConfig = <<<CONF
 Port {$sshPort}
@@ -229,23 +229,23 @@ LogLevel INFO
 StrictModes no
 CONF;
 
-        file_put_contents($sshdConfigPath, $sshdConfig . "\n");
+        file_put_contents($sshdConfigPath, $sshdConfig."\n");
         chmod($sshdConfigPath, 0600);
 
         // 11. Synchronize Git Hooks if requested
-        if ($syncHooks && $this->gitPlumbing !== null) {
-            $reposDir = $dataDir . '/repos';
+        if ($syncHooks && null !== $this->hookInstaller) {
+            $reposDir = $dataDir.'/repos';
             if (is_dir($reposDir)) {
                 $entries = scandir($reposDir);
-                if ($entries !== false) {
+                if (false !== $entries) {
                     foreach ($entries as $entry) {
-                        if ($entry === '.' || $entry === '..') {
+                        if ('.' === $entry || '..' === $entry) {
                             continue;
                         }
-                        $repoFullPath = $reposDir . '/' . $entry;
+                        $repoFullPath = $reposDir.'/'.$entry;
                         if (is_dir($repoFullPath) && str_ends_with($entry, '.git')) {
                             try {
-                                $this->gitPlumbing->installServerHooks($repoFullPath, $consoleBin);
+                                $this->hookInstaller->install($repoFullPath, $consoleBin);
                             } catch (\Throwable) {
                                 // Best effort hook sync
                             }
@@ -265,17 +265,19 @@ CONF;
 
         if ($isDryRun) {
             $output->writeln('<info>Dry-run complete. Configuration and files successfully verified.</info>');
+
             return Command::SUCCESS;
         }
 
         // 13. Execute SSH daemon
         $sshdBin = trim((string) shell_exec('which sshd 2>/dev/null'));
-        if ($sshdBin === '') {
+        if ('' === $sshdBin) {
             $sshdBin = '/usr/sbin/sshd';
         }
 
         if (!file_exists($sshdBin)) {
             $errOutput->writeln('<error>sshd binary not found on this system.</error>');
+
             return Command::FAILURE;
         }
 

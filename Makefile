@@ -10,7 +10,7 @@ SOFT_SERVE_DATA_PATH ?= $(CURDIR)/$(DATA_DIR)
 SOFT_SERVE_INITIAL_ADMIN_KEY ?= $(shell cat ~/.ssh/id_ed25519.pub 2>/dev/null || cat ~/.ssh/id_rsa.pub 2>/dev/null || echo "")
 
 # Server Network Settings
-SSH_PORT ?= 2222
+SSH_PORT ?= 2223
 SSH_HOST ?= 127.0.0.1
 SSH_PUBLIC_URL ?= ssh://codes.sh:$(SSH_PORT)
 HTTP_PORT ?= 23232
@@ -25,7 +25,7 @@ UPSTREAM_URL ?= https://github.com/charmbracelet/soft-serve.git
 UPSTREAM_REMOTE ?= upstream
 UPSTREAM_BRANCH ?= main
 
-.PHONY: all build setup install run debug browse publish index migrate rollback sync-hooks test test-unit test-render clean clean-all help upstream-setup upstream-fetch upstream-status upstream-sync
+.PHONY: all build setup install run debug browse publish index migrate rollback sync-hooks test test-render lint cs cs-check stan deptrac clean clean-all help upstream-setup upstream-fetch upstream-status upstream-sync
 
 all: build
 
@@ -55,7 +55,7 @@ setup:
 install:
 	$(COMPOSER) install
 
-## run: Run the codes.sh server (SSH daemon on :2222, HTTP backend on :23232)
+## run: Run the codes.sh server (SSH daemon on :2223, HTTP backend on :23232)
 run: build
 	@mkdir -p $(DATA_DIR)
 	@if [ ! -f $(DATA_DIR)/config.yaml ] && [ -f ../codes.sh.src/config.yaml ]; then \
@@ -140,11 +140,29 @@ sync-hooks: build
 
 ## test: Run PHPUnit test suite
 test:
-	./vendor/bin/phpunit tests
+	./vendor/bin/phpunit
 
-## test-unit: Run unit tests only
-test-unit:
-	./vendor/bin/phpunit tests
+## lint: Run every static check (cs-check, stan, deptrac, container/yaml lint)
+lint: cs-check stan deptrac
+	./bin/console lint:container
+	./bin/console lint:yaml config
+
+## cs: Fix coding style (php-cs-fixer, @Symfony)
+cs:
+	PHP_CS_FIXER_IGNORE_ENV=1 ./vendor/bin/php-cs-fixer fix
+
+## cs-check: Check coding style without modifying files
+cs-check:
+	PHP_CS_FIXER_IGNORE_ENV=1 ./vendor/bin/php-cs-fixer fix --dry-run --diff
+
+## stan: Run PHPStan (level max + baseline)
+stan:
+	./bin/console cache:warmup --env=dev >/dev/null
+	./vendor/bin/phpstan analyse --memory-limit=1G
+
+## deptrac: Check module/layer dependency rules
+deptrac:
+	./vendor/bin/deptrac analyse --no-progress
 
 ## test-render: Test Termstrap FFI rendering bridge (Markdown, CSV, ANSI TokyoNight)
 test-render: build

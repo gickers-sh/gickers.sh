@@ -43,12 +43,12 @@ class JwtManager
             'jti' => bin2hex(random_bytes(16)),
         ], $customClaims);
 
-        $headerJson = (string) json_encode($header, JSON_THROW_ON_ERROR);
-        $payloadJson = (string) json_encode($payload, JSON_THROW_ON_ERROR);
+        $headerJson = (string) json_encode($header, \JSON_THROW_ON_ERROR);
+        $payloadJson = (string) json_encode($payload, \JSON_THROW_ON_ERROR);
 
         $headerB64 = $this->base64UrlEncode($headerJson);
         $payloadB64 = $this->base64UrlEncode($payloadJson);
-        $signingInput = $headerB64 . '.' . $payloadB64;
+        $signingInput = $headerB64.'.'.$payloadB64;
 
         $sigRaw = match ($algo) {
             'HS256' => hash_hmac('sha256', $signingInput, $key ?? $this->defaultSecret, true),
@@ -56,7 +56,7 @@ class JwtManager
             default => throw new \InvalidArgumentException(sprintf('Unsupported algorithm: "%s"', $algo)),
         };
 
-        return $signingInput . '.' . $this->base64UrlEncode($sigRaw);
+        return $signingInput.'.'.$this->base64UrlEncode($sigRaw);
     }
 
     /**
@@ -67,7 +67,7 @@ class JwtManager
     public function verifyToken(string $token, ?string $key = null, ?string $expectedAlgo = null): ?array
     {
         $parts = explode('.', $token);
-        if (count($parts) !== 3) {
+        if (3 !== count($parts)) {
             return null;
         }
 
@@ -78,8 +78,8 @@ class JwtManager
         $sigRaw = $this->base64UrlDecode($sigB64);
 
         try {
-            $header = json_decode($headerJson, true, 512, JSON_THROW_ON_ERROR);
-            $payload = json_decode($payloadJson, true, 512, JSON_THROW_ON_ERROR);
+            $header = json_decode($headerJson, true, 512, \JSON_THROW_ON_ERROR);
+            $payload = json_decode($payloadJson, true, 512, \JSON_THROW_ON_ERROR);
         } catch (\JsonException) {
             return null;
         }
@@ -89,11 +89,11 @@ class JwtManager
         }
 
         $algo = (string) ($header['alg'] ?? '');
-        if ($expectedAlgo !== null && $algo !== $expectedAlgo) {
+        if (null !== $expectedAlgo && $algo !== $expectedAlgo) {
             return null;
         }
 
-        $signingInput = $headerB64 . '.' . $payloadB64;
+        $signingInput = $headerB64.'.'.$payloadB64;
 
         $validSig = match ($algo) {
             'HS256' => hash_equals(hash_hmac('sha256', $signingInput, $key ?? $this->defaultSecret, true), $sigRaw),
@@ -115,7 +115,7 @@ class JwtManager
 
     public function isValid(string $token, ?string $key = null, ?string $expectedAlgo = null): bool
     {
-        return $this->verifyToken($token, $key, $expectedAlgo) !== null;
+        return null !== $this->verifyToken($token, $key, $expectedAlgo);
     }
 
     /**
@@ -126,13 +126,14 @@ class JwtManager
     public function getClaims(string $token): ?array
     {
         $parts = explode('.', $token);
-        if (count($parts) !== 3) {
+        if (3 !== count($parts)) {
             return null;
         }
 
         $payloadJson = $this->base64UrlDecode($parts[1]);
         try {
-            $payload = json_decode($payloadJson, true, 512, JSON_THROW_ON_ERROR);
+            $payload = json_decode($payloadJson, true, 512, \JSON_THROW_ON_ERROR);
+
             return is_array($payload) ? $payload : null;
         } catch (\JsonException) {
             return null;
@@ -179,7 +180,7 @@ class JwtManager
             throw new \RuntimeException('ext-sodium is required for EdDSA signing');
         }
 
-        if ($secretKey === null || $secretKey === '') {
+        if (null === $secretKey || '' === $secretKey) {
             throw new \InvalidArgumentException('Secret key is required for EdDSA signing');
         }
 
@@ -192,7 +193,7 @@ class JwtManager
             return false;
         }
 
-        if ($publicKey === null || $publicKey === '') {
+        if (null === $publicKey || '' === $publicKey) {
             return false;
         }
 

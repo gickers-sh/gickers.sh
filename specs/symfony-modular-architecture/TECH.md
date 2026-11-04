@@ -1,6 +1,6 @@
 # TECH — Restructuration de `codes.sh` en monolithe modulaire Symfony
 
-Statut : proposé · Cible : PHP 8.5, Symfony 7.4, Doctrine ORM 3, FrankenPHP · Dépôt sans commit : références = chemins relatifs à `codes.sh/` à l'état du 2026-11-04 (baseline `vendor/bin/phpunit tests` : 158 tests / 866 assertions OK).
+Statut : proposé · Cible : PHP 8.5, Symfony 8.1 (dont `symfony/tui`), Doctrine ORM 3, FrankenPHP · Dépôt sans commit : références = chemins relatifs à `codes.sh/` à l'état du 2026-11-04 (baseline `vendor/bin/phpunit tests` : 158 tests / 866 assertions OK).
 
 Décisions déjà actées :
 - Architecture **option C** : modules par domaine (`src/<Module>/{Domain,Application,Infrastructure}`) + couche `src/UI/*`, dans le modèle Symfony standard (Kernel, autowiring, attributs).
@@ -46,7 +46,7 @@ codes.sh/
   Caddyfile                   # FrankenPHP
   config/{bundles.php, packages/*.yaml, routes.yaml, services.yaml}
   migrations/Version*.php
-  packages/tui/               # framework TUI extrait (path repository, namespace CodesSh\Tui\)
+  packages/tui/               # temporaire : framework TUI maison, supprimé en phase 6 au profit de symfony/tui
   src/
     Kernel.php
     Shared/      Domain/{Exception/, Event/DomainEvent.php, DurationParser.php}
@@ -63,14 +63,14 @@ codes.sh/
                               BootstrapServer.php}
                  Infrastructure/{Doctrine/*, Security/SecurityUser.php, Ssh/AuthorizedKeysFileWriter.php}
     Repo/        Domain/{Model/Repo.php, Model/Collaborator.php, RepoName.php, RepoStore.php,
-                         Git/{BareRepository.php, Commit.php, TreeEntry.php, Refs.php, Diff.php, DiffFile.php},
+                         Git/{GitRepository.php, Commit.php, TreeEntry.php, Refs.php, Diff.php, DiffFile.php},
                          Event/*}
                  Application/{CreateRepo.php, ImportRepo.php, ForkRepo.php, DeleteRepo.php, RenameRepo.php,
                               UpdateRepoSettings.php, AddCollaborator.php, RemoveCollaborator.php,
                               DeleteBranch.php, SetDefaultBranch.php, DeleteTag.php, RecordPush.php,
                               Query/RepoQuery.php}
                  Infrastructure/{Doctrine/*, Git/GitRepositoryReader.php, Git/GitRepositoryWriter.php,
-                                 Git/BareRepositoryStorage.php, Git/HookInstaller.php, Git/CustomHookRunner.php,
+                                 Git/BareRepositoryStorage.php (implémente Domain/RepoDirectory), Git/HookInstaller.php, Git/CustomHookRunner.php,
                                  Git/GitServiceProcess.php}
     PullRequest/ Domain/{Model/PullRequest.php, Model/Comment.php, PullRequestStatus.php, PullRequestStore.php, Event/*}
                  Application/{OpenPullRequest.php, UpdatePullRequest.php, MergePullRequest.php,
@@ -103,7 +103,7 @@ codes.sh/
             EventListener/DomainExceptionListener.php}
       GitDaemon/{GitDaemonCommand.php, GitDaemonProtocol.php}
       Tui/{TuiPageFactory.php, Page/{RootUI,SelectionPage,RepoPage,AdminPage}.php,
-           Render/TermstrapRenderer.php, Render/TermstrapSnippetRenderer.php}
+           Render/TermstrapRenderer.php (implémente CodesSh\Tui\Component\SnippetRenderer)}
   tests/{Unit,Integration,Functional}/<Module>/...
 ```
 
@@ -112,7 +112,7 @@ Règles de dépendance (vérifiées par **deptrac**, `deptrac.yaml`) :
 - `*/Application` → `Domain` (tous modules), `Shared`, contrats Symfony (`EventDispatcherInterface`, `MessageBusInterface`, `Security`).
 - `*/Infrastructure` → tout sauf `UI`.
 - `UI/*` → `Application` + `Domain` ; jamais `Infrastructure/Doctrine` directement.
-- `packages/tui` → aucune dépendance `App\`.
+- `packages/tui` (temporaire) → aucune dépendance `App\`.
 
 Compromis assumé : les entités du `Domain` portent les attributs `#[ORM\…]` (convention Symfony, pas de mapping XML). Les interfaces `*Store` existent pour chaque agrégat (implémentations `Doctrine*Store extends ServiceEntityRepository`, alias autowiring automatique car implémentation unique). Les classes git (`GitRepositoryReader`, `GitRepositoryWriter`, `BareRepositoryStorage`) restent **concrètes** : une seule implémentation, testée contre de vrais dépôts temporaires comme aujourd'hui.
 
@@ -227,7 +227,7 @@ App\UI\Ssh\Command\:
 
 **Git daemon** (`UI/GitDaemon`) — `soft:git-daemon` : boucle `stream_socket_server` + `pcntl_fork` par connexion, plafond `SOFT_SERVE_GIT_MAX_CONNECTIONS`, timeouts, `$entityManager->clear()` et fermeture de la connexion DBAL dans l'enfant. `GitDaemonProtocol` = ex-`GitDaemonService` (parse pkt-line via `Shared\Infrastructure\Git\PktLine`, partagé avec HTTP). Accès anonyme via `RepoVoter` ; même erreur pour dépôt absent et refusé. Containment `realpath` corrigé avec séparateur final.
 
-**TUI** — `packages/tui` (namespace `CodesSh\Tui\`, `composer.json` `repositories: [{type: path, url: packages/tui}]`) reçoit `Tui/Runtime`, `Event`, `Style`, `Keymap`, les composants génériques et champs. `EditorComponent` dépend d'une interface `CodesSh\Tui\Component\SnippetRenderer` implémentée côté app par `TermstrapSnippetRenderer`. `ZoneManager` passe d'un registre statique à une instance par `TerminalRunner`. Les pages restent dans `src/UI/Tui/Page`, ne sont pas des services partagés, et sont construites par `TuiPageFactory` (service) qui injecte cas d'usage et requêtes (`RepoQuery`, `PullRequestQuery`, `CodeIntelQuery`, `GitRepositoryReader`, `CreateRepo`, `ForkRepo`, `MergePullRequest`…). `AdminPage` lit/écrit via `ServerPolicy` et liste les utilisateurs réels. Termstrap : service `lazy: true`, `Termstrap\` chargé par un path repository `../termstrap` (plus d'entrée `autoload` vers un dossier externe) ; `ffi.enable` documenté comme réglage `php.ini` (le `ini_set` de `bin/*` est sans effet, valeur `PHP_INI_SYSTEM`).
+**TUI** — la TUI s'appuie sur le composant officiel **`symfony/tui`** (Symfony 8.1 : widgets `ContainerWidget`, `TabsWidget`, `SelectListWidget`, `InputWidget`, `EditorWidget`, `OverlayWidget`, `MarkdownWidget`, feuilles de style, rendu par différence d'écran, souris, focus, raccourcis, événements EventDispatcher, boucle Revolt). Le framework maison (`packages/tui` : portage Bubble Tea/Lipgloss/Bubblezone, extrait en phase 1) n'est qu'une étape intermédiaire et est **supprimé en phase 6**. Les pages (`src/UI/Tui/Page/{Selection,Repo,Admin}Page`) sont réécrites en arbres de widgets, construites par `TuiPageFactory` (service) qui injecte cas d'usage et requêtes (`RepoQuery`, `PullRequestQuery`, `CodeIntelQuery`, `GitRepositoryReader`, `CreateRepo`, `ForkRepo`, `MergePullRequest`…) ; `soft:tui`/`soft:browse` créent le `Tui` dans `execute()`. Rendu de documents : un widget applicatif `UI/Tui/Widget/AnsiDocumentWidget` affiche la sortie ANSI de `TermstrapRenderer` (README, fichiers Markdown/HTML/CSV) ; la coloration syntaxique de l'éditeur passe par l'interface `SnippetRenderer` implémentée par `TermstrapRenderer`. Écart accepté : l'apparence suit `symfony/tui`, pas Bubble Tea au pixel près. `AdminPage` lit/écrit via `ServerPolicy` et liste les utilisateurs réels. Termstrap : service `lazy: true`, path repository `../termstrap` ; `ffi.enable` documenté comme réglage `php.ini`.
 
 ### 2.6 Correspondance fichier par fichier
 
@@ -245,7 +245,7 @@ App\UI\Ssh\Command\:
 | `Model/UserModel` | `Identity/Domain/Model/User` (entité) |
 | `Model/PullRequestModel`, `PullRequestCommentModel` | `PullRequest/Domain/Model/{PullRequest,Comment}` (+ `PullRequestStatus`, sans `__get` magique) |
 | `Model/WebhookModel` | `Webhook/Domain/Model/Webhook` (+ `WebhookEvent`, `ContentType`) |
-| `Model/GitRepositoryModel` | `Repo/Domain/Model/Repo` (base) + `Repo/Domain/Git/BareRepository` (chemin disque) |
+| `Model/GitRepositoryModel` | `Repo/Domain/Model/Repo` (base) + `Repo/Domain/Git/GitRepository` (dépôt sur disque, nu ou non : `soft browse` ouvre aussi des dépôts locaux) |
 | `Model/{Commit,TreeEntry,Refs,Diff,DiffFile}Model` | `Repo/Domain/Git/{Commit,TreeEntry,Refs,Diff,DiffFile}` |
 | `Model/CodeIntel/*` | `CodeIntel/Domain/{Occurrence,SymbolInfo,SymbolLocation}` |
 | `Service/Backend/BackendService` | supprimé → cas d'usage des modules (2.4) |
@@ -266,7 +266,7 @@ App\UI\Ssh\Command\:
 | `Service/CodeIntel/CodeIntelService` | `CodeIntel/Application/{CodeIntelQuery,IndexCommitHandler}` + `CodeIntel/Infrastructure/{FilesystemIndexStore,GitArchiveExtractor,Indexer/*}` |
 | `Service/CodeIntel/ScipProtobufParser` | `CodeIntel/Infrastructure/Scip/ScipProtobufCodec` |
 | `Service/Render/TermstrapRenderer` | `UI/Tui/Render/TermstrapRenderer` (lazy) |
-| `Tui/{Runtime,Event,Style,Keymap}/*`, `Tui/Component/**` | `packages/tui/src/**` (namespace `CodesSh\Tui\`) |
+| `Tui/{Runtime,Event,Style,Keymap}/*`, `Tui/Component/**` | phase 1 : `packages/tui/src/**` ; phase 6 : supprimés, remplacés par `symfony/tui` |
 | `Tui/Page/*` | `UI/Tui/Page/*` + `UI/Tui/TuiPageFactory` |
 | `verify_files.php`, `verify_repopage.php` (racine) | supprimés (scripts ad hoc ; remplacés par des tests) |
 
@@ -287,7 +287,7 @@ flowchart LR
 ```
 
 - **Phase 0** : toutes les dépendances Composer installées d'un coup (évite les conflits de `composer.lock` entre phases parallèles) ; Kernel ; `bin/console` runtime ; `services.yaml` privé ; passage cs-fixer seul dans un commit (formatage pur) ; baseline PHPStan ; deptrac en mode rapport.
-- **Phase 2** : la migration Doctrine initiale unique (`Version20261104000000`) est générée **une fois** par l'intégrateur avec toutes les entités des sections 2.3 (y compris PR, Webhook, Lfs, pour que les phases 3-6 ne touchent pas aux migrations). `BackendService`/`DataStore` restent temporairement comme adaptateurs fins vers les nouveaux cas d'usage pour garder les anciens points d'entrée fonctionnels, puis sont supprimés en phase 7.
+- **Phase 2** : la migration Doctrine initiale unique (`Version20261104000000`) contient toutes les entités de la section 2.3 (PR, Webhook, Lfs compris) et le SQL des **deux** plateformes (SQLite et PostgreSQL, choisies à l'exécution), pour que les phases 3-6 ne touchent pas aux migrations. Pas d'adaptateur : `BackendService`/`DataStore` gèrent PR et webhooks que les nouveaux modules ne couvrent pas encore, et un adaptateur partiel obligerait à deux bases simultanées. On applique donc le schéma *strangler* : l'ancien chemin (PDO, `.data/soft-serve.db`) continue de servir les points d'entrée existants pendant que les nouveaux modules (`.data/codes-sh.db`) sont construits et testés à côté ; chaque phase 3-6 bascule un point d'entrée, la phase 7 supprime l'ancien chemin.
 - **Phase 7** : suppression de `src/Service`, `src/Command`, `src/Model`, `src/Tui` ; deptrac en mode bloquant ; README/Makefile mis à jour (`run`, `serve`, `e2e`).
 
 ## 3. Tests et validation
@@ -311,7 +311,7 @@ Organisation : `tests/Unit` (domaine pur, stores en mémoire), `tests/Integratio
 | Isolation console/SSH | Fonctionnel : `bin/console list` ne contient aucune commande `repo:*` ; `SshCliApplication` ne contient pas `soft:*` ni `doctrine:*` |
 | Architecture | `vendor/bin/deptrac` sans violation ; `phpstan` niveau max sans nouvelle erreur hors baseline ; règle « pas de `getenv` dans `src/` » |
 | Hooks | Intégration (existants `GitPlumbingServiceTest`) : scripts générés appellent `soft:hook:*` ; push réel → `RecordPush` → événements |
-| TUI | Tests existants `Tui/*` portés dans `packages/tui/tests` ; nouveau test : `TuiPageFactory` construit `SelectionPage` (modale « new repo » avec `TextAreaField`) et `RepoPage` avec `CodeIntelQuery` |
+| TUI | Tests de `packages/tui/tests` supprimés avec le paquet en phase 6 ; nouveaux tests : `TuiPageFactory` construit `SelectionPage` (modale « new repo ») et `RepoPage` avec `CodeIntelQuery`, rendus via `symfony/tui` dans un terminal virtuel |
 
 Smoke de bout en bout (cible `make e2e`, script dans `tests/e2e/run.sh`) :
 1. `soft:serve --dry-run` puis `soft:serve` (sshd, FrankenPHP, git daemon, worker).
@@ -331,7 +331,7 @@ Après la phase 2 (entités, migration unique, voters, cas d'usage Repo/Identity
 | `SshUi` | 3 | `../wt-ssh` / `refactor/ssh-ui` | `src/UI/Ssh/**`, `Identity/Infrastructure/Ssh/**`, `tests/**/Ssh/**` | `config/services.yaml` (bloc SSH déjà posé en phase 2) |
 | `PrWebhook` | 4 | `../wt-pr-webhook` / `refactor/pr-webhook` | `src/PullRequest/**`, `src/Webhook/**`, `config/packages/messenger.yaml` | migrations |
 | `HttpLfs` | 5 | `../wt-http-lfs` / `refactor/http-lfs` | `src/UI/Http/**`, `src/Lfs/**`, `public/`, `Caddyfile`, `config/packages/security.yaml`, `config/routes.yaml` | migrations |
-| `TuiCodeIntel` | 6 | `../wt-tui` / `refactor/tui-codeintel` | `packages/tui/**`, `src/UI/Tui/**`, `src/CodeIntel/**`, `src/UI/GitDaemon/**` | migrations |
+| `TuiCodeIntel` | 6 | `../wt-tui` / `refactor/tui-codeintel` | `packages/tui/**` (suppression), `src/UI/Tui/**`, `src/CodeIntel/**`, `src/UI/GitDaemon/**` | migrations |
 
 - Exécution locale (besoin de `git`, `sshd`, FFI `libtermstrap.dylib` arm64).
 - Contrat figé avant fan-out : entités + migration, signatures des cas d'usage Repo/Identity, attributs des voters, classes d'événements de domaine (`Repo/Domain/Event/*`), `ServerSettings`. Un agent qui a besoin d'un changement de contrat écrit à l'intégrateur au lieu de modifier le fichier.

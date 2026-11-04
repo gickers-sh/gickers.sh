@@ -10,7 +10,6 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use Throwable;
 
 #[AsCommand(
     name: 'soft:admin:rollback',
@@ -33,9 +32,11 @@ final class AdminRollbackCommand extends Command
             $output->writeln('<comment>Rolling back database migration...</comment>');
             $rolled = $this->dbManager->rollback();
             $output->writeln(sprintf('<info>Database rollback completed (version %d rolled back).</info>', $rolled));
+
             return Command::SUCCESS;
-        } catch (Throwable $e) {
+        } catch (\Throwable $e) {
             $errOutput->writeln(sprintf('<error>Rollback failed: %s</error>', $e->getMessage()));
+
             return Command::FAILURE;
         }
     }

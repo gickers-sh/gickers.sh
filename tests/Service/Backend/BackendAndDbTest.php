@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Backend;
 
-use App\Model\AccessLevel;
+use App\Access\Domain\AccessLevel;
 use App\Model\PullRequestModel;
 use App\Service\Backend\BackendService;
 use App\Service\Database\DatabaseManager;
@@ -327,7 +327,7 @@ class BackendAndDbTest extends TestCase
         $this->assertNull($jwt->verifyToken($token, 'wrong-key-secret'));
 
         // Reject tampered token
-        $tampered = substr($token, 0, -4) . 'AAAA';
+        $tampered = substr($token, 0, -4).'AAAA';
         $this->assertNull($jwt->verifyToken($tampered));
 
         // Reject expired token
@@ -485,11 +485,11 @@ class BackendAndDbTest extends TestCase
         $this->assertSame(5, $db->getCurrentVersion());
 
         $pdo = $db->getConnection();
-        $getTables = fn() => $pdo->query(
+        $getTables = static fn () => $pdo->query(
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
         )->fetchAll(\PDO::FETCH_COLUMN);
 
-        $getRepoCols = fn() => $pdo->query(
+        $getRepoCols = static fn () => $pdo->query(
             'PRAGMA table_info("repos")'
         )->fetchAll(\PDO::FETCH_COLUMN, 1);
 

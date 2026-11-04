@@ -4,16 +4,15 @@ declare(strict_types=1);
 
 namespace App\Command;
 
-use App\Service\Git\GitService;
-use App\Service\Render\TermstrapRenderer;
-use App\Tui\Page\RepoPage;
-use App\Tui\Runtime\TerminalRunner;
+use App\Repo\Infrastructure\Git\GitRepositoryReader;
+use App\UI\Tui\Page\RepoPage;
+use App\UI\Tui\Render\TermstrapRenderer;
+use CodesSh\Tui\Runtime\TerminalRunner;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use Throwable;
 
 #[AsCommand(
     name: 'soft:browse',
@@ -23,9 +22,9 @@ use Throwable;
 final class BrowseCommand extends Command
 {
     public function __construct(
-        private readonly GitService $gitService,
+        private readonly GitRepositoryReader $gitService,
         private readonly TermstrapRenderer $renderer,
-        private readonly TerminalRunner $runner
+        private readonly TerminalRunner $runner,
     ) {
         parent::__construct();
     }
@@ -46,8 +45,9 @@ final class BrowseCommand extends Command
 
         try {
             $repo = $this->gitService->openRepository($path);
-        } catch (Throwable $e) {
-            $output->writeln('<error>Failed to open git repository: ' . $e->getMessage() . '</error>');
+        } catch (\Throwable $e) {
+            $output->writeln('<error>Failed to open git repository: '.$e->getMessage().'</error>');
+
             return Command::FAILURE;
         }
 

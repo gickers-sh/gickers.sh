@@ -42,7 +42,7 @@ final class HookUpdateCommand extends Command
 
         $rawRepoName = getenv('SOFT_SERVE_REPO_NAME');
         $repoPath = getenv('SOFT_SERVE_REPO_PATH') ?: (getenv('CODES_SH_REPO_PATH') ?: (getcwd() ?: '.'));
-        if ($rawRepoName === false || $rawRepoName === '') {
+        if (false === $rawRepoName || '' === $rawRepoName) {
             $repoName = basename($repoPath);
             if (str_ends_with($repoName, '.git')) {
                 $repoName = substr($repoName, 0, -4);
@@ -56,9 +56,9 @@ final class HookUpdateCommand extends Command
 
         // Run custom hook $DATA_PATH/hooks/update if executable
         $dataPath = getenv('SOFT_SERVE_DATA_PATH') ?: (getenv('DATA_PATH') ?: $this->backend->getDataPath());
-        $customHookPath = rtrim($dataPath, '/') . '/hooks/update';
+        $customHookPath = rtrim($dataPath, '/').'/hooks/update';
         $exitCode = $this->runCustomHook($customHookPath, null, [$refName, $oldSha, $newSha], $output);
-        if ($exitCode !== 0) {
+        if (0 !== $exitCode) {
             return $exitCode;
         }
 

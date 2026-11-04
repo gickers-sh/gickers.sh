@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\Lfs;
 
-use InvalidArgumentException;
-
 /**
  * Git LFS pointer parser, validator, and serializer adhering to the Git LFS specification v1.
  *
@@ -19,7 +17,7 @@ final class LfsPointer
 
     public function __construct(
         public readonly string $oid,
-        public readonly int $size
+        public readonly int $size,
     ) {
     }
 
@@ -32,48 +30,46 @@ final class LfsPointer
      * - OID line: "oid sha256:<64-hex>".
      * - Size line: "size <int>".
      *
-     * @throws InvalidArgumentException When the pointer content violates the specification.
+     * @throws \InvalidArgumentException when the pointer content violates the specification
      */
     public static function parse(string $content): self
     {
         if (strlen($content) > self::MAX_POINTER_SIZE) {
-            throw new InvalidArgumentException(
-                sprintf('LFS pointer content exceeds maximum allowed size of %d bytes', self::MAX_POINTER_SIZE)
-            );
+            throw new \InvalidArgumentException(sprintf('LFS pointer content exceeds maximum allowed size of %d bytes', self::MAX_POINTER_SIZE));
         }
 
         if (!str_starts_with($content, self::SPEC_VERSION)) {
-            throw new InvalidArgumentException('Content lacks the LFS prefix: ' . self::SPEC_VERSION);
+            throw new \InvalidArgumentException('Content lacks the LFS prefix: '.self::SPEC_VERSION);
         }
 
         $lines = explode("\n", $content);
         if (count($lines) < 3) {
-            throw new InvalidArgumentException('Content has an invalid structure: fewer than 3 lines');
+            throw new \InvalidArgumentException('Content has an invalid structure: fewer than 3 lines');
         }
 
         $oidLine = $lines[1];
         if (!str_starts_with($oidLine, self::OID_PREFIX)) {
-            throw new InvalidArgumentException('OID line must start with "' . self::OID_PREFIX . '"');
+            throw new \InvalidArgumentException('OID line must start with "'.self::OID_PREFIX.'"');
         }
 
         $oid = substr($oidLine, strlen(self::OID_PREFIX));
-        if (strlen($oid) !== 64 || !preg_match('/^[a-f0-9]{64}$/', $oid)) {
-            throw new InvalidArgumentException('OID has an invalid format: must be exactly 64 lowercase hex characters');
+        if (64 !== strlen($oid) || !preg_match('/^[a-f0-9]{64}$/', $oid)) {
+            throw new \InvalidArgumentException('OID has an invalid format: must be exactly 64 lowercase hex characters');
         }
 
         $sizeLine = $lines[2];
         if (!str_starts_with($sizeLine, 'size ')) {
-            throw new InvalidArgumentException('Size line must start with "size "');
+            throw new \InvalidArgumentException('Size line must start with "size "');
         }
 
         $sizeStr = substr($sizeLine, 5);
         if (!preg_match('/^\d+$/', $sizeStr)) {
-            throw new InvalidArgumentException('Size has an invalid numeric format: ' . $sizeStr);
+            throw new \InvalidArgumentException('Size has an invalid numeric format: '.$sizeStr);
         }
 
         $size = (int) $sizeStr;
         if ($size < 0) {
-            throw new InvalidArgumentException('Size cannot be negative: ' . $size);
+            throw new \InvalidArgumentException('Size cannot be negative: '.$size);
         }
 
         return new self($oid, $size);
@@ -103,13 +99,13 @@ final class LfsPointer
      */
     public function isValid(): bool
     {
-        return strlen($this->oid) === 64
-            && preg_match('/^[a-f0-9]{64}$/', $this->oid) === 1
+        return 64 === strlen($this->oid)
+            && 1 === preg_match('/^[a-f0-9]{64}$/', $this->oid)
             && $this->size >= 0;
     }
 
     /**
-     * Returns the relative content-addressable storage path: oid[0:2]/oid[2:4]/oid
+     * Returns the relative content-addressable storage path: oid[0:2]/oid[2:4]/oid.
      */
     public function getRelativePath(): string
     {
@@ -117,6 +113,6 @@ final class LfsPointer
             return $this->oid;
         }
 
-        return substr($this->oid, 0, 2) . '/' . substr($this->oid, 2, 2) . '/' . $this->oid;
+        return substr($this->oid, 0, 2).'/'.substr($this->oid, 2, 2).'/'.$this->oid;
     }
 }

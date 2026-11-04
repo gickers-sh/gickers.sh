@@ -4,17 +4,16 @@ declare(strict_types=1);
 
 namespace App\Tests\Tui\Component;
 
-use App\Model\AccessLevel;
+use App\Repo\Infrastructure\Git\GitRepositoryReader;
 use App\Service\Backend\BackendService;
 use App\Service\Database\DatabaseManager;
-use App\Service\Git\GitService;
-use App\Service\Render\TermstrapRenderer;
 use App\Service\Store\DataStore;
-use App\Tui\Component\SelectorComponent;
-use App\Tui\Event\KeyMsg;
-use App\Tui\Event\MouseMsg;
-use App\Tui\Page\SelectionPage;
-use App\Tui\Style\ZoneManager;
+use App\UI\Tui\Page\SelectionPage;
+use App\UI\Tui\Render\TermstrapRenderer;
+use CodesSh\Tui\Component\SelectorComponent;
+use CodesSh\Tui\Event\KeyMsg;
+use CodesSh\Tui\Event\MouseMsg;
+use CodesSh\Tui\Style\ZoneManager;
 use PHPUnit\Framework\TestCase;
 
 final class SelectorComponentTest extends TestCase
@@ -86,7 +85,7 @@ final class SelectorComponentTest extends TestCase
         $res = $selector->update($mouseMsg);
 
         // If repo_1 is at y=2, it selects
-        if ($res === 'select') {
+        if ('select' === $res) {
             $this->assertSame(1, $selector->getSelectedIndex());
         } else {
             // Alternatively test with direct inBounds check
@@ -96,14 +95,14 @@ final class SelectorComponentTest extends TestCase
 
     public function testSelectionPageFeedAndMyRepositoriesFromDatabase(): void
     {
-        $tmpData = sys_get_temp_dir() . '/codes_sh_sel_test_' . uniqid();
+        $tmpData = sys_get_temp_dir().'/codes_sh_sel_test_'.uniqid();
         @mkdir($tmpData, 0755, true);
 
         try {
             $dbManager = new DatabaseManager(dataPath: $tmpData);
             $dbManager->ensureBootstrapped();
             $backend = new BackendService(new DataStore($dbManager));
-            $gitService = new GitService();
+            $gitService = new GitRepositoryReader();
             $renderer = new TermstrapRenderer();
 
             $alice = $backend->createUser('alice', isAdmin: false);
@@ -159,7 +158,7 @@ final class SelectorComponentTest extends TestCase
             $this->assertStringContainsString('alice/my-app', $myReposFrameAfter);
             $this->assertStringNotContainsString('bob/public-tool', $myReposFrameAfter);
         } finally {
-            exec('rm -rf ' . escapeshellarg($tmpData));
+            exec('rm -rf '.escapeshellarg($tmpData));
         }
     }
 

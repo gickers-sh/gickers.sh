@@ -28,12 +28,12 @@ class SsrfValidator
     public function validateIp(string $ip): bool
     {
         $ip = trim($ip);
-        if ($ip === '') {
+        if ('' === $ip) {
             return false;
         }
 
         $bin = @inet_pton($ip);
-        if ($bin === false) {
+        if (false === $bin) {
             return false;
         }
 
@@ -55,17 +55,17 @@ class SsrfValidator
     public function validateUrl(string $url): bool
     {
         $url = trim($url);
-        if ($url === '') {
+        if ('' === $url) {
             return false;
         }
 
         $parts = parse_url($url);
-        if ($parts === false || !isset($parts['scheme'], $parts['host'])) {
+        if (false === $parts || !isset($parts['scheme'], $parts['host'])) {
             return false;
         }
 
         $scheme = strtolower($parts['scheme']);
-        if ($scheme !== 'http' && $scheme !== 'https') {
+        if ('http' !== $scheme && 'https' !== $scheme) {
             return false;
         }
 
@@ -80,7 +80,7 @@ class SsrfValidator
         }
 
         // If host is an IP address
-        if (@inet_pton($host) !== false) {
+        if (false !== @inet_pton($host)) {
             return $this->validateIp($host);
         }
 
@@ -101,8 +101,8 @@ class SsrfValidator
 
     private function isLocalhost(string $host): bool
     {
-        return $host === 'localhost'
-            || $host === 'localhost.localdomain'
+        return 'localhost' === $host
+            || 'localhost.localdomain' === $host
             || str_ends_with($host, '.localhost');
     }
 
@@ -113,7 +113,7 @@ class SsrfValidator
     {
         $ips = [];
 
-        $records = @dns_get_record($host, DNS_A | DNS_AAAA);
+        $records = @dns_get_record($host, \DNS_A | \DNS_AAAA);
         if (is_array($records)) {
             foreach ($records as $record) {
                 if (isset($record['ip'])) {
@@ -136,10 +136,10 @@ class SsrfValidator
 
     private function isBinaryIpBlocked(string $bin): bool
     {
-        $isV6 = strlen($bin) === 16;
+        $isV6 = 16 === strlen($bin);
 
         // Unmap IPv4-mapped IPv6 (::ffff:127.0.0.1)
-        if ($isV6 && substr($bin, 0, 12) === (str_repeat("\x00", 10) . "\xff\xff")) {
+        if ($isV6 && substr($bin, 0, 12) === (str_repeat("\x00", 10)."\xff\xff")) {
             $bin = substr($bin, 12);
             $isV6 = false;
         }
@@ -218,11 +218,11 @@ class SsrfValidator
             [$prefixIp, $bitsStr] = explode('/', $cidr, 2);
             $bits = (int) $bitsStr;
             $bin = inet_pton($prefixIp);
-            if ($bin !== false) {
+            if (false !== $bin) {
                 $compiled[] = [
                     'prefix' => $bin,
                     'bits' => $bits,
-                    'v6' => strlen($bin) === 16,
+                    'v6' => 16 === strlen($bin),
                 ];
             }
         }

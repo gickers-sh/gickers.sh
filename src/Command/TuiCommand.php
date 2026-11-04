@@ -4,17 +4,16 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use App\Repo\Infrastructure\Git\GitRepositoryReader;
 use App\Service\Backend\BackendService;
-use App\Service\Git\GitService;
-use App\Service\Render\TermstrapRenderer;
-use App\Tui\Page\RootUI;
-use App\Tui\Runtime\TerminalRunner;
+use App\UI\Tui\Page\RootUI;
+use App\UI\Tui\Render\TermstrapRenderer;
+use CodesSh\Tui\Runtime\TerminalRunner;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use Throwable;
 
 #[AsCommand(
     name: 'soft:tui',
@@ -24,7 +23,7 @@ use Throwable;
 final class TuiCommand extends Command
 {
     public function __construct(
-        private readonly GitService $gitService,
+        private readonly GitRepositoryReader $gitService,
         private readonly TermstrapRenderer $renderer,
         private readonly TerminalRunner $runner,
         private readonly BackendService $backend,
@@ -47,11 +46,11 @@ final class TuiCommand extends Command
         $initialRepo = $input->getArgument('initial-repo');
 
         $root = new RootUI($this->gitService, $this->renderer, $this->backend);
-        if ($initialRepo !== null && is_string($initialRepo) && trim($initialRepo) !== '') {
+        if (null !== $initialRepo && is_string($initialRepo) && '' !== trim($initialRepo)) {
             try {
                 $root->openRepoByPath($initialRepo);
-            } catch (Throwable $e) {
-                $output->writeln('<error>Warning: Could not open initial repo: ' . $e->getMessage() . '</error>');
+            } catch (\Throwable $e) {
+                $output->writeln('<error>Warning: Could not open initial repo: '.$e->getMessage().'</error>');
             }
         }
 
