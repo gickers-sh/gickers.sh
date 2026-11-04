@@ -65,7 +65,7 @@ final readonly class IndexCommitHandler
 
             $this->logger->debug('No indexer produced a SCIP index', ['repo' => $message->repo, 'sha' => $message->sha]);
         } catch (\Throwable $e) {
-            $this->logger->error('CodeIntel indexing failed: ' . $e->getMessage(), ['repo' => $message->repo, 'sha' => $message->sha]);
+            $this->logger->error('CodeIntel indexing failed: '.$e->getMessage(), ['repo' => $message->repo, 'sha' => $message->sha]);
         } finally {
             if (null !== $projectDir) {
                 $this->extractor->cleanup($projectDir);

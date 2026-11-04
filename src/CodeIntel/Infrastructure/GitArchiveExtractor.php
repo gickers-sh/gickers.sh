@@ -21,7 +21,7 @@ final class GitArchiveExtractor
      */
     public function extract(string $repoPath, string $sha): string
     {
-        $tmpDir = sys_get_temp_dir() . '/codes_sh_codeintel_' . bin2hex(random_bytes(8));
+        $tmpDir = sys_get_temp_dir().'/codes_sh_codeintel_'.bin2hex(random_bytes(8));
         if (!mkdir($tmpDir, 0755, true) && !is_dir($tmpDir)) {
             throw new \RuntimeException('Failed to create temporary directory for codeintel indexing');
         }
@@ -31,10 +31,10 @@ final class GitArchiveExtractor
         if (!$archiveProcess->isSuccessful()) {
             $this->cleanup($tmpDir);
 
-            throw new \RuntimeException('git archive failed: ' . $archiveProcess->getErrorOutput());
+            throw new \RuntimeException('git archive failed: '.$archiveProcess->getErrorOutput());
         }
 
-        $tarFile = $tmpDir . '/archive.tar';
+        $tarFile = $tmpDir.'/archive.tar';
         file_put_contents($tarFile, $archiveProcess->getOutput());
 
         $extracted = false;

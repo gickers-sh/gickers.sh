@@ -34,10 +34,10 @@ final class WebhookPushSmokeTest extends KernelTestCase
 
     protected function setUp(): void
     {
-        $this->tempDir = sys_get_temp_dir() . '/smoke_wh_' . uniqid();
+        $this->tempDir = sys_get_temp_dir().'/smoke_wh_'.uniqid();
         @mkdir($this->tempDir, 0755, true);
 
-        $this->captureFile = $this->tempDir . '/captured.json';
+        $this->captureFile = $this->tempDir.'/captured.json';
 
         // Find free port
         $sock = socket_create_listen(0);
@@ -49,7 +49,7 @@ final class WebhookPushSmokeTest extends KernelTestCase
         socket_close($sock);
 
         // Server script
-        $serverScript = $this->tempDir . '/server.php';
+        $serverScript = $this->tempDir.'/server.php';
         file_put_contents(
             $serverScript,
             <<<PHP
@@ -69,7 +69,7 @@ PHP
         $this->serverProcess = new Process([
             \PHP_BINARY,
             '-S',
-            '127.0.0.1:' . $this->serverPort,
+            '127.0.0.1:'.$this->serverPort,
             $serverScript,
         ]);
         $this->serverProcess->start();
@@ -85,7 +85,7 @@ PHP
                 break;
             }
         }
-        $this->assertTrue($ready, 'PHP built-in server failed to start on port ' . $this->serverPort);
+        $this->assertTrue($ready, 'PHP built-in server failed to start on port '.$this->serverPort);
     }
 
     protected function tearDown(): void
@@ -102,11 +102,11 @@ PHP
         $container = static::getContainer();
 
         $userStore = $container->get(UserStore::class);
-        $user = new User('smokeuser' . uniqid(), true, new \DateTimeImmutable());
+        $user = new User('smokeuser'.uniqid(), true, new \DateTimeImmutable());
         $userStore->save($user);
 
         $storage = $container->get(BareRepositoryStorage::class);
-        $repoName = RepoName::fromInput('smoke-repo-' . uniqid());
+        $repoName = RepoName::fromInput('smoke-repo-'.uniqid());
         $storage->init($repoName);
 
         $repo = new Repo($repoName, $user, 'smoke', 'smoke desc', false, false, false, null, new \DateTimeImmutable());
@@ -115,7 +115,7 @@ PHP
         $barePath = $storage->pathFor($repoName);
 
         // Install hooks
-        $consoleBin = realpath(__DIR__ . '/../../../bin/console');
+        $consoleBin = realpath(__DIR__.'/../../../bin/console');
         $this->assertNotFalse($consoleBin);
         $hookInstaller = new HookInstaller($consoleBin);
         $hookInstaller->install($barePath, $consoleBin);
@@ -135,13 +135,13 @@ PHP
         $webhookStore->save($webhook);
 
         // Prepare working repository
-        $workDir = $this->tempDir . '/work';
+        $workDir = $this->tempDir.'/work';
         @mkdir($workDir, 0755, true);
         (new Process(['git', 'init', '-b', 'main', $workDir]))->mustRun();
         (new Process(['git', 'config', 'user.name', 'Smoke Tester'], $workDir))->mustRun();
         (new Process(['git', 'config', 'user.email', 'smoke@example.com'], $workDir))->mustRun();
 
-        file_put_contents($workDir . '/README.md', "# Smoke Test Repo\n");
+        file_put_contents($workDir.'/README.md', "# Smoke Test Repo\n");
         (new Process(['git', 'add', 'README.md'], $workDir))->mustRun();
         (new Process(['git', 'commit', '-m', 'Initial smoke commit'], $workDir))->mustRun();
 

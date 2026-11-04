@@ -15,5 +15,6 @@ final readonly class IndexCommit
     public function __construct(
         public string $repo,
         public string $sha,
-    ) {}
+    ) {
+    }
 }

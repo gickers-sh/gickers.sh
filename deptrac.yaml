@@ -4,36 +4,56 @@ deptrac:
     exclude_files:
         - '#.*Kernel\.php$#'
     layers:
+        # */Domain, including Shared/Domain.
         - name: Domain
           collectors:
               - { type: directory, value: 'src/[^/]+/Domain/.*' }
         - name: Application
           collectors:
               - { type: directory, value: 'src/[^/]+/Application/.*' }
+        # Shared/Infrastructure (ServerSettings, SsrfGuard, PktLine, server bootstrap).
+        - name: SharedInfrastructure
+          collectors:
+              - { type: directory, value: 'src/Shared/Infrastructure/.*' }
+        # Concrete adapters used by use cases and UI: git/indexer (no interfaces, spec §2.1), Symfony Security user, SSH authorized_keys.
+        - name: Adapter
+          collectors:
+              - { type: directory, value: 'src/[^/]+/Infrastructure/(Git|Indexer|Security|Ssh)/.*' }
+              - { type: classLike, value: '^App\\CodeIntel\\Infrastructure\\GitArchiveExtractor$' }
+        - name: Doctrine
+          collectors:
+              - { type: directory, value: 'src/[^/]+/Infrastructure/Doctrine/.*' }
         - name: Infrastructure
           collectors:
-              - { type: directory, value: 'src/[^/]+/Infrastructure/.*' }
+              - type: bool
+                must:
+                    - { type: directory, value: 'src/[^/]+/Infrastructure/.*' }
+                must_not:
+                    - { type: directory, value: 'src/Shared/Infrastructure/.*' }
+                    - { type: directory, value: 'src/[^/]+/Infrastructure/(Git|Indexer|Security|Ssh|Doctrine)/.*' }
+                    - { type: classLike, value: '^App\\CodeIntel\\Infrastructure\\GitArchiveExtractor$' }
         - name: UI
           collectors:
-              - { type: directory, value: 'src/UI/.*' }
+              - type: bool
+                must:
+                    - { type: directory, value: 'src/UI/.*' }
+                must_not:
+                    - { type: directory, value: 'src/UI/(Tui|Http)/.*' }
         - name: UiTui
           collectors:
               - { type: directory, value: 'src/UI/Tui/.*' }
         - name: UiHttp
           collectors:
               - { type: directory, value: 'src/UI/Http/.*' }
-        - name: Doctrine
-          collectors:
-              - { type: directory, value: 'src/[^/]+/Infrastructure/Doctrine/.*' }
-        - name: Legacy
-          collectors:
-              - { type: directory, value: 'src/(Command|Model|Service|Tui)/.*' }
     ruleset:
         Domain: []
-        Application: [Domain]
-        Infrastructure: [Domain, Application]
-        Doctrine: [Domain, Application, Infrastructure]
-        UI: [Domain, Application, UI, Legacy]
-        UiHttp: [Domain, Application, UI]
-        UiTui: [Domain, Application, UI, Legacy]
-        Legacy: [Domain, Application, Infrastructure, Doctrine, UI, Legacy]
+        Application: [Domain, SharedInfrastructure, Adapter]
+        SharedInfrastructure: [Domain, Application, Adapter, Infrastructure]
+        Adapter: [Domain, Application, SharedInfrastructure, Infrastructure]
+        Infrastructure: [Domain, Application, SharedInfrastructure, Adapter, Doctrine]
+        Doctrine: [Domain, Application, SharedInfrastructure, Adapter, Infrastructure]
+        # UI never reaches Doctrine directly (spec §2.1).
+        UI: [Domain, Application, SharedInfrastructure, Adapter, UiTui]
+        UiTui: [Domain, Application, SharedInfrastructure, Adapter, UI]
+        # Never UiTui: libtermstrap (Go c-shared) must not load inside FrankenPHP (spec §2.5).
+        UiHttp: [Domain, Application, SharedInfrastructure, Adapter, UI]

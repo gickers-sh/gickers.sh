@@ -1,11 +1,13 @@
 {
-    frankenphp {
-        worker public/index.php
-    }
+	auto_https off
+	frankenphp {
+		worker public/index.php
+	}
 }
 
-:80 {
-    root * public/
-    encode zstd br gzip
-    php_server
+# soft:serve passes SOFT_SERVE_HTTP_LISTEN_ADDR (Go-style host:port or :port).
+http://{$SOFT_SERVE_HTTP_LISTEN_ADDR:127.0.0.1:23232} {
+	root * public/
+	encode zstd br gzip
+	php_server
 }

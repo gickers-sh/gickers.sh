@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\UI\GitDaemon;
 
 use App\Shared\Infrastructure\Config\ServerSettings;
+use App\Shared\Infrastructure\Server\ListenAddress;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -59,7 +60,8 @@ final class GitDaemonCommand extends Command
     {
         $stderr = $output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output;
 
-        [$host, $port] = $this->parseListenAddr((string) ($input->getOption('listen') ?: $this->settings->gitListenAddr));
+        $listen = ListenAddress::parse((string) ($input->getOption('listen') ?: $this->settings->gitListenAddr), 9418);
+        [$host, $port] = [$listen->host, $listen->port];
 
         $errno = 0;
         $errstr = '';
@@ -189,25 +191,5 @@ final class GitDaemonCommand extends Command
         while (($pid = pcntl_waitpid(-1, $status, \WNOHANG)) > 0) {
             $this->active = max(0, $this->active - 1);
         }
-    }
-
-    /**
-     * Splits a Go-style listen address. Host defaults to `0.0.0.0` when omitted
-     * (`:9418`), matching `cfg.Git.ListenAddr`.
-     *
-     * @return array{0: string, 1: int}
-     */
-    private function parseListenAddr(string $addr): array
-    {
-        $addr = trim($addr);
-        $colon = strrpos($addr, ':');
-        if (false === $colon) {
-            return ['0.0.0.0', ctype_digit($addr) ? (int) $addr : 9418];
-        }
-
-        $host = substr($addr, 0, $colon);
-        $port = (int) substr($addr, $colon + 1);
-
-        return ['' !== $host ? $host : '0.0.0.0', $port > 0 ? $port : 9418];
     }
 }

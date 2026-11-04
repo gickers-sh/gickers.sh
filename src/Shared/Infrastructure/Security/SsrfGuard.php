@@ -10,7 +10,7 @@ use App\Shared\Domain\Exception\InvalidInput;
  * Rejects outbound URLs that resolve to private, loopback, link-local, multicast,
  * cloud-metadata, or otherwise reserved addresses (SSRF protection).
  *
- * Port of `pkg/ssrf/ssrf.go` (ex-`App\Service\Security\SsrfValidator`). Used at
+ * Port of `pkg/ssrf/ssrf.go`. Used at
  * creation time (`#[PublicHttpUrl]` constraint, `ImportRepo`); the connection-time
  * TOCTOU window is closed separately by `NoPrivateNetworkHttpClient` in the HTTP layer.
  */

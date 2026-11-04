@@ -29,7 +29,7 @@ abstract class CodeIntelTestCase extends TestCase
 
     protected function createTempDir(string $prefix): string
     {
-        $dir = sys_get_temp_dir() . '/' . $prefix . bin2hex(random_bytes(6));
+        $dir = sys_get_temp_dir().'/'.$prefix.bin2hex(random_bytes(6));
         mkdir($dir, 0755, true);
         $this->tempDirs[] = $dir;
 

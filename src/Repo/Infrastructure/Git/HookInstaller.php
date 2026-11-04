@@ -77,7 +77,9 @@ BASH;
                 default => '',
             };
 
-            // 4. Soft-serve / codes.sh hook inside ${hook}.d (matching hooksTmpl from pkg/hooks/gen.go)
+            // 4. Soft-serve / codes.sh hook inside ${hook}.d (matching hooksTmpl from pkg/hooks/gen.go).
+            // The PHP binary is absolute, like Go's os.Executable(): sshd sessions get a minimal PATH.
+            $phpBinary = \PHP_BINARY;
             $softHookPath = $hookDDir.'/soft-serve';
             $softHookContent = <<<BASH
 #!/usr/bin/env bash
@@ -87,18 +89,10 @@ if [ -z "\$SOFT_SERVE_REPO_NAME" ]; then
     exit 0
 fi
 CONSOLE_BIN="{$consoleBinPath}"
-exec "\$CONSOLE_BIN" soft:hook:{$hook} {$args}
+exec "{$phpBinary}" "\$CONSOLE_BIN" soft:hook:{$hook} {$args}
 BASH;
             file_put_contents($softHookPath, $softHookContent."\n");
             chmod($softHookPath, 0755);
         }
-    }
-
-    /**
-     * Backward-compatible alias for install().
-     */
-    public function installServerHooks(GitRepository|string $repo, ?string $consoleBin = null): void
-    {
-        $this->install($repo, $consoleBin);
     }
 }

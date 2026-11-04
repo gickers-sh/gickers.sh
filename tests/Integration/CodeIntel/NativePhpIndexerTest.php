@@ -24,31 +24,31 @@ final class NativePhpIndexerTest extends CodeIntelTestCase
         self::assertFalse(NativePhpIndexer::isPhpProject($dir));
 
         // composer.json.
-        file_put_contents($dir . '/composer.json', '{}');
+        file_put_contents($dir.'/composer.json', '{}');
         self::assertTrue(NativePhpIndexer::isPhpProject($dir));
-        unlink($dir . '/composer.json');
+        unlink($dir.'/composer.json');
 
         // symfony.lock.
-        file_put_contents($dir . '/symfony.lock', '{}');
+        file_put_contents($dir.'/symfony.lock', '{}');
         self::assertTrue(NativePhpIndexer::isPhpProject($dir));
-        unlink($dir . '/symfony.lock');
+        unlink($dir.'/symfony.lock');
 
         // bin/console.
-        mkdir($dir . '/bin', 0755, true);
-        file_put_contents($dir . '/bin/console', '#!/usr/bin/env php');
+        mkdir($dir.'/bin', 0755, true);
+        file_put_contents($dir.'/bin/console', '#!/usr/bin/env php');
         self::assertTrue(NativePhpIndexer::isPhpProject($dir));
-        unlink($dir . '/bin/console');
+        unlink($dir.'/bin/console');
 
         // Only vendor or .git should be ignored.
-        mkdir($dir . '/vendor/bundle', 0755, true);
-        file_put_contents($dir . '/vendor/bundle/Foo.php', '<?php');
-        mkdir($dir . '/.git/hooks', 0755, true);
-        file_put_contents($dir . '/.git/hooks/pre-commit.php', '<?php');
+        mkdir($dir.'/vendor/bundle', 0755, true);
+        file_put_contents($dir.'/vendor/bundle/Foo.php', '<?php');
+        mkdir($dir.'/.git/hooks', 0755, true);
+        file_put_contents($dir.'/.git/hooks/pre-commit.php', '<?php');
         self::assertFalse(NativePhpIndexer::isPhpProject($dir));
 
         // Actual application php file.
-        mkdir($dir . '/src', 0755, true);
-        file_put_contents($dir . '/src/Kernel.php', '<?php');
+        mkdir($dir.'/src', 0755, true);
+        file_put_contents($dir.'/src/Kernel.php', '<?php');
         self::assertTrue(NativePhpIndexer::isPhpProject($dir));
     }
 
@@ -61,17 +61,17 @@ final class NativePhpIndexerTest extends CodeIntelTestCase
 
         self::assertFalse(NativePhpIndexer::isSymfonyProject($dir));
 
-        file_put_contents($dir . '/composer.json', json_encode([
+        file_put_contents($dir.'/composer.json', json_encode([
             'require' => ['symfony/framework-bundle' => '7.4.*'],
         ]));
         self::assertTrue(NativePhpIndexer::isSymfonyProject($dir));
 
-        file_put_contents($dir . '/composer.json', json_encode([
+        file_put_contents($dir.'/composer.json', json_encode([
             'require' => ['monolog/monolog' => '^3.0'],
         ]));
         self::assertFalse(NativePhpIndexer::isSymfonyProject($dir));
 
-        file_put_contents($dir . '/symfony.lock', '{}');
+        file_put_contents($dir.'/symfony.lock', '{}');
         self::assertTrue(NativePhpIndexer::isSymfonyProject($dir));
     }
 
@@ -84,18 +84,18 @@ final class NativePhpIndexerTest extends CodeIntelTestCase
     {
         $dir = $this->createTempDir('symfony_proj_');
 
-        file_put_contents($dir . '/composer.json', json_encode([
+        file_put_contents($dir.'/composer.json', json_encode([
             'name' => 'acme/symfony-demo',
             'require' => ['symfony/framework-bundle' => '7.4.*'],
         ]));
 
-        mkdir($dir . '/src/Entity', 0755, true);
-        mkdir($dir . '/src/Repository', 0755, true);
-        mkdir($dir . '/src/Controller', 0755, true);
+        mkdir($dir.'/src/Entity', 0755, true);
+        mkdir($dir.'/src/Repository', 0755, true);
+        mkdir($dir.'/src/Controller', 0755, true);
 
         // User.php
         file_put_contents(
-            $dir . '/src/Entity/User.php',
+            $dir.'/src/Entity/User.php',
             <<<'PHP'
             <?php
             namespace App\Entity;
@@ -114,7 +114,7 @@ final class NativePhpIndexerTest extends CodeIntelTestCase
 
         // UserRepository.php
         file_put_contents(
-            $dir . '/src/Repository/UserRepository.php',
+            $dir.'/src/Repository/UserRepository.php',
             <<<'PHP'
             <?php
             namespace App\Repository;
@@ -133,7 +133,7 @@ final class NativePhpIndexerTest extends CodeIntelTestCase
 
         // UserController.php
         file_put_contents(
-            $dir . '/src/Controller/UserController.php',
+            $dir.'/src/Controller/UserController.php',
             <<<'PHP'
             <?php
             namespace App\Controller;

@@ -93,7 +93,7 @@ final class FilesystemIndexStore implements IndexStore
     {
         $repoClean = trim(str_replace(['..', '\\'], ['', '/'], $repo), '/');
 
-        return $this->settings->codeIntelPath() . '/' . $repoClean . '/' . $sha . '.scip';
+        return $this->settings->codeIntelPath().'/'.$repoClean.'/'.$sha.'.scip';
     }
 
     /**
@@ -157,7 +157,7 @@ final class FilesystemIndexStore implements IndexStore
                         $definitions[$symbol] = $loc;
                     }
                 } else {
-                    $refKey = $symbol . '|' . $cleanPath . '|' . $rangeCoords['startLine'] . '|' . $rangeCoords['startCol'];
+                    $refKey = $symbol.'|'.$cleanPath.'|'.$rangeCoords['startLine'].'|'.$rangeCoords['startCol'];
                     if (!isset($seenRefs[$refKey])) {
                         $seenRefs[$refKey] = true;
                         if (!isset($references[$symbol])) {
@@ -196,6 +196,6 @@ final class FilesystemIndexStore implements IndexStore
 
     private function cacheKey(string $repo, string $sha): string
     {
-        return $repo . ':' . $sha;
+        return $repo.':'.$sha;
     }
 }

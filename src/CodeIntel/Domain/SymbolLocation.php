@@ -15,7 +15,8 @@ final readonly class SymbolLocation implements \Stringable
         public int $col,
         public ?int $endLine = null,
         public ?int $endCol = null,
-    ) {}
+    ) {
+    }
 
     /**
      * @return array{path: string, line: int, col: int, endLine: ?int, endCol: ?int}

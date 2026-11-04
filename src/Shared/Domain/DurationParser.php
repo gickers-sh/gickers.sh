@@ -11,14 +11,13 @@ use App\Shared\Domain\Exception\InvalidInput;
  *
  * Ports Go `time.ParseDuration` (concatenated `<number><unit>` segments, optional
  * fractional values and leading sign, bare `"0"` allowed) and extends it with the
- * day/week/month/year units the legacy SSH dispatcher accepted (`1y3mo5d4h`).
+ * day/week/month/year units of the SSH CLI (`1y3mo5d4h`).
  *
- * Unlike the legacy `SshCommandDispatcher::parseDuration`, an empty or malformed
- * duration raises {@see InvalidInput} instead of silently falling back to one hour.
+ * An empty or malformed duration raises {@see InvalidInput}.
  */
 final class DurationParser
 {
-    /** Seconds per unit. Months and years use the fixed 30- and 365-day conventions of the legacy parser. */
+    /** Seconds per unit. Months and years use fixed 30- and 365-day conventions. */
     private const MULTIPLIERS = [
         'ns' => 1.0e-9,
         'us' => 1.0e-6,

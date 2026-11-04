@@ -4,18 +4,24 @@ SHELL := /bin/sh
 PHP ?= php
 COMPOSER ?= composer
 
-# Directories & Configuration
+# Directories & Configuration (exported to bin/soft; see .env for every SOFT_SERVE_* variable)
 DATA_DIR ?= .data
 SOFT_SERVE_DATA_PATH ?= $(CURDIR)/$(DATA_DIR)
-SOFT_SERVE_INITIAL_ADMIN_KEY ?= $(shell cat ~/.ssh/id_ed25519.pub 2>/dev/null || cat ~/.ssh/id_rsa.pub 2>/dev/null || echo "")
+SOFT_SERVE_INITIAL_ADMIN_KEYS ?= $(shell cat ~/.ssh/id_ed25519.pub 2>/dev/null || cat ~/.ssh/id_rsa.pub 2>/dev/null || echo "")
 
 # Server Network Settings
 SSH_PORT ?= 2223
 SSH_HOST ?= 127.0.0.1
-SSH_PUBLIC_URL ?= ssh://codes.sh:$(SSH_PORT)
+SSH_PUBLIC_URL ?= ssh://localhost:$(SSH_PORT)
 HTTP_PORT ?= 23232
 HTTP_HOST ?= 127.0.0.1
-HTTP_PUBLIC_URL ?= https://codes.sh
+HTTP_PUBLIC_URL ?= http://localhost:$(HTTP_PORT)
+
+SERVE_ENV = SOFT_SERVE_DATA_PATH="$(SOFT_SERVE_DATA_PATH)" \
+	SOFT_SERVE_INITIAL_ADMIN_KEYS="$(SOFT_SERVE_INITIAL_ADMIN_KEYS)" \
+	SOFT_SERVE_SSH_LISTEN_ADDR="$(SSH_HOST):$(SSH_PORT)" \
+	SOFT_SERVE_HTTP_LISTEN_ADDR="$(HTTP_HOST):$(HTTP_PORT)" \
+	SOFT_SERVE_HTTP_PUBLIC_URL="$(HTTP_PUBLIC_URL)"
 
 # Tunneling / Publish ports
 PUBLISH_PORTS ?= 2220 2221 2222 2223 2224 2225 2226 2227 2228 2229
@@ -25,7 +31,7 @@ UPSTREAM_URL ?= https://github.com/charmbracelet/soft-serve.git
 UPSTREAM_REMOTE ?= upstream
 UPSTREAM_BRANCH ?= main
 
-.PHONY: all build setup install run debug browse publish index migrate rollback sync-hooks test test-render lint cs cs-check stan deptrac clean clean-all help upstream-setup upstream-fetch upstream-status upstream-sync
+.PHONY: all build setup install run serve debug e2e browse publish index migrate rollback sync-hooks test test-render lint cs cs-check stan deptrac clean clean-all help upstream-setup upstream-fetch upstream-status upstream-sync
 
 all: build
 
@@ -55,34 +61,20 @@ setup:
 install:
 	$(COMPOSER) install
 
-## run: Run the codes.sh server (SSH daemon on :2223, HTTP backend on :23232)
+## run: Run the codes.sh server (sshd :2223, HTTP :23232, git daemon, Messenger worker)
 run: build
-	@mkdir -p $(DATA_DIR)
-	@if [ ! -f $(DATA_DIR)/config.yaml ] && [ -f ../codes.sh.src/config.yaml ]; then \
-		cp ../codes.sh.src/config.yaml $(DATA_DIR)/config.yaml; \
-	fi
-	SOFT_SERVE_DATA_PATH="$(SOFT_SERVE_DATA_PATH)" \
-	SOFT_SERVE_INITIAL_ADMIN_KEY="$(SOFT_SERVE_INITIAL_ADMIN_KEY)" \
-	SOFT_SERVE_SSH_LISTEN_ADDR=":$(SSH_PORT)" \
-	SOFT_SERVE_SSH_PUBLIC_URL="$(SSH_PUBLIC_URL)" \
-	SOFT_SERVE_HTTP_LISTEN_ADDR="$(HTTP_HOST):$(HTTP_PORT)" \
-	SOFT_SERVE_HTTP_PUBLIC_URL="$(HTTP_PUBLIC_URL)" \
-	./bin/soft serve --port=$(SSH_PORT) --host=$(SSH_HOST) --data-dir=$(SOFT_SERVE_DATA_PATH)
+	$(SERVE_ENV) SOFT_SERVE_SSH_PUBLIC_URL="$(SSH_PUBLIC_URL)" ./bin/soft serve
 
-## debug: Run the codes.sh server with debug logging enabled (SOFT_SERVE_DEBUG=true)
+## serve: Alias of run
+serve: run
+
+## debug: Run the server with verbose output (process command lines, debug logs)
 debug: build
-	@mkdir -p $(DATA_DIR)
-	@if [ ! -f $(DATA_DIR)/config.yaml ] && [ -f ../codes.sh.src/config.yaml ]; then \
-		cp ../codes.sh.src/config.yaml $(DATA_DIR)/config.yaml; \
-	fi
-	SOFT_SERVE_DEBUG=true SOFT_SERVE_VERBOSE=true \
-	SOFT_SERVE_DATA_PATH="$(SOFT_SERVE_DATA_PATH)" \
-	SOFT_SERVE_INITIAL_ADMIN_KEY="$(SOFT_SERVE_INITIAL_ADMIN_KEY)" \
-	SOFT_SERVE_SSH_LISTEN_ADDR=":$(SSH_PORT)" \
-	SOFT_SERVE_SSH_PUBLIC_URL="$(SSH_PUBLIC_URL)" \
-	SOFT_SERVE_HTTP_LISTEN_ADDR="$(HTTP_HOST):$(HTTP_PORT)" \
-	SOFT_SERVE_HTTP_PUBLIC_URL="$(HTTP_PUBLIC_URL)" \
-	./bin/soft serve --port=$(SSH_PORT) --host=$(SSH_HOST) --data-dir=$(SOFT_SERVE_DATA_PATH) -v
+	$(SERVE_ENV) SOFT_SERVE_SSH_PUBLIC_URL="$(SSH_PUBLIC_URL)" LOG_LEVEL=debug ./bin/soft serve -vv
+
+## e2e: End-to-end run on throwaway ports/data: ssh repo create, git push over SSH, clone over HTTP and git://
+e2e: build
+	./scripts/e2e.sh
 
 ## browse: Launch the codes.sh terminal UI repository browser
 browse: build
@@ -90,10 +82,6 @@ browse: build
 
 ## publish: Run soft serve and expose it publicly via bore on a free port (2220-2229)
 publish: build
-	@mkdir -p $(DATA_DIR)
-	@if [ ! -f $(DATA_DIR)/config.yaml ] && [ -f ../codes.sh.src/config.yaml ]; then \
-		cp ../codes.sh.src/config.yaml $(DATA_DIR)/config.yaml; \
-	fi
 	@command -v bore >/dev/null 2>&1 || { echo "!! bore introuvable: brew install bore-cli"; exit 1; }
 	@BORE_PORT=""; BORE_PID=""; \
 	for p in $(PUBLISH_PORTS); do \
@@ -111,13 +99,7 @@ publish: build
 	fi; \
 	echo ">> publie sur bore.pub:$$BORE_PORT  ->  ssh -p $$BORE_PORT bore.pub"; \
 	trap 'kill $$BORE_PID $$SOFT_PID 2>/dev/null' EXIT INT TERM; \
-	SOFT_SERVE_DATA_PATH="$(SOFT_SERVE_DATA_PATH)" \
-	SOFT_SERVE_INITIAL_ADMIN_KEY="$(SOFT_SERVE_INITIAL_ADMIN_KEY)" \
-	SOFT_SERVE_SSH_LISTEN_ADDR=":$(SSH_PORT)" \
-	SOFT_SERVE_SSH_PUBLIC_URL="ssh://bore.pub:$$BORE_PORT" \
-	SOFT_SERVE_HTTP_LISTEN_ADDR="$(HTTP_HOST):$(HTTP_PORT)" \
-	SOFT_SERVE_HTTP_PUBLIC_URL="$(HTTP_PUBLIC_URL)" \
-	./bin/soft serve --port=$(SSH_PORT) --host=$(SSH_HOST) --data-dir=$(SOFT_SERVE_DATA_PATH) & \
+	$(SERVE_ENV) SOFT_SERVE_SSH_PUBLIC_URL="ssh://bore.pub:$$BORE_PORT" ./bin/soft serve & \
 	SOFT_PID=$$!; \
 	echo ">> soft serve lance (pid $$SOFT_PID) | clone: git clone ssh://bore.pub:$$BORE_PORT/<repo>"; \
 	wait $$SOFT_PID
@@ -166,7 +148,7 @@ deptrac:
 
 ## test-render: Test Termstrap FFI rendering bridge (Markdown, CSV, ANSI TokyoNight)
 test-render: build
-	./bin/console test:render
+	./bin/console dev:render-smoke
 
 ## clean: Remove build artifacts and temporary cache
 clean:

@@ -16,7 +16,8 @@ final readonly class Occurrence
         public int $endCol,
         public string $symbol,
         public bool $isDefinition,
-    ) {}
+    ) {
+    }
 
     /**
      * Checks whether a 0-indexed (line, col) cursor falls within this occurrence range.

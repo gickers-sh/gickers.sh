@@ -39,10 +39,10 @@ final class GitDaemonCloneTest extends TestCase
         }
 
         $this->projectDir = \dirname(__DIR__, 3);
-        $this->base = sys_get_temp_dir() . '/git_daemon_clone_' . bin2hex(random_bytes(6));
-        $this->cloneDir = $this->base . '/clone';
-        mkdir($this->base . '/repos', 0o755, true);
-        mkdir($this->base . '/log', 0o755, true);
+        $this->base = sys_get_temp_dir().'/git_daemon_clone_'.bin2hex(random_bytes(6));
+        $this->cloneDir = $this->base.'/clone';
+        mkdir($this->base.'/repos', 0o755, true);
+        mkdir($this->base.'/log', 0o755, true);
     }
 
     protected function tearDown(): void
@@ -57,8 +57,8 @@ final class GitDaemonCloneTest extends TestCase
 
     public function testCloneThroughForkedDaemonSucceeds(): void
     {
-        $dbPath = $this->base . '/daemon.db';
-        $databaseUrl = 'sqlite:///' . $dbPath;
+        $dbPath = $this->base.'/daemon.db';
+        $databaseUrl = 'sqlite:///'.$dbPath;
 
         $this->migrate($databaseUrl);
         $this->seedPublicRepo($dbPath);
@@ -73,7 +73,7 @@ final class GitDaemonCloneTest extends TestCase
                 $this->daemon->getOutput(),
                 $this->daemon->getErrorOutput(),
             );
-            self::markTestSkipped('git daemon did not start listening in this environment. ' . $details);
+            self::markTestSkipped('git daemon did not start listening in this environment. '.$details);
         }
 
         $clone = new Process(
@@ -92,14 +92,14 @@ final class GitDaemonCloneTest extends TestCase
                 $this->daemon->getErrorOutput(),
             ),
         );
-        self::assertFileExists($this->cloneDir . '/README.md');
-        self::assertStringContainsString('demo', (string) file_get_contents($this->cloneDir . '/README.md'));
+        self::assertFileExists($this->cloneDir.'/README.md');
+        self::assertStringContainsString('demo', (string) file_get_contents($this->cloneDir.'/README.md'));
     }
 
     private function migrate(string $databaseUrl): void
     {
         $process = new Process(
-            [\PHP_BINARY, $this->projectDir . '/bin/console', 'doctrine:migrations:migrate', '--no-interaction', '--quiet'],
+            [\PHP_BINARY, $this->projectDir.'/bin/console', 'doctrine:migrations:migrate', '--no-interaction', '--quiet'],
             $this->projectDir,
             $this->daemonEnv($databaseUrl),
         );
@@ -108,7 +108,7 @@ final class GitDaemonCloneTest extends TestCase
 
         if (!$process->isSuccessful()) {
             self::markTestSkipped(
-                'Could not migrate the temp daemon database in this environment: ' . $process->getErrorOutput(),
+                'Could not migrate the temp daemon database in this environment: '.$process->getErrorOutput(),
             );
         }
     }
@@ -117,7 +117,7 @@ final class GitDaemonCloneTest extends TestCase
     {
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
-        $pdo = new \PDO('sqlite:' . $dbPath);
+        $pdo = new \PDO('sqlite:'.$dbPath);
         $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 
         $user = $pdo->prepare(
@@ -128,7 +128,7 @@ final class GitDaemonCloneTest extends TestCase
 
         $repo = $pdo->prepare(
             'INSERT INTO repos (name, next_pull_request_number, updated_at, project_name, description, is_private, is_hidden, is_mirror, created_at, owner_id, fork_of_id)'
-                . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                .' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         );
         $repo->execute(['demo', 1, $now, '', '', 0, 0, 0, $now, $ownerId, null]);
     }
@@ -166,12 +166,12 @@ final class GitDaemonCloneTest extends TestCase
     private function launchDaemon(string $databaseUrl, int $port): Process
     {
         $env = $this->daemonEnv($databaseUrl) + [
-            'SOFT_SERVE_GIT_LISTEN_ADDR' => ':' . $port,
+            'SOFT_SERVE_GIT_LISTEN_ADDR' => ':'.$port,
             'SOFT_SERVE_ALLOW_KEYLESS' => 'true',
         ];
 
         $daemon = new Process(
-            [\PHP_BINARY, $this->projectDir . '/bin/console', 'soft:git-daemon'],
+            [\PHP_BINARY, $this->projectDir.'/bin/console', 'soft:git-daemon'],
             $this->projectDir,
             $env,
         );
@@ -223,7 +223,7 @@ final class GitDaemonCloneTest extends TestCase
         $errstr = '';
         $sock = @stream_socket_server('tcp://127.0.0.1:0', $errno, $errstr);
         if (!\is_resource($sock)) {
-            self::markTestSkipped('Could not allocate a free TCP port: ' . $errstr);
+            self::markTestSkipped('Could not allocate a free TCP port: '.$errstr);
         }
 
         $name = (string) stream_socket_get_name($sock, false);

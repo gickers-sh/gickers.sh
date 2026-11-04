@@ -43,7 +43,7 @@ class Repo
         private bool $isMirror,
         #[ORM\ManyToOne(targetEntity: self::class)]
         #[ORM\JoinColumn(onDelete: 'SET NULL')]
-        private ?Repo $forkOf,
+        private ?self $forkOf,
         #[ORM\Column]
         private \DateTimeImmutable $createdAt,
     ) {

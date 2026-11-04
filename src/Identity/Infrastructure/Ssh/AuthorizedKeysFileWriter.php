@@ -29,6 +29,11 @@ final readonly class AuthorizedKeysFileWriter
         $this->write();
     }
 
+    public function path(): string
+    {
+        return $this->serverSettings->sshPath().'/authorized_keys';
+    }
+
     public function write(): void
     {
         $sshDir = $this->serverSettings->sshPath();
@@ -44,7 +49,7 @@ final readonly class AuthorizedKeysFileWriter
         }
 
         $content = [] === $lines ? '' : implode("\n", $lines)."\n";
-        $targetFile = $sshDir.'/authorized_keys';
+        $targetFile = $this->path();
         $tmpFile = $sshDir.'/authorized_keys.tmp.'.bin2hex(random_bytes(6));
 
         if (false === @file_put_contents($tmpFile, $content)) {

@@ -11,16 +11,17 @@ use Symfony\Component\Process\Process;
  * Runs a server-wide custom git hook (`<data>/hooks/<name>`) if it exists and is
  * executable, piping stdin and forwarding arguments and environment.
  *
- * Service replacement for the legacy `App\Command\CustomHookTrait`; mirrors
- * `runCustomHook` in Go `cmd/soft/hook/hook.go`.
+ * Mirrors `runCustomHook` in Go `cmd/soft/hook/hook.go`.
  */
 final readonly class CustomHookRunner
 {
-    public function __construct(private ServerSettings $settings) {}
+    public function __construct(private ServerSettings $settings)
+    {
+    }
 
     /**
-     * @param list<string>            $args     arguments forwarded to the hook (e.g. the update hook's ref/old/new)
-     * @param array<string, string>   $env      extra environment variables merged over the inherited environment
+     * @param list<string>                          $args     arguments forwarded to the hook (e.g. the update hook's ref/old/new)
+     * @param array<string, string>                 $env      extra environment variables merged over the inherited environment
      * @param (callable(string, string): void)|null $onOutput receives (type, buffer) chunks of the hook's output
      *
      * @return int the hook exit code, or 0 when no executable hook is installed
@@ -36,7 +37,7 @@ final readonly class CustomHookRunner
             throw new \InvalidArgumentException(sprintf('Invalid hook name "%s".', $hookName));
         }
 
-        $path = $this->settings->hooksPath() . '/' . $hookName;
+        $path = $this->settings->hooksPath().'/'.$hookName;
         if (!is_file($path) || !is_executable($path)) {
             return 0;
         }

@@ -109,9 +109,9 @@ codes.sh/
 
 Règles de dépendance (vérifiées par **deptrac**, `deptrac.yaml`) :
 - `*/Domain` → uniquement `Shared/Domain` et le `Domain` d'autres modules (référence par entité permise : `Repo` → `Identity\Domain\Model\User`).
-- `*/Application` → `Domain` (tous modules), `Shared`, contrats Symfony (`EventDispatcherInterface`, `MessageBusInterface`, `Security`).
+- `*/Application` → `Domain` (tous modules), `Shared` (dont `Shared/Infrastructure` : `ServerSettings`, `SsrfGuard`), les adaptateurs concrets sans interface (`*/Infrastructure/{Git,Indexer,Security,Ssh}`, `CodeIntel\Infrastructure\GitArchiveExtractor`), contrats Symfony (`EventDispatcherInterface`, `MessageBusInterface`, `Security`).
 - `*/Infrastructure` → tout sauf `UI`.
-- `UI/*` → `Application` + `Domain` ; jamais `Infrastructure/Doctrine` directement.
+- `UI/*` → `Application` + `Domain` + `Shared/Infrastructure` + les mêmes adaptateurs concrets ; jamais `Infrastructure/Doctrine` directement ; `UI/Http` ↛ `UI/Tui`. Les règles sont bloquantes (`make deptrac`, 0 violation).
 - `packages/tui` (temporaire) → aucune dépendance `App\`.
 
 Compromis assumé : les entités du `Domain` portent les attributs `#[ORM\…]` (convention Symfony, pas de mapping XML). Les interfaces `*Store` existent pour chaque agrégat (implémentations `Doctrine*Store extends ServiceEntityRepository`, alias autowiring automatique car implémentation unique). Les classes git (`GitRepositoryReader`, `GitRepositoryWriter`, `BareRepositoryStorage`) restent **concrètes** : une seule implémentation, testée contre de vrais dépôts temporaires comme aujourd'hui.
@@ -169,7 +169,7 @@ Numérotation des PR : dans la transaction de `OpenPullRequest`, un `UPDATE repo
 
 SQLite : `journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=ON` posés par un middleware DBAL (`Shared\Infrastructure\Doctrine\SqlitePragmaMiddleware`) — nécessaire car web, worker Messenger, daemon et hooks écrivent en concurrence.
 
-Données existantes : `.data/soft-serve.db` est abandonné (`make clean-all` puis `soft admin bootstrap`). Les dépôts nus restent sur disque mais ne réapparaissent qu'une fois réenregistrés (comportement actuel : la liste vient de la base).
+Données existantes : `.data/soft-serve.db` est abandonné (`make clean-all && make run` : `soft serve` recrée le répertoire, migre et amorce l'admin). Les dépôts nus restent sur disque mais ne réapparaissent qu'une fois réenregistrés (comportement actuel : la liste vient de la base).
 
 `DatabaseManager::ensureBootstrapped` (seed `admin`, clés initiales, réglages) devient le cas d'usage `Identity\Application\BootstrapServer`, exposé par `soft:admin:bootstrap` et appelé par `ServeCommand` ; il n'est **plus** déclenché implicitement par les constructeurs.
 
@@ -215,8 +215,8 @@ App\UI\Ssh\Command\:
 **Console** (`UI/Console/Command`) — noms conservés : `soft:serve`, `soft:browse`, `soft:tui`, `soft:hook:{pre-receive,update,post-receive,post-update}` (gravés dans les scripts de hooks), `soft:admin:{bootstrap,sync-hooks,reindex-codeintel}`. `soft:admin:migrate|rollback` disparaissent au profit de `doctrine:migrations:migrate` (`bin/soft admin migrate` → `doctrine:migrations:migrate --no-interaction`, `admin rollback` → `doctrine:migrations:migrate prev`). `HookCommand` (dispatcher générique) supprimé : `bin/soft hook x` mappe déjà sur `soft:hook:x`. `CustomHookTrait` → service `CustomHookRunner`. `TestRenderCommand` → `Dev/RenderSmokeCommand` avec `#[When('dev')]`. `bin/soft` garde le mapping et `--version` ; `man` devient une commande `soft:man` générée depuis les définitions Console.
 
 `ServeCommand` (ex-`ServerCommand`, 287 l.) est découpé :
-- préparation : `Shared\Infrastructure\Server\{DataDirectoryInitializer, HostKeyGenerator, JwtKeyGenerator, SshdConfigWriter}`, `BootstrapServer`, `doctrine:migrations:migrate`, `AuthorizedKeysFileWriter`, `HookInstaller` (`--sync-hooks`) ;
-- exécution : `ProcessSupervisor` lance et surveille (relance, relais SIGINT/SIGTERM, arrêt gracieux 5 s comme Go) `sshd -D -e -f …`, `frankenphp run --config Caddyfile`, `bin/console soft:git-daemon`, `bin/console messenger:consume async scheduler_default`. Les options `--http-port`, `--git-port`… sont retirées au profit des variables d'environnement (`--dry-run` conservé). En production, chaque processus peut aussi être lancé séparément (Docker Compose / systemd) ; `ServeCommand` reste le chemin « tout-en-un » équivalent à `soft serve` Go.
+- préparation : `Shared\Infrastructure\Server\{DataDirectoryInitializer, HostKeyGenerator, JwtKeyGenerator, SshdConfigWriter}`, `BootstrapServer`, `doctrine:migrations:migrate`, `AuthorizedKeysFileWriter`, `HookSynchronizer` (`--sync-hooks`, partagé avec `soft:admin:sync-hooks`). sshd ne transmet pas son environnement aux sessions : `sshd_config` porte un `SetEnv` (`APP_ENV`, `DATABASE_URL`, `MESSENGER_TRANSPORT_DSN`, `ServerSettings::toEnvironment()`) ; les scripts de hooks appellent le binaire PHP par chemin absolu (le `PATH` des sessions sshd est minimal).
+- exécution : `ProcessSupervisor` lance et surveille (relance après 1 s, arrêt après 5 échecs rapides consécutifs, relais SIGINT/SIGTERM, arrêt gracieux 5 s comme Go) `sshd -D -e -f …`, `frankenphp run --config Caddyfile` (repli dev : `php -S` si `frankenphp` est absent du `PATH`), `bin/console soft:git-daemon`, `bin/console messenger:consume async` (`scheduler_default` sera ajouté avec la première tâche planifiée, cf. §6). Les options `--http-port`, `--git-port`… sont retirées au profit des variables d'environnement (`--dry-run` conservé). En production, chaque processus peut aussi être lancé séparément (Docker Compose / systemd) ; `ServeCommand` reste le chemin « tout-en-un » équivalent à `soft serve` Go. `make e2e` (`scripts/e2e.sh`) démarre `soft serve` sur des ports et données jetables et enchaîne `repo create` SSH → `git push` SSH → clone HTTP → clone `git://` → `repo tree`.
 
 **HTTP** (`UI/Http`, FrankenPHP worker) — routes par attributs :
 - `GET /{repo}.git/info/refs` (smart si `?service=`, sinon dumb), `POST /{repo}.git/git-upload-pack`, `POST /{repo}.git/git-receive-pack` : `GitServiceProcess` (ex-`GitHttpBackendService`) lance `git <svc> --stateless-rpc` via `symfony/process` et renvoie une `StreamedResponse` en lisant `$request->getContent(true)` (gzip décodé en flux) — plus de corps bufferisé en mémoire.
@@ -349,7 +349,7 @@ Après la phase 2 (entités, migration unique, voters, cas d'usage Repo/Identity
 | Deux runtimes Go dans un processus (FFI `libtermstrap` + FrankenPHP) [INFERENCE, non testé] | Termstrap limité à `UI/Tui` (règle deptrac) et service lazy ; jamais chargé par le worker HTTP |
 | Différences de tokenisation `StringInput` / tokenizer actuel | tests de parité portés depuis `SshDispatcherTest` (guillemets, échappements, `--k=v`, `-ab`) avant suppression du dispatcher |
 | Scripts de hooks et `authorized_keys` existants pointant vers l'ancienne ligne de commande | noms `soft:hook:*` et `soft:ssh:dispatch` conservés ; `ServeCommand` régénère les deux au démarrage |
-| Perte des données de dev (`soft-serve.db`) | acceptée (schéma repensé) ; documenté dans le README : `make clean-all && bin/soft admin bootstrap` |
+| Perte des données de dev (`soft-serve.db`) | acceptée (schéma repensé) ; documenté dans le README : `make clean-all && make run` |
 
 ## 6. Hors périmètre (écarts de parité Go relevés, non traités par cette restructuration)
 

@@ -40,8 +40,8 @@ final class GitDaemonProtocolTest extends KernelTestCase
         self::bootKernel();
         $container = static::getContainer();
 
-        $this->dataPath = sys_get_temp_dir() . '/git_daemon_proto_' . uniqid('', true);
-        mkdir($this->dataPath . '/repos', 0o755, true);
+        $this->dataPath = sys_get_temp_dir().'/git_daemon_proto_'.uniqid('', true);
+        mkdir($this->dataPath.'/repos', 0o755, true);
 
         $this->settings = $this->settings(allowKeyless: true);
         $storage = new BareRepositoryStorage($this->settings, new GitRepositoryReader());
@@ -113,7 +113,7 @@ final class GitDaemonProtocolTest extends KernelTestCase
 
         self::assertSame('git-upload-pack', $plan['service']);
         self::assertSame('demo', $plan['name']);
-        self::assertSame($this->dataPath . '/repos/demo.git', $plan['repoPath']);
+        self::assertSame($this->dataPath.'/repos/demo.git', $plan['repoPath']);
         self::assertSame([
             'git',
             '-c',
@@ -130,9 +130,9 @@ final class GitDaemonProtocolTest extends KernelTestCase
             '.',
         ], $plan['argv']);
         self::assertSame('demo', $plan['env']['SOFT_SERVE_REPO_NAME']);
-        self::assertSame($this->dataPath . '/repos/demo.git', $plan['env']['SOFT_SERVE_REPO_PATH']);
+        self::assertSame($this->dataPath.'/repos/demo.git', $plan['env']['SOFT_SERVE_REPO_PATH']);
         self::assertSame('example.com', $plan['env']['SOFT_SERVE_HOST']);
-        self::assertSame($this->dataPath . '/log/hooks.log', $plan['env']['SOFT_SERVE_LOG_PATH']);
+        self::assertSame($this->dataPath.'/log/hooks.log', $plan['env']['SOFT_SERVE_LOG_PATH']);
         self::assertArrayNotHasKey('GIT_PROTOCOL', $plan['env']);
     }
 

@@ -77,9 +77,6 @@ final readonly class GitTransportRunner
             'SOFT_SERVE_PUBLIC_KEY' => $this->sshSession->publicKeyFingerprint() ?? '',
             'SOFT_SERVE_DATA_PATH' => $this->serverSettings->dataPath,
         ];
-        if (isset($_SERVER['APP_ENV'])) {
-            $env['APP_ENV'] = (string) $_SERVER['APP_ENV'];
-        }
         $process->setEnv($env);
         $process->setInput(\STDIN);
         $process->setTimeout(60);

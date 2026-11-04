@@ -24,7 +24,8 @@ final readonly class PushIndexSubscriber
     public function __construct(
         private RepoStore $repos,
         private MessageBusInterface $bus,
-    ) {}
+    ) {
+    }
 
     #[AsEventListener]
     public function __invoke(PushReceived $event): void

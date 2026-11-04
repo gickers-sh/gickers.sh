@@ -1,280 +1,142 @@
 parameters:
 	ignoreErrors:
 		-
-			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
-			identifier: function.alreadyNarrowedType
+			message: '#^Offset ''new'' on array\{ref\: string, old\: string, new\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
 			count: 1
-			path: src/Command/AdminReindexCodeintelCommand.php
+			path: src/CodeIntel/Application/PushIndexSubscriber.php
 
 		-
-			message: '#^Call to function method_exists\(\) with App\\Service\\Backend\\BackendService and ''getRepoPath'' will always evaluate to true\.$#'
-			identifier: function.alreadyNarrowedType
+			message: '#^Method App\\CodeIntel\\Domain\\SymbolInfo\:\:toArray\(\) should return array\{symbol\: string, definitions\: array\<int, array\{path\: string, line\: int, col\: int, endLine\: int\|null, endCol\: int\|null\}\>, references\: array\<int, array\{path\: string, line\: int, col\: int, endLine\: int\|null, endCol\: int\|null\}\>\} but returns array\{symbol\: string, definitions\: array\<array\{path\: string, line\: int, col\: int, endLine\: int\|null, endCol\: int\|null\}\>, references\: array\<array\{path\: string, line\: int, col\: int, endLine\: int\|null, endCol\: int\|null\}\>\}\.$#'
+			identifier: return.type
 			count: 1
-			path: src/Command/AdminReindexCodeintelCommand.php
+			path: src/CodeIntel/Domain/SymbolInfo.php
+
+		-
+			message: '#^Offset ''occurrences'' on array\{relative_path\: string, occurrences\: array\<int, array\{range\: array\<int\>, symbol\: string, symbol_roles\: int\}\>, language\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/CodeIntel/Infrastructure/FilesystemIndexStore.php
+
+		-
+			message: '#^Offset ''range'' on array\{range\: array\<int\>, symbol\: string, symbol_roles\: int\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/CodeIntel/Infrastructure/FilesystemIndexStore.php
+
+		-
+			message: '#^Offset ''relative_path'' on array\{relative_path\: string, occurrences\: array\<int, array\{range\: array\<int\>, symbol\: string, symbol_roles\: int\}\>, language\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/CodeIntel/Infrastructure/FilesystemIndexStore.php
+
+		-
+			message: '#^Offset ''symbol'' on array\{range\: array\<int\>, symbol\: string, symbol_roles\: int\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/CodeIntel/Infrastructure/FilesystemIndexStore.php
+
+		-
+			message: '#^Offset ''symbol_roles'' on array\{range\: array\<int\>, symbol\: string, symbol_roles\: int\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: src/CodeIntel/Infrastructure/FilesystemIndexStore.php
+
+		-
+			message: '#^Cannot call method getRealPath\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: src/CodeIntel/Infrastructure/GitArchiveExtractor.php
+
+		-
+			message: '#^Cannot call method isDir\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/CodeIntel/Infrastructure/GitArchiveExtractor.php
+
+		-
+			message: '#^Parameter \#1 \$directory of function rmdir expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/CodeIntel/Infrastructure/GitArchiveExtractor.php
+
+		-
+			message: '#^Parameter \#1 \$filename of function unlink expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/CodeIntel/Infrastructure/GitArchiveExtractor.php
+
+		-
+			message: '#^Cannot call method getFilename\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
+
+		-
+			message: '#^Cannot call method getPathname\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
+
+		-
+			message: '#^Cannot call method isFile\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
 
 		-
 			message: '#^Cannot cast mixed to string\.$#'
 			identifier: cast.string
 			count: 2
-			path: src/Command/AdminReindexCodeintelCommand.php
+			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
 
 		-
-			message: '#^Parameter \#1 \$arg of function escapeshellarg expects string, mixed given\.$#'
+			message: '#^Method App\\CodeIntel\\Infrastructure\\Indexer\\NativePhpIndexer\:\:index\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
+
+		-
+			message: '#^Parameter \#1 \$haystack of function str_ends_with expects string, mixed given\.$#'
 			identifier: argument.type
 			count: 2
-			path: src/Command/AdminReindexCodeintelCommand.php
+			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
 
 		-
-			message: '#^Parameter \#1 \$filename of function is_dir expects string, mixed given\.$#'
+			message: '#^Parameter \#1 \$string of function substr expects string, mixed given\.$#'
 			identifier: argument.type
 			count: 1
-			path: src/Command/AdminReindexCodeintelCommand.php
+			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
 
 		-
-			message: '#^Parameter \#1 \$name of method App\\Service\\Backend\\BackendService\:\:getRepoPath\(\) expects string, mixed given\.$#'
+			message: '#^Parameter \#1 \.\.\.\$arrays of function array_merge expects array, mixed given\.$#'
 			identifier: argument.type
 			count: 1
-			path: src/Command/AdminReindexCodeintelCommand.php
+			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
 
 		-
-			message: '#^Parameter \#1 \$repoPath of method App\\Service\\CodeIntel\\CodeIntelService\:\:indexCommit\(\) expects string, mixed given\.$#'
+			message: '#^Parameter \#2 \.\.\.\$arrays of function array_merge expects array, mixed given\.$#'
 			identifier: argument.type
 			count: 1
-			path: src/Command/AdminReindexCodeintelCommand.php
+			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
 
 		-
-			message: '#^Parameter \#2 \$repoName of method App\\Service\\CodeIntel\\CodeIntelService\:\:indexCommit\(\) expects string, mixed given\.$#'
+			message: '#^Method App\\CodeIntel\\Infrastructure\\Scip\\ScipProtobufCodec\:\:encodeIndex\(\) has parameter \$documents with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/CodeIntel/Infrastructure/Scip/ScipProtobufCodec.php
+
+		-
+			message: '#^Parameter \#1 \$doc of method App\\CodeIntel\\Infrastructure\\Scip\\ScipProtobufCodec\:\:encodeDocument\(\) expects array\{relative_path\?\: string, path\?\: string, occurrences\?\: array\<int, App\\CodeIntel\\Domain\\Occurrence\|array\{range\?\: array\<int\>, symbol\?\: string, symbol_roles\?\: int\}\>, language\?\: string\}, mixed given\.$#'
 			identifier: argument.type
 			count: 1
-			path: src/Command/AdminReindexCodeintelCommand.php
+			path: src/CodeIntel/Infrastructure/Scip/ScipProtobufCodec.php
 
 		-
-			message: '#^Parameter \#2 \.\.\.\$values of function sprintf expects bool\|float\|int\|string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 5
-			path: src/Command/AdminReindexCodeintelCommand.php
-
-		-
-			message: '#^Parameter \#1 \$filename of function is_dir expects string, mixed given\.$#'
-			identifier: argument.type
+			message: '#^Right side of && is always true\.$#'
+			identifier: booleanAnd.rightAlwaysTrue
 			count: 1
-			path: src/Command/AdminSyncHooksCommand.php
-
-		-
-			message: '#^Parameter \#1 \$name of method App\\Service\\Backend\\BackendService\:\:getRepoPath\(\) expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/AdminSyncHooksCommand.php
-
-		-
-			message: '#^Parameter \#1 \$repo of method App\\Repo\\Infrastructure\\Git\\HookInstaller\:\:install\(\) expects App\\Repo\\Domain\\Git\\GitRepository\|string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/AdminSyncHooksCommand.php
-
-		-
-			message: '#^Parameter \#2 \.\.\.\$values of function sprintf expects bool\|float\|int\|string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 3
-			path: src/Command/AdminSyncHooksCommand.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between null and mixed will always evaluate to false\.$#'
-			identifier: identical.alwaysFalse
-			count: 1
-			path: src/Command/AdminSyncHooksCommand.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 1
-			path: src/Command/BrowseCommand.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 1
-			path: src/Command/HookCommand.php
-
-		-
-			message: '#^Parameter \#1 \$value of function count expects array\|Countable, list\<string\>\|false given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/HookPostReceiveCommand.php
-
-		-
-			message: '#^Parameter \#3 \$args of method App\\Command\\HookPostUpdateCommand\:\:runCustomHook\(\) expects list\<string\>, array\<mixed, mixed\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/HookPostUpdateCommand.php
-
-		-
-			message: '#^Parameter \#1 \$value of function count expects array\|Countable, list\<string\>\|false given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/HookPreReceiveCommand.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 3
-			path: src/Command/HookUpdateCommand.php
-
-		-
-			message: '#^Binary operation "\." between mixed and ''/config\.yaml'' results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Binary operation "\." between mixed and ''/hooks'' results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Binary operation "\." between mixed and ''/hooks/update\.sample'' results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Binary operation "\." between mixed and ''/lfs'' results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Binary operation "\." between mixed and ''/log'' results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Binary operation "\." between mixed and ''/repos'' results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 2
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Binary operation "\." between mixed and ''/ssh'' results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 2
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 8
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Parameter \#1 \$configPath of method App\\Service\\Config\\ServerConfig\:\:load\(\) expects string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Parameter \#1 \$dataPath of class App\\Service\\Config\\ServerConfig constructor expects string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Parameter \#1 \$directory of function mkdir expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Parameter \#1 \$filename of function file_exists expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 2
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Parameter \#1 \$filename of function file_get_contents expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Parameter \#1 \$filename of function is_dir expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Parameter \#1 \$string of function trim expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Parameter \#1 \$targetPath of method App\\Service\\Config\\ServerConfig\:\:writeDefaultConfig\(\) expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Parameter \#2 \.\.\.\$values of function sprintf expects bool\|float\|int\|string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/ServerCommand.php
-
-		-
-			message: '#^Parameter \#1 \$string of function trim expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/SshAuthorizedKeysCommand.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 4
-			path: src/Command/SshDispatchCommand.php
-
-		-
-			message: '#^Parameter \#1 \$initialRepo of method App\\Command\\SshDispatchCommand\:\:runTui\(\) expects string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/SshDispatchCommand.php
-
-		-
-			message: '#^Parameter \#2 \.\.\.\$values of function sprintf expects bool\|float\|int\|string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 2
-			path: src/Command/SshDispatchCommand.php
-
-		-
-			message: '#^Parameter \#3 \$username of method App\\Command\\SshDispatchCommand\:\:runGitLfs\(\) expects string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/SshDispatchCommand.php
-
-		-
-			message: '#^Parameter \#3 \.\.\.\$values of function sprintf expects bool\|float\|int\|string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/SshDispatchCommand.php
-
-		-
-			message: '#^Parameter \#4 \$keyFingerprint of method App\\Command\\SshDispatchCommand\:\:runGitLfs\(\) expects string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/SshDispatchCommand.php
-
-		-
-			message: '#^Parameter \#4 \$username of method App\\Command\\SshDispatchCommand\:\:runCli\(\) expects string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/SshDispatchCommand.php
-
-		-
-			message: '#^Parameter \#5 \$keyFingerprint of method App\\Command\\SshDispatchCommand\:\:runCli\(\) expects string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Command/SshDispatchCommand.php
+			path: src/CodeIntel/Infrastructure/Scip/ScipProtobufCodec.php
 
 		-
 			message: '#^Parameter \#3 \$length of function substr expects int\|null, mixed given\.$#'
@@ -287,12 +149,6 @@ parameters:
 			identifier: return.type
 			count: 1
 			path: src/Identity/Infrastructure/Doctrine/DoctrineUserStore.php
-
-		-
-			message: '#^Method App\\Model\\CodeIntel\\SymbolInfoModel\:\:toArray\(\) should return array\{symbol\: string, definitions\: array\<int, array\{path\: string, line\: int, col\: int, endLine\: int\|null, endCol\: int\|null\}\>, references\: array\<int, array\{path\: string, line\: int, col\: int, endLine\: int\|null, endCol\: int\|null\}\>\} but returns array\{symbol\: string, definitions\: array\<array\{path\: string, line\: int, col\: int, endLine\: int\|null, endCol\: int\|null\}\>, references\: array\<array\{path\: string, line\: int, col\: int, endLine\: int\|null, endCol\: int\|null\}\>\}\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Model/CodeIntel/SymbolInfoModel.php
 
 		-
 			message: '#^Parameter \#3 \$lockVersion of method Doctrine\\Bundle\\DoctrineBundle\\Repository\\ServiceEntityRepository\<App\\Repo\\Domain\\Model\\Collaborator\>\:\:find\(\) expects int\|null, mixed given\.$#'
@@ -321,1244 +177,26 @@ parameters:
 		-
 			message: '#^Cannot cast mixed to int\.$#'
 			identifier: cast.int
-			count: 27
-			path: src/Service/Backend/BackendService.php
-
-		-
-			message: '#^Expression on left side of \?\? is always null\.$#'
-			identifier: nullCoalesce.expr
 			count: 1
-			path: src/Service/Backend/BackendService.php
-
-		-
-			message: '#^Method App\\Service\\Backend\\BackendService\:\:createRepositoryWithGit\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Backend/BackendService.php
-
-		-
-			message: '#^Method App\\Service\\Backend\\BackendService\:\:getRepo\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Backend/BackendService.php
-
-		-
-			message: '#^Method App\\Service\\Backend\\BackendService\:\:getRepoById\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Backend/BackendService.php
-
-		-
-			message: '#^Method App\\Service\\Backend\\BackendService\:\:getRepository\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Backend/BackendService.php
-
-		-
-			message: '#^Cannot call method getFilename\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: src/Service/CodeIntel/CodeIntelService.php
-
-		-
-			message: '#^Cannot call method getPathname\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/Service/CodeIntel/CodeIntelService.php
-
-		-
-			message: '#^Cannot call method getRealPath\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: src/Service/CodeIntel/CodeIntelService.php
-
-		-
-			message: '#^Cannot call method isDir\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/Service/CodeIntel/CodeIntelService.php
-
-		-
-			message: '#^Cannot call method isFile\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: src/Service/CodeIntel/CodeIntelService.php
+			path: src/UI/GitDaemon/GitDaemonCommand.php
 
 		-
 			message: '#^Cannot cast mixed to string\.$#'
 			identifier: cast.string
-			count: 2
-			path: src/Service/CodeIntel/CodeIntelService.php
-
-		-
-			message: '#^Offset ''occurrences'' on array\{relative_path\: string, occurrences\: array\<int, array\{range\: array\<int\>, symbol\: string, symbol_roles\: int\}\>, language\: string\} on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
 			count: 1
-			path: src/Service/CodeIntel/CodeIntelService.php
+			path: src/UI/GitDaemon/GitDaemonCommand.php
 
 		-
-			message: '#^Offset ''range'' on array\{range\: array\<int\>, symbol\: string, symbol_roles\: int\} on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
+			message: '#^Call to function is_array\(\) with array\{timed_out\: bool, blocked\: bool, eof\: bool, unread_bytes\: int, stream_type\: string, wrapper_type\: string, wrapper_data\: mixed, mode\: string, \.\.\.\} will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
 			count: 1
-			path: src/Service/CodeIntel/CodeIntelService.php
+			path: src/UI/GitDaemon/GitDaemonProtocol.php
 
 		-
-			message: '#^Offset ''relative_path'' on array\{relative_path\: string, occurrences\: array\<int, array\{range\: array\<int\>, symbol\: string, symbol_roles\: int\}\>, language\: string\} on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: src/Service/CodeIntel/CodeIntelService.php
-
-		-
-			message: '#^Offset ''symbol'' on array\{range\: array\<int\>, symbol\: string, symbol_roles\: int\} on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: src/Service/CodeIntel/CodeIntelService.php
-
-		-
-			message: '#^Offset ''symbol_roles'' on array\{range\: array\<int\>, symbol\: string, symbol_roles\: int\} on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: src/Service/CodeIntel/CodeIntelService.php
-
-		-
-			message: '#^Parameter \#1 \$directory of function rmdir expects string, mixed given\.$#'
+			message: '#^Parameter \#2 \$length of function fread expects int\<1, max\>, int given\.$#'
 			identifier: argument.type
 			count: 1
-			path: src/Service/CodeIntel/CodeIntelService.php
-
-		-
-			message: '#^Parameter \#1 \$filename of function unlink expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/CodeIntel/CodeIntelService.php
-
-		-
-			message: '#^Parameter \#1 \$haystack of function str_ends_with expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 2
-			path: src/Service/CodeIntel/CodeIntelService.php
-
-		-
-			message: '#^Parameter \#1 \$string of function substr expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/CodeIntel/CodeIntelService.php
-
-		-
-			message: '#^Parameter \#1 \.\.\.\$arrays of function array_merge expects array, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/CodeIntel/CodeIntelService.php
-
-		-
-			message: '#^Parameter \#2 \.\.\.\$arrays of function array_merge expects array, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/CodeIntel/CodeIntelService.php
-
-		-
-			message: '#^Method App\\Service\\CodeIntel\\ScipProtobufParser\:\:encodeIndex\(\) has parameter \$documents with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/CodeIntel/ScipProtobufParser.php
-
-		-
-			message: '#^Parameter \#1 \$doc of method App\\Service\\CodeIntel\\ScipProtobufParser\:\:encodeDocument\(\) expects array\{relative_path\?\: string, path\?\: string, occurrences\?\: array\<int, App\\Model\\CodeIntel\\OccurrenceModel\|array\{range\?\: array\<int\>, symbol\?\: string, symbol_roles\?\: int\}\>, language\?\: string\}, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/CodeIntel/ScipProtobufParser.php
-
-		-
-			message: '#^Right side of && is always true\.$#'
-			identifier: booleanAnd.rightAlwaysTrue
-			count: 1
-			path: src/Service/CodeIntel/ScipProtobufParser.php
-
-		-
-			message: '#^Parameter \#1 \$callback of function array_map expects \(callable\(mixed\)\: mixed\)\|null, ''trim'' given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Parameter \#1 \.\.\.\$arrays of function array_merge expects array, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>db\[''data_source''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>db\[''driver''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>git\[''idle_timeout''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>git\[''listen_addr''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>git\[''max_connections''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>git\[''max_timeout''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>git\[''public_url''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>http\[''listen_addr''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>http\[''public_url''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>jobs\[''mirror_pull''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>log\[''format''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>log\[''time_format''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>ssh\[''client_key_path''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>ssh\[''client_strict_host_key_checking''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>ssh\[''idle_timeout''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>ssh\[''key_path''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>ssh\[''listen_addr''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>ssh\[''max_timeout''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>ssh\[''public_url''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Part \$this\-\>stats\[''listen_addr''\] \(mixed\) of encapsed string cannot be cast to string\.$#'
-			identifier: encapsedStringPart.nonString
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Property App\\Service\\Config\\ServerConfig\:\:\$db \(array\<string, mixed\>\) does not accept array\<mixed\>\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Property App\\Service\\Config\\ServerConfig\:\:\$git \(array\<string, mixed\>\) does not accept array\<mixed\>\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Property App\\Service\\Config\\ServerConfig\:\:\$http \(array\<string, mixed\>\) does not accept array\<mixed\>\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Property App\\Service\\Config\\ServerConfig\:\:\$jobs \(array\<string, mixed\>\) does not accept array\<mixed\>\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Property App\\Service\\Config\\ServerConfig\:\:\$lfs \(array\<string, mixed\>\) does not accept array\<mixed\>\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Property App\\Service\\Config\\ServerConfig\:\:\$log \(array\<string, mixed\>\) does not accept array\<mixed\>\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Property App\\Service\\Config\\ServerConfig\:\:\$ssh \(array\<string, mixed\>\) does not accept array\<mixed\>\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Property App\\Service\\Config\\ServerConfig\:\:\$stats \(array\<string, mixed\>\) does not accept array\<mixed\>\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Strict comparison using \!\=\= between null and string will always evaluate to true\.$#'
-			identifier: notIdentical.alwaysTrue
-			count: 1
-			path: src/Service/Config/ServerConfig.php
-
-		-
-			message: '#^Method App\\Service\\Daemon\\GitDaemonService\:\:buildPacket\(\) has parameter \$extraParams with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Daemon/GitDaemonService.php
-
-		-
-			message: '#^Method App\\Service\\Daemon\\GitDaemonService\:\:executeService\(\) has parameter \$extraParams with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Daemon/GitDaemonService.php
-
-		-
-			message: '#^Offset 0 on non\-empty\-list\<string\> on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: src/Service/Daemon/GitDaemonService.php
-
-		-
-			message: '#^Parameter \#2 \$array of function implode expects array\<string\>, array given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Daemon/GitDaemonService.php
-
-		-
-			message: '#^Parameter \#2 \$length of function fread expects int\<1, max\>, float\|int\<1, max\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Daemon/GitDaemonService.php
-
-		-
-			message: '#^Parameter \#4 \$extraParams of static method App\\Service\\Daemon\\GitDaemonService\:\:buildEnvironment\(\) expects array\<int\<0, max\>\|string, string\>, array given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Daemon/GitDaemonService.php
-
-		-
-			message: '#^Parameter \#5 \$env_vars of function proc_open expects array\<string, mixed\>\|null, array\<mixed\> given\.$#'
-			identifier: argument.type
-			count: 2
-			path: src/Service/Daemon/GitDaemonService.php
-
-		-
-			message: '#^Binary operation "\." between non\-falsy\-string and mixed results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/Service/Database/DatabaseManager.php
-
-		-
-			message: '#^Cannot access offset ''max_version'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 2
-			path: src/Service/Database/DatabaseManager.php
-
-		-
-			message: '#^Cannot call method fetchAll\(\) on PDOStatement\|false\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/Service/Database/DatabaseManager.php
-
-		-
-			message: '#^Cannot call method fetchColumn\(\) on PDOStatement\|false\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/Service/Database/DatabaseManager.php
-
-		-
-			message: '#^Cannot cast mixed to int\.$#'
-			identifier: cast.int
-			count: 2
-			path: src/Service/Database/DatabaseManager.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 1
-			path: src/Service/Database/DatabaseManager.php
-
-		-
-			message: '#^Method App\\Service\\Database\\DatabaseManager\:\:__construct\(\) has parameter \$options with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Database/DatabaseManager.php
-
-		-
-			message: '#^Method App\\Service\\Database\\DatabaseManager\:\:getTableColumns\(\) should return list\<string\> but returns array\.$#'
-			identifier: return.type
-			count: 2
-			path: src/Service/Database/DatabaseManager.php
-
-		-
-			message: '#^PHPDoc tag @return with type int is incompatible with native type void\.$#'
-			identifier: return.phpDocType
-			count: 1
-			path: src/Service/Database/DatabaseManager.php
-
-		-
-			message: '#^Parameter \#2 \.\.\.\$values of function sprintf expects bool\|float\|int\|string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Database/DatabaseManager.php
-
-		-
-			message: '#^Parameter \#3 \.\.\.\$values of function sprintf expects bool\|float\|int\|string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Database/DatabaseManager.php
-
-		-
-			message: '#^Property App\\Service\\Database\\DatabaseManager\:\:\$options type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Database/DatabaseManager.php
-
-		-
-			message: '#^Strict comparison using \!\=\= between null and mixed will always evaluate to true\.$#'
-			identifier: notIdentical.alwaysTrue
-			count: 1
-			path: src/Service/Database/DatabaseManager.php
-
-		-
-			message: '#^Cannot access offset ''created_at'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 2
-			path: src/Service/Lfs/LfsStorageService.php
-
-		-
-			message: '#^Cannot access offset ''id'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 2
-			path: src/Service/Lfs/LfsStorageService.php
-
-		-
-			message: '#^Cannot access offset ''owner_name'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 2
-			path: src/Service/Lfs/LfsStorageService.php
-
-		-
-			message: '#^Cannot access offset ''path'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 2
-			path: src/Service/Lfs/LfsStorageService.php
-
-		-
-			message: '#^Cannot access offset ''user_id'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Service/Lfs/LfsStorageService.php
-
-		-
-			message: '#^Cannot cast mixed to int\.$#'
-			identifier: cast.int
-			count: 2
-			path: src/Service/Lfs/LfsStorageService.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 7
-			path: src/Service/Lfs/LfsStorageService.php
-
-		-
-			message: '#^Method App\\Service\\Lfs\\LfsStorageService\:\:createLock\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Lfs/LfsStorageService.php
-
-		-
-			message: '#^Method App\\Service\\Lfs\\LfsStorageService\:\:deleteLock\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Lfs/LfsStorageService.php
-
-		-
-			message: '#^Method App\\Service\\Lfs\\LfsStorageService\:\:handleBatchRequest\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Lfs/LfsStorageService.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 1
-			path: src/Service/Security/JwtManager.php
-
-		-
-			message: '#^Method App\\Service\\Security\\JwtManager\:\:getClaims\(\) should return array\<string, mixed\>\|null but returns array\<mixed, mixed\>\|null\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Service/Security/JwtManager.php
-
-		-
-			message: '#^Method App\\Service\\Security\\JwtManager\:\:verifyToken\(\) should return array\<string, mixed\>\|null but returns array\<mixed\>\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Service/Security/JwtManager.php
-
-		-
-			message: '#^Parameter \#1 \$signature of function sodium_crypto_sign_verify_detached expects non\-empty\-string, string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Security/JwtManager.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 2
-			path: src/Service/Security/SsrfValidator.php
-
-		-
-			message: '#^Access to an undefined property App\\Model\\PullRequestModel\:\:\$baseRef\.$#'
-			identifier: property.notFound
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Access to an undefined property App\\Model\\PullRequestModel\:\:\$headRef\.$#'
-			identifier: property.notFound
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Cannot cast mixed to int\.$#'
-			identifier: cast.int
-			count: 2
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 8
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Match arm comparison between ''del'' and ''del'' is always true\.$#'
-			identifier: match.alwaysTrue
-			count: 2
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Method App\\Service\\Ssh\\SshCommandDispatcher\:\:requireRepo\(\) should return array\<string, mixed\> but returns array\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Missing parameter \$id \(int\|null\) in call to App\\Model\\UserModel constructor\.$#'
-			identifier: argument.missing
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Parameter \#1 \$args of method App\\Service\\Ssh\\SshCommandDispatcher\:\:handleCollabCommand\(\) expects array\<string\>, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Parameter \#1 \$args of method App\\Service\\Ssh\\SshCommandDispatcher\:\:handleJwtCommand\(\) expects array\<string\>, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Parameter \#1 \$args of method App\\Service\\Ssh\\SshCommandDispatcher\:\:handlePrCommand\(\) expects array\<string\>, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Parameter \#1 \$args of method App\\Service\\Ssh\\SshCommandDispatcher\:\:handlePubkeyCommand\(\) expects array\<string\>, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Parameter \#1 \$args of method App\\Service\\Ssh\\SshCommandDispatcher\:\:handleRepoCommand\(\) expects array\<string\>, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Parameter \#1 \$args of method App\\Service\\Ssh\\SshCommandDispatcher\:\:handleSettingsCommand\(\) expects array\<string\>, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Parameter \#1 \$args of method App\\Service\\Ssh\\SshCommandDispatcher\:\:handleTokenCommand\(\) expects array\<string\>, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Parameter \#1 \$args of method App\\Service\\Ssh\\SshCommandDispatcher\:\:handleUserCommand\(\) expects array\<string\>, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Parameter \#1 \$args of method App\\Service\\Ssh\\SshCommandDispatcher\:\:handleUsernameCommand\(\) expects array\<string\>, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Parameter \#2 \$refA of method App\\Repo\\Infrastructure\\Git\\GitRepositoryReader\:\:getDiff\(\) expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Parameter \#2 \.\.\.\$values of function sprintf expects bool\|float\|int\|string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 6
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Parameter \#3 \$refB of method App\\Repo\\Infrastructure\\Git\\GitRepositoryReader\:\:getDiff\(\) expects string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Parameter \#3 \.\.\.\$values of function sprintf expects bool\|float\|int\|string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Parameter \#4 \$events of method App\\Service\\Backend\\BackendService\:\:createWebhook\(\) expects list\<int\|string\>, array\<int\<0, max\>, non\-falsy\-string\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Parameter \#5 \.\.\.\$values of function sprintf expects bool\|float\|int\|string\|null, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Property App\\Model\\PullRequestModel\:\:\$baseBranch \(string\) on left side of \?\? is not nullable\.$#'
-			identifier: nullCoalesce.property
-			count: 3
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Property App\\Model\\PullRequestModel\:\:\$baseCommit \(string\) on left side of \?\? is not nullable\.$#'
-			identifier: nullCoalesce.property
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Property App\\Model\\PullRequestModel\:\:\$headBranch \(string\) on left side of \?\? is not nullable\.$#'
-			identifier: nullCoalesce.property
-			count: 3
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Property App\\Model\\PullRequestModel\:\:\$headCommit \(string\) on left side of \?\? is not nullable\.$#'
-			identifier: nullCoalesce.property
-			count: 1
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Property App\\Model\\PullRequestModel\:\:\$state \(string\) on left side of \?\? is not nullable\.$#'
-			identifier: nullCoalesce.property
-			count: 2
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Property App\\Repo\\Domain\\Git\\Refs\:\:\$currentBranch \(string\) on left side of \?\? is not nullable\.$#'
-			identifier: nullCoalesce.property
-			count: 3
-			path: src/Service/Ssh/SshCommandDispatcher.php
-
-		-
-			message: '#^Variable \$type on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.variable
-			count: 1
-			path: src/Service/Ssh/SshKeyComparator.php
-
-		-
-			message: '#^Cannot access offset ''access_level'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 2
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot access offset ''author_username'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot access offset ''body'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot access offset ''commit_sha'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot access offset ''created_at'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot access offset ''file_path'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot access offset ''id'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot access offset ''line'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot access offset ''next_num'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot access offset ''pull_request_id'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot access offset ''updated_at'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot access offset ''user_id'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 2
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot access offset ''username'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot access offset ''value'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot call method fetchAll\(\) on PDOStatement\|false\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot cast mixed to int\.$#'
-			identifier: cast.int
-			count: 17
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 31
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Method App\\Service\\Store\\DataStore\:\:findRepoById\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Method App\\Service\\Store\\DataStore\:\:findRepoById\(\) should return array\|null but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Method App\\Service\\Store\\DataStore\:\:findRepoByName\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Method App\\Service\\Store\\DataStore\:\:findRepoByName\(\) should return array\|null but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Method App\\Service\\Store\\DataStore\:\:hydratePullRequest\(\) has parameter \$row with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Method App\\Service\\Store\\DataStore\:\:hydrateUser\(\) has parameter \$row with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Method App\\Service\\Store\\DataStore\:\:hydrateWebhook\(\) has parameter \$row with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Method App\\Service\\Store\\DataStore\:\:listAccessTokens\(\) should return list\<array\<string, mixed\>\> but returns array\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Method App\\Service\\Store\\DataStore\:\:listDeliveries\(\) should return list\<array\> but returns array\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Method App\\Service\\Store\\DataStore\:\:listForks\(\) should return list\<array\> but returns array\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Method App\\Service\\Store\\DataStore\:\:listPublicKeys\(\) should return list\<string\> but returns array\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Method App\\Service\\Store\\DataStore\:\:listRepos\(\) should return list\<array\> but returns array\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Parameter \#1 \$row of method App\\Service\\Store\\DataStore\:\:hydratePullRequest\(\) expects array, mixed given\.$#'
-			identifier: argument.type
-			count: 3
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Parameter \#1 \$row of method App\\Service\\Store\\DataStore\:\:hydrateUser\(\) expects array, mixed given\.$#'
-			identifier: argument.type
-			count: 4
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Parameter \#1 \$row of method App\\Service\\Store\\DataStore\:\:hydrateWebhook\(\) expects array, mixed given\.$#'
-			identifier: argument.type
-			count: 2
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Parameter \$events of class App\\Model\\WebhookModel constructor expects list\<int\|string\>, array given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Store/DataStore.php
-
-		-
-			message: '#^Cannot access offset 0 on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/Service/Webhook/WebhookDispatcher.php
-
-		-
-			message: '#^Cannot cast mixed to int\.$#'
-			identifier: cast.int
-			count: 2
-			path: src/Service/Webhook/WebhookDispatcher.php
-
-		-
-			message: '#^Parameter \#2 \$array of function implode expects array\<string\>, array\<mixed, mixed\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Webhook/WebhookDispatcher.php
-
-		-
-			message: '#^Parameter \#2 \$subject of function preg_match expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Service/Webhook/WebhookDispatcher.php
-
-		-
-			message: '#^Using nullsafe property access "\?\-\>username" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
-			identifier: nullsafe.neverNull
-			count: 2
-			path: src/Service/Webhook/WebhookDispatcher.php
-
-		-
-			message: '#^Parameter \#2 \$badges of class CodesSh\\Tui\\Component\\HeaderComponent constructor expects array\<string, string\>, array\<int, string\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/UI/Tui/Page/AdminPage.php
-
-		-
-			message: '#^Access to an undefined property App\\Model\\PullRequestModel\:\:\$description\.$#'
-			identifier: property.notFound
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Access to an undefined property App\\Model\\PullRequestModel\:\:\$status\.$#'
-			identifier: property.notFound
-			count: 4
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Access to an undefined property App\\Model\\UserModel\:\:\$email\.$#'
-			identifier: property.notFound
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Access to an undefined property App\\Model\\UserModel\:\:\$name\.$#'
-			identifier: property.notFound
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Binary operation "\." between ''Status\: '' and mixed results in an error\.$#'
-			identifier: binaryOp.invalid
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Call to an undefined method CodesSh\\Tui\\Component\\EditorComponent\:\:getValue\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Call to an undefined method CodesSh\\Tui\\Component\\HeaderComponent\:\:setBadges\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Cannot call method format\(\) on DateTimeImmutable\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 8
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Method CodesSh\\Tui\\Component\\CodeViewerComponent\:\:setCode\(\) invoked with 2 parameters, 1 required\.$#'
-			identifier: arguments.count
-			count: 2
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Missing parameter \$body \(string\) in call to method App\\Service\\Backend\\BackendService\:\:createPullRequest\(\)\.$#'
-			identifier: argument.missing
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Offset ''commit'' on array\{id\: string, label\: string, data\: mixed\} in isset\(\) does not exist\.$#'
-			identifier: isset.offset
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Offset ''id'' on array\{id\: string, label\: string, data\: mixed\} on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
-			count: 2
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Offset ''path'' does not exist on array\{id\: string, label\: string, data\: mixed\}\.$#'
-			identifier: offsetAccess.notFound
-			count: 3
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Offset ''pr'' on array\{id\: string, label\: string, data\: mixed\} in isset\(\) does not exist\.$#'
-			identifier: isset.offset
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Offset ''type'' on array\{id\: string, label\: string, data\: mixed\} on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 3
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Parameter \#1 \$path of method App\\UI\\Tui\\Page\\RepoPage\:\:openFile\(\) expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Parameter \#1 \$subpath of method App\\UI\\Tui\\Page\\RepoPage\:\:loadFiles\(\) expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Parameter \#2 \$array of function implode expects array\<string\>, list\<mixed\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Parameter \#2 \$badges of class CodesSh\\Tui\\Component\\HeaderComponent constructor expects array\<string, string\>, array\<int, string\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Parameter \#2 \$content of method App\\UI\\Tui\\Page\\RepoPage\:\:saveFileCommit\(\) expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Parameter \$authorEmail of method App\\Repo\\Infrastructure\\Git\\GitRepositoryWriter\:\:writeFile\(\) expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Parameter \$authorName of method App\\Repo\\Infrastructure\\Git\\GitRepositoryWriter\:\:writeFile\(\) expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Property App\\UI\\Tui\\Page\\RepoPage\:\:\$isEditingReadme is never read, only written\.$#'
-			identifier: property.onlyWritten
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Result of && is always false\.$#'
-			identifier: booleanAnd.alwaysFalse
-			count: 4
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Right side of \|\| is always false\.$#'
-			identifier: booleanOr.rightAlwaysFalse
-			count: 2
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Strict comparison using \!\=\= between '''' and ''tree'' will always evaluate to true\.$#'
-			identifier: notIdentical.alwaysTrue
-			count: 2
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between '''' and ''tree'' will always evaluate to false\.$#'
-			identifier: identical.alwaysFalse
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Unknown parameter \$description in call to method App\\Service\\Backend\\BackendService\:\:createPullRequest\(\)\.$#'
-			identifier: argument.unknown
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Using nullsafe property access "\?\-\>email" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
-			identifier: nullsafe.neverNull
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
-			identifier: nullsafe.neverNull
-			count: 1
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Using nullsafe property access "\?\-\>username" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
-			identifier: nullsafe.neverNull
-			count: 6
-			path: src/UI/Tui/Page/RepoPage.php
-
-		-
-			message: '#^Cannot call method init\(\) on App\\UI\\Tui\\Page\\AdminPage\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/UI/Tui/Page/RootUI.php
-
-		-
-			message: '#^Cannot call method init\(\) on App\\UI\\Tui\\Page\\RepoPage\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/UI/Tui/Page/RootUI.php
-
-		-
-			message: '#^Property App\\UI\\Tui\\Page\\RootUI\:\:\$activePage \(CodesSh\\Tui\\Component\\ComponentInterface\) does not accept App\\UI\\Tui\\Page\\AdminPage\|null\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: src/UI/Tui/Page/RootUI.php
-
-		-
-			message: '#^Property App\\UI\\Tui\\Page\\RootUI\:\:\$activePage \(CodesSh\\Tui\\Component\\ComponentInterface\) does not accept App\\UI\\Tui\\Page\\RepoPage\|null\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: src/UI/Tui/Page/RootUI.php
-
-		-
-			message: '#^Call to an undefined method App\\Service\\Backend\\BackendService\:\:forkRepository\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: src/UI/Tui/Page/SelectionPage.php
-
-		-
-			message: '#^Cannot access offset ''repo'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: src/UI/Tui/Page/SelectionPage.php
-
-		-
-			message: '#^Cannot cast mixed to int\.$#'
-			identifier: cast.int
-			count: 3
-			path: src/UI/Tui/Page/SelectionPage.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 12
-			path: src/UI/Tui/Page/SelectionPage.php
-
-		-
-			message: '#^Offset ''id'' on array\{id\: string, label\: string, data\: mixed\} on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: src/UI/Tui/Page/SelectionPage.php
-
-		-
-			message: '#^Offset ''repoName'' on array\{id\: string, label\: string, data\: mixed\} on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: src/UI/Tui/Page/SelectionPage.php
-
-		-
-			message: '#^Offset 0 on non\-empty\-list\<string\> on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: src/UI/Tui/Page/SelectionPage.php
-
-		-
-			message: '#^Parameter \#1 \$row of method App\\UI\\Tui\\Page\\SelectionPage\:\:createRepoItemFromRow\(\) expects array\<string, mixed\>, array given\.$#'
-			identifier: argument.type
-			count: 2
-			path: src/UI/Tui/Page/SelectionPage.php
-
-		-
-			message: '#^Using nullsafe property access "\?\-\>isAdmin" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
-			identifier: nullsafe.neverNull
-			count: 1
-			path: src/UI/Tui/Page/SelectionPage.php
-
-		-
-			message: '#^Using nullsafe property access "\?\-\>publicKeys" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
-			identifier: nullsafe.neverNull
-			count: 1
-			path: src/UI/Tui/Page/SelectionPage.php
-
-		-
-			message: '#^Using nullsafe property access "\?\-\>username" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
-			identifier: nullsafe.neverNull
-			count: 1
-			path: src/UI/Tui/Page/SelectionPage.php
+			path: src/UI/GitDaemon/GitDaemonProtocol.php
 
 		-
 			message: '#^Cannot cast mixed to int\.$#'
@@ -1579,6 +217,192 @@ parameters:
 			path: src/UI/Tui/Render/TermstrapRenderer.php
 
 		-
+			message: '#^Argument of an invalid type mixed supplied for foreach, only iterables are supported\.$#'
+			identifier: foreach.nonIterable
+			count: 1
+			path: tests/Functional/Smoke/WebhookPushSmokeTest.php
+
+		-
+			message: '#^Cannot call method getMessage\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: tests/Functional/Smoke/WebhookPushSmokeTest.php
+
+		-
+			message: '#^Cannot cast mixed to int\.$#'
+			identifier: cast.int
+			count: 1
+			path: tests/Functional/Smoke/WebhookPushSmokeTest.php
+
+		-
+			message: '#^Method Symfony\\Component\\Messenger\\Transport\\Receiver\\ReceiverInterface\:\:get\(\) invoked with 1 parameter, 0 required\.$#'
+			identifier: arguments.count
+			count: 1
+			path: tests/Functional/Smoke/WebhookPushSmokeTest.php
+
+		-
+			message: '#^Service "test\.webhook_store" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Smoke/WebhookPushSmokeTest.php
+
+		-
+			message: '#^Parameter \#1 \$command of class Symfony\\Component\\Console\\Tester\\CommandTester constructor expects \(callable\(\)\: mixed\)\|Symfony\\Component\\Console\\Command\\Command, object given\.$#'
+			identifier: argument.type
+			count: 10
+			path: tests/Functional/Ssh/PullRequestCommandTest.php
+
+		-
+			message: '#^Service "test\.pr_close_command" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Ssh/PullRequestCommandTest.php
+
+		-
+			message: '#^Service "test\.pr_comment_command" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Ssh/PullRequestCommandTest.php
+
+		-
+			message: '#^Service "test\.pr_create_command" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Ssh/PullRequestCommandTest.php
+
+		-
+			message: '#^Service "test\.pr_delete_command" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Ssh/PullRequestCommandTest.php
+
+		-
+			message: '#^Service "test\.pr_diff_command" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Ssh/PullRequestCommandTest.php
+
+		-
+			message: '#^Service "test\.pr_list_command" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Ssh/PullRequestCommandTest.php
+
+		-
+			message: '#^Service "test\.pr_merge_command" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Ssh/PullRequestCommandTest.php
+
+		-
+			message: '#^Service "test\.pr_reopen_command" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Ssh/PullRequestCommandTest.php
+
+		-
+			message: '#^Service "test\.pr_view_command" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Ssh/PullRequestCommandTest.php
+
+		-
+			message: '#^Service "test\.ssh_session" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Ssh/PullRequestCommandTest.php
+
+		-
+			message: '#^Parameter \#1 \$command of class Symfony\\Component\\Console\\Tester\\CommandTester constructor expects \(callable\(\)\: mixed\)\|Symfony\\Component\\Console\\Command\\Command, object given\.$#'
+			identifier: argument.type
+			count: 5
+			path: tests/Functional/Ssh/WebhookCommandTest.php
+
+		-
+			message: '#^Service "test\.ssh_session" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Ssh/WebhookCommandTest.php
+
+		-
+			message: '#^Service "test\.webhook_create_command" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Ssh/WebhookCommandTest.php
+
+		-
+			message: '#^Service "test\.webhook_delete_command" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Ssh/WebhookCommandTest.php
+
+		-
+			message: '#^Service "test\.webhook_list_command" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Ssh/WebhookCommandTest.php
+
+		-
+			message: '#^Call to an undefined method object\:\:get\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Functional/Tui/TuiFunctionalTest.php
+
+		-
+			message: '#^Cannot call method isMerged\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/Functional/Tui/TuiFunctionalTest.php
+
+		-
+			message: '#^Cannot call method number\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/Functional/Tui/TuiFunctionalTest.php
+
+		-
+			message: '#^Service "test\.open_pull_request" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Tui/TuiFunctionalTest.php
+
+		-
+			message: '#^Service "test\.pull_request_query" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Functional/Tui/TuiFunctionalTest.php
+
+		-
+			message: '#^Trying to invoke object but it might not be a callable\.$#'
+			identifier: callable.nonCallable
+			count: 1
+			path: tests/Functional/Tui/TuiFunctionalTest.php
+
+		-
+			message: '#^Parameter \#1 \$kernel of class Symfony\\Bundle\\FrameworkBundle\\Console\\Application constructor expects Symfony\\Component\\HttpKernel\\KernelInterface, Symfony\\Component\\HttpKernel\\KernelInterface\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Functional/UI/Ssh/SshCliIsolationTest.php
+
+		-
+			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with int will always evaluate to true\.$#'
+			identifier: method.alreadyNarrowedType
+			count: 2
+			path: tests/Functional/UI/Ssh/SshEntrypointCommandTest.php
+
+		-
+			message: '#^Parameter \#1 \$kernel of class Symfony\\Bundle\\FrameworkBundle\\Console\\Application constructor expects Symfony\\Component\\HttpKernel\\KernelInterface, Symfony\\Component\\HttpKernel\\KernelInterface\|null given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/Functional/UI/Ssh/SshEntrypointCommandTest.php
+
+		-
+			message: '#^Property App\\Tests\\Functional\\UI\\Ssh\\SshEntrypointCommandTest\:\:\$bobFp is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: tests/Functional/UI/Ssh/SshEntrypointCommandTest.php
+
+		-
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with true will always evaluate to true\.$#'
 			identifier: method.alreadyNarrowedType
 			count: 1
@@ -1595,6 +419,60 @@ parameters:
 			identifier: symfonyContainer.serviceNotFound
 			count: 1
 			path: tests/Integration/Access/AccessGuardTest.php
+
+		-
+			message: '#^Cannot call method getRealPath\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: tests/Integration/CodeIntel/CodeIntelTestCase.php
+
+		-
+			message: '#^Cannot call method isDir\(\) on mixed\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/Integration/CodeIntel/CodeIntelTestCase.php
+
+		-
+			message: '#^Parameter \#1 \$directory of function rmdir expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Integration/CodeIntel/CodeIntelTestCase.php
+
+		-
+			message: '#^Parameter \#1 \$filename of function unlink expects string, mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Integration/CodeIntel/CodeIntelTestCase.php
+
+		-
+			message: '#^Parameter \#1 \$command of class Symfony\\Component\\Process\\Process constructor expects array\<string\>, array given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Integration/CodeIntel/IndexCommitHandlerTest.php
+
+		-
+			message: '#^Call to function assert\(\) with true will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: tests/Integration/GitDaemon/GitDaemonProtocolTest.php
+
+		-
+			message: '#^Instanceof between App\\Identity\\Infrastructure\\Doctrine\\DoctrineUserStore and App\\Identity\\Domain\\UserStore will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: tests/Integration/GitDaemon/GitDaemonProtocolTest.php
+
+		-
+			message: '#^Instanceof between App\\Repo\\Infrastructure\\Doctrine\\DoctrineRepoStore and App\\Repo\\Domain\\RepoStore will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: tests/Integration/GitDaemon/GitDaemonProtocolTest.php
+
+		-
+			message: '#^Service "test\.access_guard" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Integration/GitDaemon/GitDaemonProtocolTest.php
 
 		-
 			message: '#^Property App\\Tests\\Integration\\Identity\\AccessTokenTest\:\:\$authToken \(App\\Identity\\Application\\AuthenticateAccessToken\) does not accept object\.$#'
@@ -1789,6 +667,30 @@ parameters:
 			path: tests/Integration/Identity/UserLifecycleTest.php
 
 		-
+			message: '#^Property App\\Tests\\Integration\\PullRequest\\MergePullRequestTest\:\:\$mergePr \(App\\PullRequest\\Application\\MergePullRequest\) does not accept object\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: tests/Integration/PullRequest/MergePullRequestTest.php
+
+		-
+			message: '#^Property App\\Tests\\Integration\\PullRequest\\MergePullRequestTest\:\:\$openPr \(App\\PullRequest\\Application\\OpenPullRequest\) does not accept object\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: tests/Integration/PullRequest/MergePullRequestTest.php
+
+		-
+			message: '#^Service "test\.merge_pull_request" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Integration/PullRequest/MergePullRequestTest.php
+
+		-
+			message: '#^Service "test\.open_pull_request" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Integration/PullRequest/MergePullRequestTest.php
+
+		-
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsArray\(\) with array\<string\> will always evaluate to true\.$#'
 			identifier: method.alreadyNarrowedType
 			count: 1
@@ -1807,18 +709,6 @@ parameters:
 			path: tests/Integration/Repo/Git/GitRepositoryWriterTest.php
 
 		-
-			message: '#^Cannot cast mixed to int\.$#'
-			identifier: cast.int
-			count: 2
-			path: tests/Integration/Repo/Git/HookInstallerTest.php
-
-		-
-			message: '#^Parameter \#1 \$webhookId of method App\\Service\\Store\\DataStore\:\:listDeliveries\(\) expects int, int\|null given\.$#'
-			identifier: argument.type
-			count: 2
-			path: tests/Integration/Repo/Git/HookInstallerTest.php
-
-		-
 			message: '#^Property App\\Tests\\Integration\\Repo\\RepoUseCaseTestCase\:\:\$accessGuard \(App\\Access\\Application\\AccessGuard\) does not accept object\.$#'
 			identifier: assign.propertyType
 			count: 1
@@ -1831,253 +721,25 @@ parameters:
 			path: tests/Integration/Repo/RepoUseCaseTestCase.php
 
 		-
-			message: '#^Cannot call method fetchAll\(\) on PDOStatement\|false\.$#'
-			identifier: method.nonObject
-			count: 3
-			path: tests/Service/Backend/BackendAndDbTest.php
-
-		-
-			message: '#^Cannot cast mixed to int\.$#'
-			identifier: cast.int
-			count: 4
-			path: tests/Service/Backend/BackendAndDbTest.php
-
-		-
-			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertStringContainsString\(\) expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 2
-			path: tests/Service/Backend/BackendAndDbTest.php
-
-		-
-			message: '#^Cannot call method getRealPath\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: tests/Service/CodeIntel/CodeIntelServiceTest.php
-
-		-
-			message: '#^Cannot call method isDir\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: tests/Service/CodeIntel/CodeIntelServiceTest.php
-
-		-
-			message: '#^Parameter \#1 \$command of class Symfony\\Component\\Process\\Process constructor expects array\<string\>, array given\.$#'
-			identifier: argument.type
-			count: 1
-			path: tests/Service/CodeIntel/CodeIntelServiceTest.php
-
-		-
-			message: '#^Parameter \#1 \$directory of function rmdir expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: tests/Service/CodeIntel/CodeIntelServiceTest.php
-
-		-
-			message: '#^Parameter \#1 \$filename of function unlink expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: tests/Service/CodeIntel/CodeIntelServiceTest.php
-
-		-
-			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsString\(\) with string will always evaluate to true\.$#'
-			identifier: method.alreadyNarrowedType
-			count: 4
-			path: tests/Service/Ssh/SshDispatcherTest.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 1
-			path: tests/Service/Ssh/SshDispatcherTest.php
-
-		-
-			message: '#^Cannot access offset ''Authorization'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 2
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Cannot access offset ''actions'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 6
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Cannot access offset ''code'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 4
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Cannot access offset ''download'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Cannot access offset ''error'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 5
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Cannot access offset ''header'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 2
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Cannot access offset ''href'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 3
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Cannot access offset ''message'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Cannot access offset ''name'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Cannot access offset ''oid'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 3
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Cannot access offset ''size'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 1
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Cannot access offset ''upload'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 2
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Cannot access offset ''verify'' on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 2
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Cannot access offset 0 on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 8
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Cannot access offset 1 on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 4
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Cannot cast mixed to int\.$#'
-			identifier: cast.int
-			count: 1
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Offset ''lock'' might not exist on array\{status\: 201, lock\?\: array, message\?\: string\}\.$#'
-			identifier: offsetAccess.notFound
-			count: 2
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Offset ''message'' might not exist on array\{status\: 409, lock\?\: array, message\?\: string\}\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Offset ''password'' might not exist on array\{type\: ''basic'', username\: ''bob'', password\?\: string, token\?\: string\}\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Offset ''token'' might not exist on array\{type\: ''bearer'', username\?\: string, password\?\: string, token\?\: string\}\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Offset ''token'' might not exist on array\{type\: ''token'', username\?\: string, password\?\: string, token\?\: string\}\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Offset ''type'' might not exist on array\{type\: ''basic''\|''bearer''\|''token'', username\?\: string, password\?\: string, token\?\: string\}\|null\.$#'
-			identifier: offsetAccess.notFound
-			count: 3
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Offset ''username'' might not exist on array\{type\: ''basic'', username\?\: string, password\?\: string, token\?\: string\}\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Parameter \#1 \$prefix of method PHPUnit\\Framework\\Assert\:\:assertStringStartsWith\(\) expects non\-empty\-string, string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Parameter \#2 \$array of method PHPUnit\\Framework\\Assert\:\:assertArrayHasKey\(\) expects array\<mixed\>\|ArrayAccess\<\(int\|string\), mixed\>, mixed given\.$#'
-			identifier: argument.type
-			count: 4
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Parameter \#2 \$array of method PHPUnit\\Framework\\Assert\:\:assertArrayNotHasKey\(\) expects array\<mixed\>\|ArrayAccess\<\(int\|string\), mixed\>, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertCount\(\) expects Countable\|iterable, mixed given\.$#'
-			identifier: argument.type
-			count: 3
-			path: tests/Service/Web/GitHttpAndLfsTest.php
-
-		-
-			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertTrue\(\) with true will always evaluate to true\.$#'
-			identifier: method.alreadyNarrowedType
-			count: 1
-			path: tests/Tui/Component/SelectorComponentTest.php
-
-		-
-			message: '#^Offset ''label'' on array\{id\: string, label\: ''apple'', data\: mixed\} on left side of \?\? always exists and is not nullable\.$#'
+			message: '#^Offset ''method'' on array\{method\: string, url\: string, headers\: mixed, body\: mixed\} on left side of \?\? always exists and is not nullable\.$#'
 			identifier: nullCoalesce.offset
 			count: 1
-			path: tests/Tui/Component/SelectorComponentTest.php
+			path: tests/Integration/Webhook/WebhookDeliveryTest.php
 
 		-
-			message: '#^Parameter \#2 \$string of function explode expects string, string\|null given\.$#'
-			identifier: argument.type
+			message: '#^Offset ''url'' on array\{method\: ''POST'', url\: string, headers\: mixed, body\: mixed\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
 			count: 1
-			path: tests/Tui/Component/SelectorComponentTest.php
+			path: tests/Integration/Webhook/WebhookDeliveryTest.php
 
 		-
-			message: '#^Access to an undefined property CodesSh\\Tui\\Event\\InputEvent\:\:\$key\.$#'
-			identifier: property.notFound
+			message: '#^Property App\\Tests\\Integration\\Webhook\\WebhookDeliveryTest\:\:\$webhookStore \(App\\Webhook\\Domain\\WebhookStore\) does not accept object\.$#'
+			identifier: assign.propertyType
 			count: 1
-			path: tests/Tui/Keymap/ShortcutsTest.php
+			path: tests/Integration/Webhook/WebhookDeliveryTest.php
 
 		-
-			message: '#^Offset ''id'' might not exist on array\{id\: string, label\: string, data\: mixed\}\|null\.$#'
-			identifier: offsetAccess.notFound
+			message: '#^Service "test\.webhook_store" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
 			count: 1
-			path: tests/Tui/Keymap/ShortcutsTest.php
+			path: tests/Integration/Webhook/WebhookDeliveryTest.php

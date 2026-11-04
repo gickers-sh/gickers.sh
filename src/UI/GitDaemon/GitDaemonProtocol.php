@@ -9,6 +9,7 @@ use App\Access\Domain\AccessLevel;
 use App\Repo\Domain\RepoName;
 use App\Shared\Infrastructure\Config\ServerSettings;
 use App\Shared\Infrastructure\Git\PktLine;
+use App\Shared\Infrastructure\Process\EnvCommand;
 
 /**
  * Socket-independent git:// daemon protocol handler.
@@ -46,15 +47,16 @@ final class GitDaemonProtocol
     public function __construct(
         private readonly ServerSettings $settings,
         private readonly AccessGuard $accessGuard,
-    ) {}
+    ) {
+    }
 
     /**
      * Reads one request from $in, authorizes it and streams the git service over
      * the three handles. $err defaults to $out because the git:// transport is a
      * single bidirectional socket (Go wires Stdin/Stdout/Stderr all to the conn).
      *
-     * @param resource  $in
-     * @param resource  $out
+     * @param resource      $in
+     * @param resource      $out
      * @param resource|null $err
      */
     public function handle($in, $out, $err = null): void
@@ -162,7 +164,7 @@ final class GitDaemonProtocol
     /** Formats a client-facing error pkt-line + flush, like Go `git.WritePktlineErr`. */
     public static function errorPacket(string $message): string
     {
-        return PktLine::encode('ERR ' . $message . "\n") . PktLine::flush();
+        return PktLine::encode('ERR '.$message."\n").PktLine::flush();
     }
 
     /**
@@ -204,7 +206,7 @@ final class GitDaemonProtocol
 
         if (
             false === $realRepos || false === $realRepo
-            || !str_starts_with($realRepo, $realRepos . \DIRECTORY_SEPARATOR)
+            || !str_starts_with($realRepo, $realRepos.\DIRECTORY_SEPARATOR)
         ) {
             throw new DaemonFailure(self::ERR_NOT_AUTHED);
         }
@@ -213,7 +215,7 @@ final class GitDaemonProtocol
     /** `<repos>/<name>.git` (Go `filepath.Join(reposDir, name+".git")`). */
     private function repoPath(string $name): string
     {
-        return $this->settings->reposPath() . '/' . $name . '.git';
+        return $this->settings->reposPath().'/'.$name.'.git';
     }
 
     /**
@@ -256,13 +258,13 @@ final class GitDaemonProtocol
             'SOFT_SERVE_REPO_NAME' => $name,
             'SOFT_SERVE_REPO_PATH' => $repoPath,
             'SOFT_SERVE_HOST' => $host,
-            'SOFT_SERVE_LOG_PATH' => $this->settings->dataPath . '/log/hooks.log',
+            'SOFT_SERVE_LOG_PATH' => $this->settings->dataPath.'/log/hooks.log',
         ];
 
         if ([] !== $extraParams) {
             $proto = [];
             foreach ($extraParams as $key => $value) {
-                $proto[] = $key . '=' . $value;
+                $proto[] = $key.'='.$value;
             }
             $env['GIT_PROTOCOL'] = implode(':', $proto);
         }
@@ -275,9 +277,9 @@ final class GitDaemonProtocol
      * forwarding git's stderr to the client just like Go (Stderr: c).
      *
      * @param array{service: string, name: string, host: string, repoPath: string, argv: list<string>, env: array<string, string>} $plan
-     * @param resource $in
-     * @param resource $out
-     * @param resource $err
+     * @param resource                                                                                                             $in
+     * @param resource                                                                                                             $out
+     * @param resource                                                                                                             $err
      *
      * @throws DaemonFailure {@see ERR_SYSTEM_MALFUNCTION} when git cannot be started
      */
@@ -290,11 +292,10 @@ final class GitDaemonProtocol
         ];
 
         $process = @proc_open(
-            $plan['argv'],
+            EnvCommand::wrap($plan['argv'], $plan['env']),
             $descriptors,
             $pipes,
             $plan['repoPath'],
-            $this->childEnvironment($plan['env']),
         );
         if (!\is_resource($process)) {
             throw new DaemonFailure(self::ERR_SYSTEM_MALFUNCTION);
@@ -400,7 +401,7 @@ final class GitDaemonProtocol
             throw new DaemonFailure(self::ERR_INVALID_REQUEST);
         }
 
-        return $header . $payload;
+        return $header.$payload;
     }
 
     /**
@@ -434,33 +435,6 @@ final class GitDaemonProtocol
 
         return $buffer;
     }
-
-    /**
-     * git needs the inherited PATH/HOME etc.; proc_open with an explicit env array
-     * would otherwise replace the whole environment. We copy the current process
-     * environment from the superglobals (no getenv/putenv in src/) and overlay the
-     * computed SOFT_SERVE_* / GIT_PROTOCOL variables on top (Go: os.Environ()+Env).
-     *
-     * @param array<string, string> $overlay
-     *
-     * @return array<string, string>
-     */
-    private function childEnvironment(array $overlay): array
-    {
-        $env = [];
-        foreach ($_SERVER as $key => $value) {
-            if (\is_string($value)) {
-                $env[$key] = $value;
-            }
-        }
-        foreach ($_ENV as $key => $value) {
-            if (\is_string($value)) {
-                $env[$key] = $value;
-            }
-        }
-
-        return array_merge($env, $overlay);
-    }
 }
 
 /**
@@ -469,4 +443,6 @@ final class GitDaemonProtocol
  * `ERR <message>` pkt-line. Co-located with {@see GitDaemonProtocol} so the
  * daemon UI stays a two-file unit.
  */
-final class DaemonFailure extends \RuntimeException {}
+final class DaemonFailure extends \RuntimeException
+{
+}

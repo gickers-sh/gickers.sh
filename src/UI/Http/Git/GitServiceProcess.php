@@ -7,6 +7,7 @@ namespace App\UI\Http\Git;
 use App\Identity\Domain\Model\User;
 use App\Shared\Infrastructure\Config\ServerSettings;
 use App\Shared\Infrastructure\Git\PktLine;
+use App\Shared\Infrastructure\Process\EnvCommand;
 use Symfony\Component\Process\Process;
 
 /**
@@ -45,7 +46,7 @@ final readonly class GitServiceProcess
             2 => ['pipe', 'w'],
         ];
 
-        $process = proc_open($command, $descriptors, $pipes, $repoPath, $env);
+        $process = proc_open(EnvCommand::wrap($command, $env), $descriptors, $pipes, $repoPath);
         if (!\is_resource($process)) {
             throw new \RuntimeException(sprintf('Failed to execute git %s for info/refs', $subcommand));
         }
@@ -96,7 +97,7 @@ final readonly class GitServiceProcess
             2 => ['pipe', 'w'],
         ];
 
-        $process = proc_open($command, $descriptors, $pipes, $repoPath, $env);
+        $process = proc_open(EnvCommand::wrap($command, $env), $descriptors, $pipes, $repoPath);
         if (!\is_resource($process)) {
             throw new \RuntimeException(sprintf('Failed to execute git %s for RPC', $subcommand));
         }
@@ -266,8 +267,7 @@ final readonly class GitServiceProcess
         ?User $user,
         ?string $protocol,
     ): array {
-        /** @var array<string, string> $env */
-        $env = getenv();
+        $env = [];
         $name = $repoName ?? basename($repoPath, '.git');
 
         $env['SOFT_SERVE_REPO_NAME'] = $name;

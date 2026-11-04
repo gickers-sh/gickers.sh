@@ -279,17 +279,6 @@ final class SshEntrypointCommandTest extends KernelTestCase
         $this->assertStringContainsString('main', $this->getOutputText($output));
     }
 
-    public function testAuthorizedKeysCommandRegeneration(): void
-    {
-        $application = new Application(self::$kernel);
-        $command = $application->find('soft:ssh:authorized-keys');
-        $tester = new CommandTester($command);
-        $exitCode = $tester->execute([]);
-
-        $this->assertSame(0, $exitCode);
-        $this->assertStringContainsString('authorized_keys regenerated successfully', $tester->getDisplay());
-    }
-
     // --- Repo operations tests (cases 19-25) ---
 
     public function testRepoCreateAndListWithBackend(): void

@@ -7,9 +7,6 @@ namespace App\Shared\Infrastructure\Git;
 /**
  * Git pkt-line codec (`gitprotocol-common(5)`), shared by the Smart HTTP and
  * git:// daemon transports.
- *
- * Extracted from `GitHttpBackendService::encodePktLine`/`flushPkt` and
- * `GitDaemonService::readPktLine`; those legacy files remain untouched.
  */
 final class PktLine
 {
@@ -20,7 +17,9 @@ final class PktLine
     /** 0xFFF0 total line length minus the 4-byte length prefix. */
     public const MAX_PAYLOAD = 65516;
 
-    private function __construct() {}
+    private function __construct()
+    {
+    }
 
     /**
      * Encodes a payload into a data pkt-line with its 4-hex length prefix.
@@ -47,7 +46,7 @@ final class PktLine
      * Parses the first packet at the head of $buffer.
      *
      * @return array{type: 'data'|'flush'|'delim'|'response-end', payload: string, length: int}
-     *                                                                                          $length is the number of bytes consumed from $buffer (always 4 for control packets).
+     *                                                                                          $length is the number of bytes consumed from $buffer (always 4 for control packets)
      *
      * @throws \InvalidArgumentException when the length header is malformed or the data packet is truncated
      */

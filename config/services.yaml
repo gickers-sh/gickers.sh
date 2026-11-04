@@ -10,8 +10,6 @@ services:
         exclude:
             - '../src/Kernel.php'
             - '../src/*/Domain/'
-            - '../src/Model/'
-            - '../src/Service/Lfs/LfsPointer.php'
             - '../src/UI/Tui/Page/'
             - '../src/Shared/Infrastructure/Config/ServerSettings.php'
             - '../src/UI/Ssh/Command/'

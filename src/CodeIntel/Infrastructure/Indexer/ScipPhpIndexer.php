@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\CodeIntel\Infrastructure\Indexer;
 
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\DependencyInjection\Attribute\AsTaggedItem;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Process\Process;
 
 /**
@@ -22,7 +22,8 @@ final class ScipPhpIndexer implements Indexer
     public function __construct(
         #[Autowire(env: 'PATH')]
         private readonly string $pathEnv = '',
-    ) {}
+    ) {
+    }
 
     public function supports(string $projectDir): bool
     {
@@ -36,7 +37,7 @@ final class ScipPhpIndexer implements Indexer
             return null;
         }
 
-        $outputIndex = $projectDir . '/index.scip';
+        $outputIndex = $projectDir.'/index.scip';
         $cmd = new Process([$scipPhp], $projectDir);
         $cmd->run();
         if (!$cmd->isSuccessful() || !file_exists($outputIndex)) {
@@ -54,7 +55,7 @@ final class ScipPhpIndexer implements Indexer
             if ('' === $dir) {
                 continue;
             }
-            $candidate = rtrim($dir, '/\\') . \DIRECTORY_SEPARATOR . $name;
+            $candidate = rtrim($dir, '/\\').\DIRECTORY_SEPARATOR.$name;
             if (is_file($candidate) && is_executable($candidate)) {
                 return $candidate;
             }

@@ -23,6 +23,8 @@ $mapped = match ($args[0] ?? null) {
     'browse', 'serve', 'tui', 'man' => ['soft:'.$args[0], ...array_slice($args, 1)],
     'admin' => [...match ($args[1] ?? null) {
         null => ['list', 'soft:admin'],
+        'migrate' => ['doctrine:migrations:migrate', '--no-interaction'],
+        'rollback' => ['doctrine:migrations:migrate', 'prev', '--no-interaction'],
         default => ['soft:admin:'.$args[1]],
     }, ...array_slice($args, 2)],
     'hook' => isset($args[1]) ? ['soft:hook:'.$args[1], ...array_slice($args, 2)] : ['list', 'soft:hook'],

@@ -40,13 +40,13 @@ final class IndexCommitHandlerTest extends CodeIntelTestCase
         $runGit(['config', 'user.name', 'Test'], $repoDir);
         $runGit(['config', 'user.email', 'test@example.com'], $repoDir);
 
-        mkdir($repoDir . '/src/Entity', 0755, true);
-        mkdir($repoDir . '/src/Controller', 0755, true);
+        mkdir($repoDir.'/src/Entity', 0755, true);
+        mkdir($repoDir.'/src/Controller', 0755, true);
 
-        file_put_contents($repoDir . '/composer.json', json_encode(['name' => 'acme/commit-test']));
-        file_put_contents($repoDir . '/src/Entity/User.php', "<?php\nnamespace App\\Entity;\nclass User {}\n");
+        file_put_contents($repoDir.'/composer.json', json_encode(['name' => 'acme/commit-test']));
+        file_put_contents($repoDir.'/src/Entity/User.php', "<?php\nnamespace App\\Entity;\nclass User {}\n");
         file_put_contents(
-            $repoDir . '/src/Controller/UserController.php',
+            $repoDir.'/src/Controller/UserController.php',
             <<<'PHP'
 <?php
 namespace App\Controller;
@@ -69,7 +69,9 @@ PHP
 
         // The commit under test lives at $repoDir, so map the repo name straight to it.
         $repoDirectory = new class($repoDir) implements RepoDirectory {
-            public function __construct(private string $path) {}
+            public function __construct(private string $path)
+            {
+            }
 
             public function exists(RepoName $name): bool
             {

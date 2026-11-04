@@ -28,11 +28,11 @@ final class GitRepositoryReader
         }
 
         $isBare = false;
-        $gitDir = $realPath . '/.git';
+        $gitDir = $realPath.'/.git';
 
         if (is_dir($gitDir)) {
             $isBare = false;
-        } elseif (is_file($realPath . '/HEAD') && (is_dir($realPath . '/objects') || is_dir($realPath . '/refs'))) {
+        } elseif (is_file($realPath.'/HEAD') && (is_dir($realPath.'/objects') || is_dir($realPath.'/refs'))) {
             $isBare = true;
             $gitDir = $realPath;
         } else {
@@ -43,7 +43,7 @@ final class GitRepositoryReader
                 throw new \RuntimeException(sprintf('Path "%s" is not a valid git repository.', $path));
             }
             $isBare = 'true' === trim($process->getOutput());
-            $gitDir = $isBare ? $realPath : $realPath . '/.git';
+            $gitDir = $isBare ? $realPath : $realPath.'/.git';
         }
 
         $name = basename($realPath);
@@ -53,7 +53,7 @@ final class GitRepositoryReader
 
         // Description
         $description = '';
-        $descFile = $gitDir . '/description';
+        $descFile = $gitDir.'/description';
         if (is_file($descFile)) {
             $descContent = trim((string) file_get_contents($descFile));
             // Default git description is "Unnamed repository; edit this file 'description' to name the repository."
@@ -134,7 +134,7 @@ final class GitRepositoryReader
         $args = ['git', 'ls-tree', '-l', '-z', $ref];
         if ('' !== $subpath) {
             $args[] = '--';
-            $args[] = rtrim($subpath, '/') . '/';
+            $args[] = rtrim($subpath, '/').'/';
         }
 
         $process = new Process($args, $repo->path);
@@ -273,10 +273,10 @@ final class GitRepositoryReader
             'git',
             'log',
             '-z',
-            '--format=format:' . $format,
+            '--format=format:'.$format,
             '-n',
             (string) $limit,
-            '--skip=' . (string) $offset,
+            '--skip='.(string) $offset,
             $ref,
         ];
 
@@ -367,7 +367,7 @@ final class GitRepositoryReader
         if ($branchProcess->isSuccessful()) {
             $raw = trim($branchProcess->getOutput());
             if ('' !== $raw) {
-                $branches = array_filter(array_map('trim', explode("\n", $raw)), static fn($b) => '' !== $b);
+                $branches = array_filter(array_map('trim', explode("\n", $raw)), static fn ($b) => '' !== $b);
                 $branches = array_values($branches);
             }
         }
@@ -390,7 +390,7 @@ final class GitRepositoryReader
         if ($tagProcess->isSuccessful()) {
             $raw = trim($tagProcess->getOutput());
             if ('' !== $raw) {
-                $tags = array_filter(array_map('trim', explode("\n", $raw)), static fn($t) => '' !== $t);
+                $tags = array_filter(array_map('trim', explode("\n", $raw)), static fn ($t) => '' !== $t);
                 $tags = array_values($tags);
             }
         }

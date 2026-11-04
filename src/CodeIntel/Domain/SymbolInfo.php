@@ -17,7 +17,8 @@ final readonly class SymbolInfo
         public string $symbol,
         public array $definitions = [],
         public array $references = [],
-    ) {}
+    ) {
+    }
 
     public function hasDefinition(): bool
     {
@@ -41,8 +42,8 @@ final readonly class SymbolInfo
     {
         return [
             'symbol' => $this->symbol,
-            'definitions' => array_map(static fn(SymbolLocation $loc) => $loc->toArray(), $this->definitions),
-            'references' => array_map(static fn(SymbolLocation $loc) => $loc->toArray(), $this->references),
+            'definitions' => array_map(static fn (SymbolLocation $loc) => $loc->toArray(), $this->definitions),
+            'references' => array_map(static fn (SymbolLocation $loc) => $loc->toArray(), $this->references),
         ];
     }
 }

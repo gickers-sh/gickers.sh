@@ -22,7 +22,9 @@ use App\CodeIntel\Domain\SymbolLocation;
  */
 final readonly class CodeIntelQuery
 {
-    public function __construct(private IndexStore $store) {}
+    public function __construct(private IndexStore $store)
+    {
+    }
 
     public function has(string $repo, string $sha): bool
     {

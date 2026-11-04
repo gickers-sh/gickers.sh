@@ -239,7 +239,7 @@ final class ScipProtobufCodec
 
         // Field 3: symbol_roles (int32 varint)
         if (0 !== $roles) {
-            $bytes .= $this->writeTag(3, self::WIRE_VARINT) . $this->writeVarint($roles);
+            $bytes .= $this->writeTag(3, self::WIRE_VARINT).$this->writeVarint($roles);
         }
 
         return $bytes;
@@ -350,8 +350,8 @@ final class ScipProtobufCodec
     public function writeLengthDelimited(int $fieldNumber, string $data): string
     {
         return $this->writeTag($fieldNumber, self::WIRE_LENGTH_DELIMITED)
-            . $this->writeVarint(strlen($data))
-            . $data;
+            .$this->writeVarint(strlen($data))
+            .$data;
     }
 
     /**
