@@ -25,7 +25,9 @@ final readonly class GoGetController
     ) {
     }
 
-    #[Route('/{repo}', requirements: ['repo' => '[^/]+?(?:\.git)?'], methods: ['GET'])]
+    // Catch-all like Go's `/{repo:.*}`: sub-package import paths walk up to the repository.
+    // Lowest priority so every specific git/LFS route (all of which carry a fixed suffix) wins.
+    #[Route('/{repo}', requirements: ['repo' => '.+'], methods: ['GET'], priority: -100)]
     public function __invoke(Request $request, string $repo): Response
     {
         if ('1' !== $request->query->get('go-get')) {

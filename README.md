@@ -43,6 +43,7 @@ Variables d'environnement (valeurs par défaut dans `.env`, surcharges locales d
 | `SOFT_SERVE_ANON_ACCESS`, `SOFT_SERVE_ALLOW_KEYLESS` | valeurs initiales ; modifiables ensuite via `ssh … settings` |
 | `SOFT_SERVE_INITIAL_ADMIN_KEYS` | clés publiques admin (une par ligne) |
 | `SOFT_SERVE_LFS_ENABLED`, `SOFT_SERVE_NAME` | LFS, nom affiché |
+| `SOFT_SERVE_WEBHOOK_ALLOW_LIST` | IP/CIDR (séparés par des virgules) autorisés comme destination de webhook malgré la protection SSRF, à la création et à la livraison (vide par défaut) |
 
 ## Commandes
 
@@ -75,5 +76,6 @@ Les dépôts nus restés sur disque ne réapparaissent qu'une fois réenregistr�
 make test     # PHPUnit
 make lint     # php-cs-fixer (dry-run), PHPStan niveau max, deptrac, lint conteneur/YAML
 make cs       # corrige le style
-make e2e      # soft serve sur ports/données jetables : repo create, push SSH, clone HTTP et git://
+make e2e      # soft serve sur ports/données jetables : --dry-run, repo create, push SSH, clone HTTP et git://,
+              # webhook signé, git lfs push, pr create/merge, TUI via expect, latence SSH (E2E_APP_ENV=prod pour mesurer en prod)
 ```

@@ -313,12 +313,14 @@ Organisation : `tests/Unit` (domaine pur, stores en mémoire), `tests/Integratio
 | Hooks | Intégration (existants `GitPlumbingServiceTest`) : scripts générés appellent `soft:hook:*` ; push réel → `RecordPush` → événements |
 | TUI | Tests de `packages/tui/tests` supprimés avec le paquet en phase 6 ; nouveaux tests : `TuiPageFactory` construit `SelectionPage` (modale « new repo ») et `RepoPage` avec `CodeIntelQuery`, rendus via `symfony/tui` dans un terminal virtuel |
 
-Smoke de bout en bout (cible `make e2e`, script dans `tests/e2e/run.sh`) :
-1. `soft:serve --dry-run` puis `soft:serve` (sshd, FrankenPHP, git daemon, worker).
-2. `ssh -p 2222 localhost repo create demo` → `git push` SSH → `git clone http://…/demo.git` → `git clone git://…/demo` → `git lfs push` HTTP.
-3. `repo webhook create demo http://127.0.0.1:<port>` (serveur de capture local, autorisé en env `test` uniquement) → push → livraison reçue et signée.
-4. `pr create` / `pr merge` → `git log` montre le commit de merge.
-5. `ssh -t … tui` : navigation SelectionPage → RepoPage → goto definition (indexation async terminée).
+Smoke de bout en bout (cible `make e2e`, script dans `tests/e2e/run.sh`, ports et données jetables) :
+1. `soft serve --dry-run` puis `soft serve` (sshd, HTTP, git daemon, worker).
+2. `ssh … repo create demo` → `git push` SSH → `git clone http://…/demo.git` → `git clone git://…/demo` → `repo tree`.
+3. `repo webhook create demo http://127.0.0.1:<port>` vers un serveur de capture local (autorisé par `SOFT_SERVE_WEBHOOK_ALLOW_LIST=127.0.0.1`, liste honorée à la création par `SsrfGuard` et à la livraison par `NoPrivateNetworkHttpClient`) → push → livraison reçue, signature `X-SoftServe-Signature` vérifiée.
+4. `git lfs push` (`git-lfs-authenticate` en SSH puis API batch HTTP) → clone qui restaure l'objet.
+5. `pr create` / `pr merge` → la tête de `main` est un commit de merge contenant la branche.
+6. Latence d'une commande SSH (`repo list`, médiane sur 5 ; `E2E_APP_ENV=prod` pour la mesure prod).
+7. `ssh -tt … tui` piloté par `expect` (sauté si absent) : SelectionPage → RepoPage (README affiché) → retour → Ctrl+C. Le « goto definition » est couvert par `TuiFunctionalTest::testRepoPageWithCodeIntelQuery`, pas par l'e2e.
 
 Toute la suite existante (158 tests) est portée ou remplacée phase par phase ; un test supprimé doit être remplacé par un test qui couvre le même comportement.
 
@@ -342,7 +344,7 @@ Après la phase 2 (entités, migration unique, voters, cas d'usage Repo/Identity
 
 | Risque | Mitigation |
 |---|---|
-| Latence du démarrage `bin/console` à chaque session SSH et chaque hook | `APP_ENV=prod` + `APP_DEBUG=0` dans la ligne `command=` d'`authorized_keys` et dans les scripts de hooks ; `cache:warmup` lancé par `ServeCommand` ; OPcache CLI + préchargement ; mesure avant/après dans `make e2e` |
+| Latence du démarrage `bin/console` à chaque session SSH et chaque hook | `APP_ENV` transmis aux sessions par `SetEnv` (`sshd_config`) et hérité par les hooks ; `cache:warmup` lancé par `ServeCommand` ; mesure dans `make e2e` (2026-11-04, macOS arm64, `repo list` médiane : dev 205 ms, prod 173 ms). OPcache CLI + préchargement : non fait |
 | Concurrence SQLite (web + worker + hooks + daemon) | WAL + `busy_timeout` (middleware DBAL), transactions courtes, Postgres recommandé en production (`DATABASE_URL`) |
 | Doctrine dans les processus longs (worker FrankenPHP, daemon, Messenger) | reset automatique de DoctrineBundle entre requêtes ; `clear()` par connexion dans le daemon ; `messenger:consume --memory-limit=128M --time-limit=3600` |
 | FrankenPHP exige un PHP ZTS ; PHP local Homebrew en NTS | binaire statique ou image `dunglas/frankenphp` pour le HTTP ; PHP NTS local pour la CLI/TUI/tests |

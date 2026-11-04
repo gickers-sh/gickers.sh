@@ -33,7 +33,7 @@ step() { printf '==> %s\n' "$*"; }
 
 ssh-keygen -q -N '' -t ed25519 -f "$WORK/id_ed25519" -C e2e
 
-export APP_ENV=dev
+export APP_ENV="${E2E_APP_ENV:-dev}"
 export SOFT_SERVE_DATA_PATH="$WORK/data"
 export DATABASE_URL="sqlite:///$WORK/data/codes-sh.db"
 export SOFT_SERVE_INITIAL_ADMIN_KEYS="$(cat "$WORK/id_ed25519.pub")"
@@ -144,21 +144,46 @@ git -C "$WORK/src" fetch -q origin main
 git -C "$WORK/src" log -1 --format=%P origin/main | grep -q ' ' || { echo "!! main head is not a merge commit" >&2; exit 1; }
 git -C "$WORK/src" ls-tree -r --name-only origin/main | grep -qx feature.txt
 
+step "ssh command latency (spec §5: bin/console boots per session; APP_ENV=$APP_ENV)"
+php -r '
+    $t = [];
+    for ($i = 0; $i < 5; ++$i) {
+        $s = hrtime(true);
+        exec($argv[1]." >/dev/null 2>&1", $o, $rc);
+        if (0 !== $rc) { fwrite(STDERR, "!! timed command failed\n"); exit(1); }
+        $t[] = (hrtime(true) - $s) / 1e6;
+    }
+    sort($t);
+    printf("    repo list: median %.0f ms (min %.0f, max %.0f)\n", $t[2], $t[0], $t[4]);
+' "$SSH_CMD 127.0.0.1 repo list"
+
 if command -v expect >/dev/null 2>&1; then
     step "ssh tui: SelectionPage → RepoPage (README) → back → quit"
-    # shellcheck disable=SC2086 # SSH_CMD is a word list on purpose.
-    expect -f - $SSH_CMD -tt 127.0.0.1 tui <<'EXPECT' >"$WORK/tui.log" 2>&1 || { cat "$WORK/tui.log" >&2; exit 1; }
+    # Multi-line pattern lists: a one-line `expect { ... }` is read as ONE literal pattern and only times out.
+    cat >"$WORK/tui.exp" <<'EXPECT'
 set timeout 20
+proc must {pattern code} {
+    expect {
+        -exact $pattern {}
+        timeout { puts stderr "!! tui: timed out waiting for '$pattern'"; exit $code }
+        eof { puts stderr "!! tui: session ended before '$pattern'"; exit $code }
+    }
+}
 spawn {*}$argv
-expect { "My Repositories" {} timeout { exit 1 } }
-expect { "demo" {} timeout { exit 2 } }
+must "My Repositories" 1
+must "demo" 2
 send "\r"
-expect { "hello e2e" {} timeout { exit 3 } }
+must "hello e2e" 3
 send "q"
-expect { "My Repositories" {} timeout { exit 4 } }
+must "My Repositories" 4
 send "\003"
-expect { eof {} timeout { exit 5 } }
+expect {
+    eof {}
+    timeout { puts stderr "!! tui: still running after ctrl+c"; exit 5 }
+}
 EXPECT
+    # shellcheck disable=SC2086 # SSH_CMD is a word list on purpose.
+    expect -f "$WORK/tui.exp" $SSH_CMD -tt 127.0.0.1 tui >"$WORK/tui.log" 2>&1 </dev/null || { cat "$WORK/tui.log" >&2; exit 1; }
 else
     step "ssh tui: skipped (expect not installed)"
 fi

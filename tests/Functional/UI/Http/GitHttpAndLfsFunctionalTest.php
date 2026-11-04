@@ -20,6 +20,13 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * Functional tests for Git HTTP transport, Git LFS, and JWT authentication.
  * Uses Symfony Kernel::handle() directly for full HTTP pipeline testing.
+ *
+ * @phpstan-type LfsBatchObject array{
+ *     oid: string,
+ *     size: int,
+ *     error?: array{code: int, message: string},
+ *     actions?: array<string, array{href: string, header?: array<string, string>, expires_in?: int}>,
+ * }
  */
 final class GitHttpAndLfsFunctionalTest extends KernelTestCase
 {
@@ -550,5 +557,132 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
         // Repository demo-repo does not exist in DB, but JWT authentication itself succeeded!
         // Because it doesn't exist, response is 404 repository not found (not 401 invalid token)!
         $this->assertSame(404, $this->handle($request)->getStatusCode());
+    }
+
+    public function testInfoRefsWithoutSmartServiceFallsBackToDumbHttp(): void
+    {
+        $owner = $this->newUser('ivan');
+        $repo = ($this->createRepo)($owner, 'dumb-refs-'.bin2hex(random_bytes(4)), private: false);
+
+        foreach (['', '?service=git-upload-archive'] as $query) {
+            $response = $this->handle(Request::create(sprintf('/%s.git/info/refs%s', $repo->name()->value, $query), 'GET'));
+
+            $this->assertSame(200, $response->getStatusCode(), 'query: '.$query);
+            $this->assertSame('text/plain; charset=utf-8', $response->headers->get('Content-Type'), 'query: '.$query);
+        }
+    }
+
+    public function testGoGetResolvesSubpackageToRepositoryRoot(): void
+    {
+        $owner = $this->newUser('judy');
+        $name = 'go-mod-'.bin2hex(random_bytes(4));
+        ($this->createRepo)($owner, $name, private: false);
+
+        $response = $this->handle(Request::create(sprintf('/%s/pkg/util?go-get=1', $name), 'GET'));
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertMatchesRegularExpression(
+            sprintf('#<meta name="go-import" content="[^/"]+/%s git [^"]+/%s\.git">#', preg_quote($name, '#'), preg_quote($name, '#')),
+            (string) $response->getContent(),
+        );
+
+        $missing = $this->handle(Request::create('/no-such-'.bin2hex(random_bytes(4)).'/pkg?go-get=1', 'GET'));
+        $this->assertSame(404, $missing->getStatusCode());
+    }
+
+    public function testBasicAuthAcceptsAccessToken(): void
+    {
+        $owner = $this->newUser('kim');
+        $secret = $this->issueSecret($owner, 'basic-token');
+        $repo = ($this->createRepo)($owner, 'basic-auth-'.bin2hex(random_bytes(4)), private: true);
+        $url = sprintf('/%s.git/info/refs?service=git-upload-pack', $repo->name()->value);
+
+        $basic = static fn (string $credentials): Request => Request::create($url, 'GET', [], [], [], [
+            'HTTP_AUTHORIZATION' => 'Basic '.base64_encode($credentials),
+        ]);
+
+        // Access token as password, or alone as the username (git credential helpers send either).
+        $this->assertSame(200, $this->handle($basic($owner->username().':'.$secret))->getStatusCode());
+        $this->assertSame(200, $this->handle($basic($secret))->getStatusCode());
+
+        // Wrong secret: 403 (Go `badCredentials` -> renderForbidden), never downgraded to anonymous access.
+        $this->assertSame(403, $this->handle($basic($owner->username().':not-the-token'))->getStatusCode());
+    }
+
+    public function testLfsBatchReportsPerObjectErrors(): void
+    {
+        $owner = $this->newUser('lena');
+        $secret = $this->issueSecret($owner, 'lfs-errors');
+        $repo = ($this->createRepo)($owner, 'lfs-errors-'.bin2hex(random_bytes(4)), private: false);
+
+        $payload = 'stored object '.bin2hex(random_bytes(8));
+        $storedOid = hash('sha256', $payload);
+        $put = Request::create(
+            sprintf('/%s.git/info/lfs/objects/basic/%s', $repo->name()->value, $storedOid),
+            'PUT',
+            [],
+            [],
+            [],
+            ['HTTP_AUTHORIZATION' => 'Token '.$secret, 'HTTP_CONTENT_LENGTH' => (string) \strlen($payload)],
+            $payload,
+        );
+        $this->assertSame(200, $this->handle($put)->getStatusCode());
+
+        $missingOid = str_repeat('d', 64);
+        $objects = $this->lfsBatch($repo->name()->value, 'Token '.$secret, 'download', [
+            ['oid' => 'not-a-sha256', 'size' => 10],
+            ['oid' => $missingOid, 'size' => -1],
+            ['oid' => $missingOid, 'size' => 10],
+            ['oid' => $storedOid, 'size' => \strlen($payload) + 50],
+            ['oid' => $storedOid, 'size' => \strlen($payload)],
+        ]);
+
+        $this->assertSame(422, $objects[0]['error']['code'] ?? null);
+        $this->assertSame(422, $objects[1]['error']['code'] ?? null);
+        $this->assertSame(404, $objects[2]['error']['code'] ?? null);
+        $this->assertSame(['code' => 422, 'message' => 'size mismatch'], $objects[3]['error'] ?? null);
+        $this->assertArrayNotHasKey('error', $objects[4]);
+        $this->assertArrayHasKey('download', $objects[4]['actions'] ?? []);
+    }
+
+    public function testLfsBatchActionsCarryTheCallerAuthorization(): void
+    {
+        $owner = $this->newUser('mia');
+        $authorization = 'Token '.$this->issueSecret($owner, 'lfs-actions');
+        $repo = ($this->createRepo)($owner, 'lfs-actions-'.bin2hex(random_bytes(4)), private: false);
+
+        $objects = $this->lfsBatch($repo->name()->value, $authorization, 'upload', [
+            ['oid' => str_repeat('e', 64), 'size' => 100],
+        ]);
+
+        $this->assertSame($authorization, $objects[0]['actions']['upload']['header']['Authorization'] ?? null);
+        $this->assertSame($authorization, $objects[0]['actions']['verify']['header']['Authorization'] ?? null);
+    }
+
+    /**
+     * @param list<array{oid: string, size: int}> $objects
+     *
+     * @return list<LfsBatchObject>
+     */
+    private function lfsBatch(string $repo, string $authorization, string $operation, array $objects): array
+    {
+        $response = $this->handle(Request::create(
+            sprintf('/%s.git/info/lfs/objects/batch', $repo),
+            'POST',
+            [],
+            [],
+            [],
+            [
+                'HTTP_AUTHORIZATION' => $authorization,
+                'HTTP_ACCEPT' => 'application/vnd.git-lfs+json',
+                'CONTENT_TYPE' => 'application/vnd.git-lfs+json',
+            ],
+            (string) json_encode(['operation' => $operation, 'transfers' => ['basic'], 'objects' => $objects]),
+        ));
+        $this->assertSame(200, $response->getStatusCode());
+
+        /** @var array{objects: list<LfsBatchObject>} $data */
+        $data = json_decode((string) $response->getContent(), true, flags: \JSON_THROW_ON_ERROR);
+
+        return $data['objects'];
     }
 }
