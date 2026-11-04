@@ -23,8 +23,6 @@ final class RepoCollabListCommand extends AbstractSshCommand
     {
         return [
             'repo:collab:ls',
-            'collab:list',
-            'collab:ls',
         ];
     }
 

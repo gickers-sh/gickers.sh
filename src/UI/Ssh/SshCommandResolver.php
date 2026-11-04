@@ -89,30 +89,31 @@ final class SshCommandResolver
         }
 
         // Top-level promotions
-        if ('collab' === $tokens[0] || 'collaborator' === $tokens[0] || 'collaborators' === $tokens[0]) {
+        if (in_array($tokens[0], ['collab', 'collabs', 'collaborator', 'collaborators'], true)) {
             array_shift($tokens);
             array_unshift($tokens, 'repo', 'collab');
-        } elseif ('webhook' === $tokens[0] || 'webhooks' === $tokens[0]) {
+        } elseif (in_array($tokens[0], ['webhook', 'webhooks'], true)) {
             array_shift($tokens);
             array_unshift($tokens, 'repo', 'webhook');
-        } elseif (count($tokens) >= 2 && 'repo' === $tokens[0] && ('pr' === $tokens[1] || 'prs' === $tokens[1])) {
+        } elseif (count($tokens) >= 2 && 'repo' === $tokens[0] && in_array($tokens[1], ['pr', 'prs', 'pull-request', 'pull-requests'], true)) {
             array_shift($tokens); // remove 'repo'
             $tokens[0] = 'pr';
         }
 
-        // Group alias normalizations
+        // Group alias normalizations on token 0
         $tokens[0] = match ($tokens[0]) {
-            'repos' => 'repo',
-            'users' => 'user',
-            'access-token', 'access-tokens', 'tokens' => 'token',
+            'repos', 'repository', 'repositories' => 'repo',
+            'prs', 'pull-request', 'pull-requests' => 'pr',
             'pubkeys', 'publickey', 'publickeys' => 'pubkey',
-            'prs' => 'pr',
+            'access-token' => 'token',
+            'users' => 'user',
             default => $tokens[0],
         };
 
+        // Group alias normalizations on token 1 when token 0 is 'repo'
         if (count($tokens) >= 2 && 'repo' === $tokens[0]) {
             $tokens[1] = match ($tokens[1]) {
-                'collaborator', 'collaborators' => 'collab',
+                'collabs', 'collaborator', 'collaborators' => 'collab',
                 'webhooks' => 'webhook',
                 'branches' => 'branch',
                 'tags' => 'tag',

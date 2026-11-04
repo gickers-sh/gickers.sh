@@ -20,6 +20,14 @@ final class RepoProjectNameCommand extends AbstractSshCommand
         return 'repo:project-name';
     }
 
+    /**
+     * @return list<string>
+     */
+    public static function sshAliases(): array
+    {
+        return ['repo:project'];
+    }
+
     public function __construct(
         SshSession $sshSession,
         private readonly RepoQuery $repoQuery,

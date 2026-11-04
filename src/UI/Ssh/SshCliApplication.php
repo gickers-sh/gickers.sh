@@ -45,19 +45,13 @@ class SshCliApplication extends Application
                 $aliases = $serviceType::sshAliases();
             }
 
-            // Derive conventional leaf aliases
-            $derived = $this->deriveAliases($name);
-            /** @var list<string> $allAliases */
-            $allAliases = array_values(array_unique(array_merge($aliases, $derived)));
-
-            if ([] !== $allAliases) {
-                $aliasMap[$name] = $allAliases;
-                foreach ($allAliases as $alias) {
+            if ([] !== $aliases) {
+                $aliasMap[$name] = $aliases;
+                foreach ($aliases as $alias) {
                     $commandMap[$alias] = $name;
                 }
             }
         }
-
         $this->setCommandLoader(new ContainerCommandLoader($this->commandLocator, $commandMap));
         /** @var list<string> $canonicalNames */
         $canonicalNames = array_keys($provided);
@@ -101,36 +95,5 @@ class SshCliApplication extends Application
         $input = new ArgvInput($argv);
 
         return $this->run($input, $output);
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function deriveAliases(string $name): array
-    {
-        $aliases = [];
-        if (str_ends_with($name, ':delete')) {
-            $prefix = substr($name, 0, -7);
-            $aliases[] = $prefix.':del';
-            $aliases[] = $prefix.':rm';
-            $aliases[] = $prefix.':remove';
-        } elseif (str_ends_with($name, ':list')) {
-            $prefix = substr($name, 0, -5);
-            $aliases[] = $prefix.':ls';
-        } elseif (str_ends_with($name, ':rename')) {
-            $prefix = substr($name, 0, -7);
-            $aliases[] = $prefix.':mv';
-            $aliases[] = $prefix.':move';
-        } elseif ('repo:blob' === $name) {
-            $aliases[] = 'repo:cat';
-            $aliases[] = 'repo:show';
-        } elseif ('repo:description' === $name) {
-            $aliases[] = 'repo:desc';
-        } elseif ('user:remove-pubkey' === $name) {
-            $aliases[] = 'user:rm-pubkey';
-            $aliases[] = 'user:del-pubkey';
-        }
-
-        return $aliases;
     }
 }

@@ -24,9 +24,6 @@ final class RepoCollabRemoveCommand extends AbstractSshCommand
         return [
             'repo:collab:del',
             'repo:collab:rm',
-            'collab:remove',
-            'collab:rm',
-            'collab:del',
         ];
     }
 

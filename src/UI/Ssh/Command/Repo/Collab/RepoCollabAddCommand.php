@@ -21,11 +21,6 @@ final class RepoCollabAddCommand extends AbstractSshCommand
         return 'repo:collab:add';
     }
 
-    public static function sshAliases(): array
-    {
-        return ['collab:add'];
-    }
-
     public function __construct(
         SshSession $sshSession,
         private readonly AddCollaborator $addCollaborator,

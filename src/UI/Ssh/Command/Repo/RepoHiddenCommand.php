@@ -20,6 +20,14 @@ final class RepoHiddenCommand extends AbstractSshCommand
         return 'repo:hidden';
     }
 
+    /**
+     * @return list<string>
+     */
+    public static function sshAliases(): array
+    {
+        return ['repo:hide'];
+    }
+
     public function __construct(
         SshSession $sshSession,
         private readonly RepoQuery $repoQuery,
