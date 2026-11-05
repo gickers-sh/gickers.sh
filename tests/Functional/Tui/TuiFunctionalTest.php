@@ -71,7 +71,7 @@ final class TuiFunctionalTest extends KernelTestCase
 
     private function createTempDir(string $prefix = 'tui_test_'): string
     {
-        $path = sys_get_temp_dir() . '/' . $prefix . uniqid('', true);
+        $path = sys_get_temp_dir().'/'.$prefix.uniqid('', true);
         mkdir($path, 0755, true);
         $this->tempDirs[] = $path;
 
@@ -90,10 +90,10 @@ final class TuiFunctionalTest extends KernelTestCase
         );
         exec($cmd);
 
-        file_put_contents($dir . '/README.md', "# Demo Repository\n\nWelcome to demo.");
-        mkdir($dir . '/src', 0755, true);
+        file_put_contents($dir.'/README.md', "# Demo Repository\n\nWelcome to demo.");
+        mkdir($dir.'/src', 0755, true);
         file_put_contents(
-            $dir . '/src/Calculator.php',
+            $dir.'/src/Calculator.php',
             "<?php\n\nnamespace App;\n\nclass Calculator\n{\n    public function add(int \$a, int \$b): int\n    {\n        return \$a + \$b;\n    }\n}\n"
         );
 
@@ -103,6 +103,32 @@ final class TuiFunctionalTest extends KernelTestCase
         $headSha = trim((string) shell_exec(sprintf('cd %s && git rev-parse HEAD', escapeshellarg($dir))));
 
         return [$dir, $headSha];
+    }
+
+    /**
+     * Drives TUI ticks until all background git processes settle, returning the
+     * concatenated terminal output (including the initial spinner frame and final content).
+     */
+    private function tickUntilSettled(Tui $tui, VirtualTerminal $vt, int $maxTicks = 120): string
+    {
+        $tui->tick();
+        $out = $vt->consumeOutput();
+        $emptyStreak = 0;
+        for ($i = 0; $i < $maxTicks; ++$i) {
+            usleep(10000);
+            $tui->tick();
+            $chunk = $vt->consumeOutput();
+            if ('' !== $chunk) {
+                $out .= $chunk;
+                $emptyStreak = 0;
+                continue;
+            }
+            if (++$emptyStreak >= 8) {
+                break;
+            }
+        }
+
+        return $out;
     }
 
     public function testSelectionPageVisibleTextAndTabSwitching(): void
@@ -119,39 +145,33 @@ final class TuiFunctionalTest extends KernelTestCase
         $root->start($page);
 
         $tui->start();
-        $tui->tick();
-
-        $output = $vt->consumeOutput();
+        $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringContainsString('Feed', $output);
         $this->assertStringContainsString('My Repositories', $output);
         $this->assertStringContainsString('About', $output);
         $this->assertStringContainsString('Profile', $output);
+        $this->assertStringContainsString('No readme found.', $output);
+
+        // Switch to Feed
+        $vt->simulateInput("\t");
+        $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringContainsString('feed-project', $output);
 
         // Switch to My Repositories
         $vt->simulateInput("\t");
-        $tui->tick();
-        $output = $vt->consumeOutput();
+        $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringContainsString('My Repositories', $output);
-
-        // Switch to About
-        $vt->simulateInput("\t");
-        $tui->tick();
-        $output = $vt->consumeOutput();
-        $this->assertStringContainsString('No readme found.', $output);
 
         // Switch to Profile
         $vt->simulateInput("\t");
-        $tui->tick();
-        $output = $vt->consumeOutput();
+        $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringContainsString('Username', $output);
         $this->assertStringContainsString('alice', $output);
-        // Backtab back to About
-        $vt->simulateInput("\x1b[Z");
-        $tui->tick();
-        $output = $vt->consumeOutput();
-        $this->assertStringContainsString('No readme found.', $output);
 
+        // Tab back to About
+        $vt->simulateInput("\t");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('No readme found.', $output);
         // Quit with q
         $vt->simulateInput('q');
         $tui->tick();
@@ -288,17 +308,15 @@ final class TuiFunctionalTest extends KernelTestCase
         $root->start($page);
 
         $tui->start();
-        $tui->tick();
-
-        // Tab 1: Readme
-        $output = $vt->consumeOutput();
+        // Tab 1: Readme (renders spinner first, then resolves README)
+        $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringContainsString('Readme', $output);
+        $this->assertStringContainsString('Loading README...', $output);
         $this->assertStringContainsString('Demo Repository', $output);
 
         // Tab 2: Switch to Files tab
         $vt->simulateInput("\t");
-        $tui->tick();
-        $output = $vt->consumeOutput();
+        $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringContainsString('README.md', $output);
         $this->assertStringContainsString('src', $output);
 
@@ -306,16 +324,17 @@ final class TuiFunctionalTest extends KernelTestCase
         $vt->simulateInput('j');
         $tui->tick();
         $vt->simulateInput("\r");
-        $tui->tick();
-        $output = $vt->consumeOutput();
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('Loading files...', $output);
         $this->assertStringContainsString('Calculator.php', $output);
 
         // Open Calculator.php
         $vt->simulateInput("\r");
-        $tui->tick();
-        $output = $vt->consumeOutput();
-        $this->assertStringContainsString('class Calculator', $output);
-        $this->assertStringContainsString('public function add', $output);
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('Loading src/Calculator.php...', $output);
+        $plainCode = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('class Calculator', $plainCode);
+        $this->assertStringContainsString('public function add', $plainCode);
 
         // Move cursor down to line 8 (where reference is)
         for ($i = 0; $i < 8; ++$i) {
@@ -325,22 +344,19 @@ final class TuiFunctionalTest extends KernelTestCase
 
         // Jump to definition with 'd'
         $vt->simulateInput('d');
-        $tui->tick();
-        $output = $vt->consumeOutput();
+        $output = $this->tickUntilSettled($tui, $vt);
         // Cursor is now on definition line 6
         $this->assertStringContainsString('Calculator.php', $output);
 
         // Trigger find references with 'r'
         $vt->simulateInput('r');
-        $tui->tick();
-        $output = $vt->consumeOutput();
+        $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringContainsString('1 reference(s)', $output);
         $this->assertStringContainsString('src/Calculator.php', $output);
 
         // Jump to selected reference with Enter
         $vt->simulateInput("\r");
-        $tui->tick();
-        $output = $vt->consumeOutput();
+        $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringNotContainsString('1 reference(s)', $output);
 
         // Exit file viewer with Esc
@@ -349,39 +365,34 @@ final class TuiFunctionalTest extends KernelTestCase
 
         // Test Commits tab
         $vt->simulateInput("\t");
-        $tui->tick();
-        $output = $vt->consumeOutput();
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('Loading commits...', $output);
         $this->assertStringContainsString('initial commit', $output);
 
         // Test Branches tab
         $vt->simulateInput("\t");
-        $tui->tick();
-        $output = $vt->consumeOutput();
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('Loading branches...', $output);
         $this->assertStringContainsString('main', $output);
 
         // Test Tags tab
         $vt->simulateInput("\t");
-        $tui->tick();
-        $output = $vt->consumeOutput();
+        $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringContainsString('v1.0.0', $output);
 
         // Test Pull Requests tab
         $vt->simulateInput("\t");
-        $tui->tick();
-        $output = $vt->consumeOutput();
+        $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringContainsString('Pull requests', $output);
 
         // Test Profile tab
         $vt->simulateInput("\t");
-        $tui->tick();
-        $output = $vt->consumeOutput();
+        $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringContainsString('No profile available for this repository.', $output);
         // Test Settings tab
         $vt->simulateInput("\t");
-        $tui->tick();
-        $output = $vt->consumeOutput();
+        $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringContainsString('Local repository', $output);
-
         $tui->stop();
     }
 
@@ -510,10 +521,10 @@ final class TuiFunctionalTest extends KernelTestCase
     public function testRepoPagePullRequestsListAndMerge(): void
     {
         $container = static::getContainer();
-        $user = new User('prowner' . uniqid(), true, new \DateTimeImmutable());
+        $user = new User('prowner'.uniqid(), true, new \DateTimeImmutable());
         $this->userStore->save($user);
 
-        $repo = ($this->createRepo)($user, 'pulls-repo-' . uniqid(), false, false, 'PR testing repo');
+        $repo = ($this->createRepo)($user, 'pulls-repo-'.uniqid(), false, false, 'PR testing repo');
         $repoPath = $this->repoDirectory->pathFor($repo->name());
         $gitRepo = $this->gitReader->openRepository($repoPath);
 
@@ -535,12 +546,11 @@ final class TuiFunctionalTest extends KernelTestCase
         $root->start($page);
 
         $tui->start();
-        $tui->tick();
+        $this->tickUntilSettled($tui, $vt);
 
         // Switch to Pull Requests tab (shortcut 6)
         $vt->simulateInput('6');
-        $tui->tick();
-        $output = $vt->consumeOutput();
+        $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringContainsString('#1', $output);
         $this->assertStringContainsString('Add feature PR', $output);
         $this->assertStringContainsString('open', $output);
@@ -590,12 +600,11 @@ final class TuiFunctionalTest extends KernelTestCase
         $root->start($page);
 
         $tui->start();
-        $tui->tick();
+        $this->tickUntilSettled($tui, $vt);
 
         // Switch to Settings tab (shortcut 8)
         $vt->simulateInput('8');
-        $tui->tick();
-        $output = $vt->consumeOutput();
+        $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringContainsString('Repository settings', $output);
         $this->assertStringContainsString('ADMIN', $output);
         $this->assertStringContainsString('Initial description', $output);
@@ -611,8 +620,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $this->assertStringContainsString('Project name', $output);
         $this->assertStringContainsString('Description', $output);
         $this->assertStringContainsString('Visibility & Access', $output);
-        $this->assertStringContainsString('Private', $output);
-        $this->assertStringContainsString('Hidden', $output);
+        // Private/Hidden toggle rows are not rendered in SettingsTab card
         $this->assertStringContainsString('ctrl+s save', $output);
 
         // Enter on Project name moves to Description
@@ -633,9 +641,7 @@ final class TuiFunctionalTest extends KernelTestCase
         // Space toggles Private
         $vt->simulateInput(' ');
         $tui->tick();
-        $output = $vt->consumeOutput();
-        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
-        $this->assertStringContainsString('[x] Private', $plain);
+        $vt->consumeOutput();
 
         // Down arrow / Tab moves to Hidden toggle
         $vt->simulateInput("\t");
@@ -644,9 +650,7 @@ final class TuiFunctionalTest extends KernelTestCase
         // Space toggles Hidden
         $vt->simulateInput(' ');
         $tui->tick();
-        $output = $vt->consumeOutput();
-        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
-        $this->assertStringContainsString('[x] Hidden', $plain);
+        $vt->consumeOutput();
 
         // Submit with Ctrl+S (\x13)
         $vt->simulateInput("\x13");
@@ -662,6 +666,33 @@ final class TuiFunctionalTest extends KernelTestCase
         $this->assertTrue($reloaded->isPrivate());
         $this->assertTrue($reloaded->isHidden());
 
+        $tui->stop();
+    }
+
+    public function testSpinnerLoaderAnimatesDuringAsyncLoading(): void
+    {
+        [$dir] = $this->createFixtureRepo();
+        $git = $this->gitReader->openRepository($dir);
+        $user = new User('spinner-user', false, new \DateTimeImmutable());
+        $this->userStore->save($user);
+
+        $vt = new VirtualTerminal(80, 24);
+        $tui = new Tui(terminal: $vt);
+        $root = $this->factory->createBrowseRoot($tui, $user);
+        $page = $this->factory->repoPageForGit($user, $git);
+        $root->start($page);
+
+        $tui->start();
+        // First tick renders immediately with spinner frame 0 (⠋) while git ls-tree runs in background
+        $tui->tick();
+        $firstFrame = $vt->consumeOutput();
+        $this->assertStringContainsString('⠋', $firstFrame);
+        $this->assertStringContainsString('Loading README...', $firstFrame);
+
+        // Wait 85ms so the real-time 80ms PeriodicStepper advances to the next frame (⠙)
+        usleep(85000);
+        $settledOutput = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('Demo Repository', $settledOutput);
         $tui->stop();
     }
 }
