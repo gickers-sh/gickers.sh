@@ -15,6 +15,7 @@ use App\PullRequest\Infrastructure\Git\PullRequestGit;
 use App\Repo\Domain\Model\Repo;
 use App\Repo\Domain\RepoName;
 use App\Shared\Domain\Exception\NotFound;
+use Symfony\Component\Process\Process;
 
 /**
  * Read side for pull requests. Every entry enforces repository read access with
@@ -61,6 +62,15 @@ final readonly class PullRequestQuery
             ?? throw new NotFound('pull request not found');
 
         return $this->git->diff($target, $pullRequest);
+    }
+
+    public function startDiffProcess(?User $actor, RepoName|string $repo, int $number): Process
+    {
+        $target = $this->readableRepo($actor, $repo);
+        $pullRequest = $this->pullRequestStore->byNumber($target, $number)
+            ?? throw new NotFound('pull request not found');
+
+        return $this->git->startDiffProcess($target, $pullRequest);
     }
 
     private function readableRepo(?User $actor, RepoName|string $repo): Repo

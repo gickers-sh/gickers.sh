@@ -10,6 +10,7 @@ use App\Repo\Domain\Git\DiffFile;
 use App\Repo\Domain\Git\GitRepository;
 use App\Repo\Domain\Git\Refs;
 use App\Repo\Domain\Git\TreeEntry;
+use Symfony\Component\Process\Process;
 
 final class GitRepositoryReader
 {
@@ -60,21 +61,34 @@ final class GitRepositoryReader
             }
         }
 
-        // Default / HEAD branch
+        // Default / HEAD branch: read $gitDir/HEAD directly when it is a standard symbolic ref
         $defaultBranch = 'main';
-        $headProcess = GitCommand::run($realPath, ['symbolic-ref', '--short', 'HEAD']);
-        if ($headProcess->isSuccessful()) {
-            $head = trim($headProcess->getOutput());
-            if ('' !== $head) {
-                $defaultBranch = $head;
+        $headFile = $gitDir.'/HEAD';
+        $headResolved = false;
+        if (is_file($headFile)) {
+            $headRaw = trim((string) file_get_contents($headFile));
+            if (str_starts_with($headRaw, 'ref: refs/heads/')) {
+                $branch = substr($headRaw, \strlen('ref: refs/heads/'));
+                if ('' !== $branch) {
+                    $defaultBranch = $branch;
+                    $headResolved = true;
+                }
             }
-        } else {
-            // Fallback: rev-parse abbrev-ref HEAD
-            $headProcess = GitCommand::run($realPath, ['rev-parse', '--abbrev-ref', 'HEAD']);
+        }
+        if (!$headResolved) {
+            $headProcess = GitCommand::run($realPath, ['symbolic-ref', '--short', 'HEAD']);
             if ($headProcess->isSuccessful()) {
                 $head = trim($headProcess->getOutput());
-                if ('' !== $head && 'HEAD' !== $head) {
+                if ('' !== $head) {
                     $defaultBranch = $head;
+                }
+            } else {
+                $headProcess = GitCommand::run($realPath, ['rev-parse', '--abbrev-ref', 'HEAD']);
+                if ($headProcess->isSuccessful()) {
+                    $head = trim($headProcess->getOutput());
+                    if ('' !== $head && 'HEAD' !== $head) {
+                        $defaultBranch = $head;
+                    }
                 }
             }
         }
@@ -125,19 +139,39 @@ final class GitRepositoryReader
      */
     public function getTree(GitRepository $repo, string $ref = 'HEAD', string $subpath = ''): array
     {
+        $process = $this->runOrStartTree($repo, $ref, $subpath, false);
+
+        if (!$process->isSuccessful()) {
+            throw new \RuntimeException(sprintf('Failed to get tree for ref "%s": %s', $ref, $process->getErrorOutput()));
+        }
+
+        return $this->parseTreeOutput($process->getOutput());
+    }
+
+    /**
+     * Starts a non-blocking `git ls-tree` process.
+     */
+    public function startTreeProcess(GitRepository $repo, string $ref = 'HEAD', string $subpath = ''): Process
+    {
+        return $this->runOrStartTree($repo, $ref, $subpath, true);
+    }
+
+    private function runOrStartTree(GitRepository $repo, string $ref, string $subpath, bool $async): Process
+    {
         $args = ['ls-tree', '-l', '-z', new Revision($ref)];
         if ('' !== $subpath) {
             $args[] = '--';
             $args[] = rtrim($subpath, '/').'/';
         }
 
-        $process = GitCommand::run($repo->path, $args);
+        return $async ? GitCommand::start($repo->path, $args) : GitCommand::run($repo->path, $args);
+    }
 
-        if (!$process->isSuccessful()) {
-            throw new \RuntimeException(sprintf('Failed to get tree for ref "%s": %s', $ref, $process->getErrorOutput()));
-        }
-
-        $output = $process->getOutput();
+    /**
+     * @return list<TreeEntry>
+     */
+    public function parseTreeOutput(string $output): array
+    {
         if ('' === $output) {
             return [];
         }
@@ -203,6 +237,16 @@ final class GitRepositoryReader
     }
 
     /**
+     * Starts a non-blocking `git cat-file -p` process.
+     */
+    public function startBlobProcess(GitRepository $repo, string $ref, string $path): Process
+    {
+        $target = sprintf('%s:%s', $ref, ltrim($path, '/'));
+
+        return GitCommand::start($repo->path, ['cat-file', '-p', new Revision($target)]);
+    }
+
+    /**
      * Finds and reads the README file at the root of the repository.
      * Looks for README.md, README, readme.markdown, README.txt (case-insensitive).
      *
@@ -216,6 +260,28 @@ final class GitRepositoryReader
             return null;
         }
 
+        $entry = $this->findReadmeEntry($entries);
+        if (null === $entry) {
+            return null;
+        }
+
+        try {
+            $content = $this->getBlob($repo, $ref, $entry->path);
+
+            return [
+                'path' => $entry->path,
+                'content' => $content,
+            ];
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * @param iterable<TreeEntry> $entries
+     */
+    public function findReadmeEntry(iterable $entries): ?TreeEntry
+    {
         $candidates = ['readme.md', 'readme', 'readme.markdown', 'readme.txt'];
         $filesByName = [];
         foreach ($entries as $entry) {
@@ -226,17 +292,7 @@ final class GitRepositoryReader
 
         foreach ($candidates as $candidate) {
             if (isset($filesByName[$candidate])) {
-                $entry = $filesByName[$candidate];
-                try {
-                    $content = $this->getBlob($repo, $ref, $entry->path);
-
-                    return [
-                        'path' => $entry->path,
-                        'content' => $content,
-                    ];
-                } catch (\Throwable) {
-                    return null;
-                }
+                return $filesByName[$candidate];
             }
         }
 
@@ -260,6 +316,25 @@ final class GitRepositoryReader
      */
     public function getCommits(GitRepository $repo, string $ref = 'HEAD', int $limit = 50, int $offset = 0): array
     {
+        $process = $this->runOrStartCommits($repo, $ref, $limit, $offset, false);
+
+        if (!$process->isSuccessful()) {
+            throw new \RuntimeException(sprintf('Failed to get commits for ref "%s": %s', $ref, $process->getErrorOutput()));
+        }
+
+        return $this->parseCommitsOutput($process->getOutput());
+    }
+
+    /**
+     * Starts a non-blocking `git log` process.
+     */
+    public function startCommitsProcess(GitRepository $repo, string $ref = 'HEAD', int $limit = 50, int $offset = 0): Process
+    {
+        return $this->runOrStartCommits($repo, $ref, $limit, $offset, true);
+    }
+
+    private function runOrStartCommits(GitRepository $repo, string $ref, int $limit, int $offset, bool $async): Process
+    {
         $format = '%H%x00%h%x00%an%x00%ae%x00%at%x00%s%x00%b';
         $args = [
             'log',
@@ -271,13 +346,14 @@ final class GitRepositoryReader
             new Revision($ref),
         ];
 
-        $process = GitCommand::run($repo->path, $args);
+        return $async ? GitCommand::start($repo->path, $args) : GitCommand::run($repo->path, $args);
+    }
 
-        if (!$process->isSuccessful()) {
-            throw new \RuntimeException(sprintf('Failed to get commits for ref "%s": %s', $ref, $process->getErrorOutput()));
-        }
-
-        $output = $process->getOutput();
+    /**
+     * @return list<Commit>
+     */
+    public function parseCommitsOutput(string $output): array
+    {
         if ('' === $output) {
             return [];
         }
@@ -340,6 +416,72 @@ final class GitRepositoryReader
         }
 
         return $this->parseDiffOutput($process->getOutput());
+    }
+
+    /**
+     * Starts a non-blocking `git show --patch` process for a single commit diff.
+     */
+    public function startCommitDiffProcess(GitRepository $repo, string $sha): Process
+    {
+        return GitCommand::start($repo->path, ['show', '--patch', '--format=', new Revision($sha)]);
+    }
+
+    /**
+     * Starts a non-blocking `git for-each-ref` process returning all branches and tags in a single call.
+     */
+    public function startRefsProcess(GitRepository $repo): Process
+    {
+        return GitCommand::start($repo->path, [
+            'for-each-ref',
+            '--format=%(refname)%09%(objectname)%09%(committerdate:unix)%09%(creatordate:unix)',
+            'refs/heads',
+            'refs/tags',
+        ]);
+    }
+
+    /**
+     * Parses the output of {@see startRefsProcess()} into branches, tags, and per-ref commit metadata.
+     *
+     * @return array{branches: list<string>, tags: list<string>, meta: array<string, array{hash: string, time: int}>}
+     */
+    public function parseRefsProcessOutput(string $output): array
+    {
+        $branches = [];
+        $tags = [];
+        $meta = [];
+
+        foreach (explode("\n", trim($output)) as $line) {
+            $line = trim($line);
+            if ('' === $line) {
+                continue;
+            }
+            $parts = explode("\t", $line);
+            $refname = $parts[0];
+            $hash = $parts[1] ?? '';
+            $committerTs = (int) ($parts[2] ?? 0);
+            $creatorTs = (int) ($parts[3] ?? 0);
+            $time = $committerTs > 0 ? $committerTs : $creatorTs;
+
+            if (str_starts_with($refname, 'refs/heads/')) {
+                $short = substr($refname, \strlen('refs/heads/'));
+                if ('' !== $short) {
+                    $branches[] = $short;
+                    if ('' !== $hash) {
+                        $meta[$short] = ['hash' => $hash, 'time' => $time];
+                    }
+                }
+            } elseif (str_starts_with($refname, 'refs/tags/')) {
+                $short = substr($refname, \strlen('refs/tags/'));
+                if ('' !== $short) {
+                    $tags[] = $short;
+                    if ('' !== $hash) {
+                        $meta[$short] = ['hash' => $hash, 'time' => $time];
+                    }
+                }
+            }
+        }
+
+        return ['branches' => $branches, 'tags' => $tags, 'meta' => $meta];
     }
 
     /**
@@ -425,7 +567,7 @@ final class GitRepositoryReader
     /**
      * Parse raw diff output into a structured Diff.
      */
-    private function parseDiffOutput(string $rawDiff): Diff
+    public function parseDiffOutput(string $rawDiff): Diff
     {
         if ('' === trim($rawDiff)) {
             return new Diff(

@@ -32,6 +32,20 @@ final class GitCommand
     }
 
     /**
+     * Starts `git <args>` asynchronously without blocking and returns the running process.
+     *
+     * @param list<string|Revision>      $args
+     * @param array<string, string>|null $env
+     */
+    public static function start(string $cwd, array $args, ?string $input = null, ?array $env = null): Process
+    {
+        $process = self::process($cwd, $args, $input, $env);
+        $process->start();
+
+        return $process;
+    }
+
+    /**
      * Runs `git <args>` and returns its stdout.
      *
      * @param list<string|Revision>      $args

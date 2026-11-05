@@ -13,6 +13,7 @@ use App\Repo\Infrastructure\Git\GitRepositoryReader;
 use App\Repo\Infrastructure\Git\GitRepositoryWriter;
 use App\Repo\Infrastructure\Git\Revision;
 use App\Shared\Domain\Exception\InvalidInput;
+use Symfony\Component\Process\Process;
 
 /**
  * Git plumbing specific to pull requests: materialising `refs/pull/<n>/head`,
@@ -110,6 +111,22 @@ final class PullRequestGit
         }
 
         return $process->getOutput();
+    }
+
+    /**
+     * Starts a non-blocking three-dot diff process for the pull request.
+     */
+    public function startDiffProcess(Repo $target, PullRequest $pr): Process
+    {
+        $path = $this->repoDirectory->pathFor($target->name());
+        $pullRef = \sprintf('refs/pull/%d/head', $pr->number());
+        $baseRef = 'refs/heads/'.$pr->baseRef();
+
+        $spec = $this->revParse($path, $pullRef)
+            ? \sprintf('%s...%s', $baseRef, $pullRef)
+            : \sprintf('%s...%s', $pr->baseCommit(), $pr->headCommit());
+
+        return GitCommand::start($path, ['diff', new Revision($spec)]);
     }
 
     /**
