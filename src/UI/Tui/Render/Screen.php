@@ -108,6 +108,16 @@ final class Screen
     }
 
     /**
+     * A body displaying an animated spinner line near the top.
+     *
+     * @return list<string>
+     */
+    public static function spinnerBody(Spinner $spinner, string $message, int $width): array
+    {
+        return [self::blank($width), self::fit('  '.$spinner->format($message), $width)];
+    }
+
+    /**
      * Render a horizontal tab bar (Soft Serve style): the active tab is
      * underlined cyan, the rest use the default foreground, separated by a dim
      * vertical bar.

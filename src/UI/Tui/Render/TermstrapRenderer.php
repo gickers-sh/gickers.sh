@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\UI\Tui\Render;
 
+use Symfony\Component\Process\Process;
 use Termstrap\Termstrap;
 
 final class TermstrapRenderer implements MarkdownRenderer
@@ -24,8 +25,11 @@ CSS;
     private ?Termstrap $termstrap = null;
     private bool $termstrapAvailable = false;
 
+    private ?string $libraryPath;
+
     public function __construct(?string $libraryPath = null)
     {
+        $this->libraryPath = $libraryPath;
         try {
             $this->termstrap = new Termstrap($libraryPath);
             $this->termstrapAvailable = true;
@@ -66,7 +70,7 @@ CSS;
                 $input = $content;
                 break;
             case '.gif':
-                $input = '<img src="' . htmlspecialchars($filename, \ENT_QUOTES, 'UTF-8') . '" alt="Animated GIF" />';
+                $input = '<img src="'.htmlspecialchars($filename, \ENT_QUOTES, 'UTF-8').'" alt="Animated GIF" />';
                 break;
             default:
                 $input = $content;
@@ -110,6 +114,36 @@ CSS;
     }
 
     /**
+     * Starts a non-blocking PHP subprocess that runs {@see renderDocument()} so heavy FFI
+     * rendering (remote badges/images, large documents) never blocks the TUI event loop.
+     *
+     * @param array<string, mixed> $options
+     */
+    public function startRenderDocumentProcess(string $filename, string $content, int $width, array $options = []): Process
+    {
+        $autoload = \dirname(__DIR__, 4).'/vendor/autoload.php';
+        $script = 'require $argv[1];'
+            .'$payload = json_decode(stream_get_contents(STDIN), true);'
+            .'if (!is_array($payload)) { exit(1); }'
+            .'$r = new \App\UI\Tui\Render\TermstrapRenderer($payload["libraryPath"] ?? null);'
+            .'fwrite(STDOUT, $r->renderDocument((string) $payload["filename"], (string) $payload["content"], (int) $payload["width"], (array) ($payload["options"] ?? [])));';
+
+        $payload = json_encode([
+            'libraryPath' => $this->libraryPath,
+            'filename' => $filename,
+            'content' => $content,
+            'width' => $width,
+            'options' => $options,
+        ], \JSON_THROW_ON_ERROR);
+
+        $process = new Process([\PHP_BINARY, '-r', $script, $autoload]);
+        $process->setInput($payload);
+        $process->start();
+
+        return $process;
+    }
+
+    /**
      * Renders a single line / snippet for live preview in the editor, matching
      * Go Soft Serve `pkg/ui/render/renderer.go:RenderSnippet`.
      */
@@ -126,7 +160,7 @@ CSS;
 
         $renderInput = $content;
         if ('' !== $docDefs && str_contains($content, '][')) {
-            $renderInput = $content . "\n\n" . $docDefs;
+            $renderInput = $content."\n\n".$docDefs;
         }
 
         $ext = $this->normalizeExt($filename);
@@ -155,7 +189,7 @@ CSS;
         }
 
         if (!$this->termstrapAvailable || null === $this->termstrap) {
-            return $leadIndent . $this->fallbackRender($input, $width);
+            return $leadIndent.$this->fallbackRender($input, $width);
         }
 
         $termstrapOptions = [
@@ -175,7 +209,7 @@ CSS;
             foreach ($lines as $line) {
                 $stripped = preg_replace('/\e\[[0-9;]*m/', '', $line);
                 if ('' !== trim($stripped)) {
-                    $target = rtrim($line, " ");
+                    $target = rtrim($line, ' ');
                     break;
                 }
             }
@@ -187,9 +221,9 @@ CSS;
                 }
             }
 
-            return $leadIndent . $target;
+            return $leadIndent.$target;
         } catch (\Throwable) {
-            return $leadIndent . $this->fallbackRender($input, $width);
+            return $leadIndent.$this->fallbackRender($input, $width);
         }
     }
 
@@ -219,7 +253,7 @@ CSS;
         $html = '<table class="table table-striped table-hover table-sm">';
         $html .= '<thead><tr>';
         foreach ($rows[0] as $col) {
-            $html .= '<th>' . htmlspecialchars((string) $col, \ENT_QUOTES, 'UTF-8') . '</th>';
+            $html .= '<th>'.htmlspecialchars((string) $col, \ENT_QUOTES, 'UTF-8').'</th>';
         }
         $html .= '</tr></thead>';
 
@@ -228,7 +262,7 @@ CSS;
             for ($i = 1; $i < count($rows); ++$i) {
                 $html .= '<tr>';
                 foreach ($rows[$i] as $col) {
-                    $html .= '<td>' . htmlspecialchars((string) $col, \ENT_QUOTES, 'UTF-8') . '</td>';
+                    $html .= '<td>'.htmlspecialchars((string) $col, \ENT_QUOTES, 'UTF-8').'</td>';
                 }
                 $html .= '</tr>';
             }
@@ -246,12 +280,12 @@ CSS;
             $lower = strtolower($filename);
 
             return match ($lower) {
-                'csv', 'tsv', 'html', 'htm', 'md', 'markdown', 'gif' => '.' . $lower,
+                'csv', 'tsv', 'html', 'htm', 'md', 'markdown', 'gif' => '.'.$lower,
                 default => '',
             };
         }
 
-        return '.' . $ext;
+        return '.'.$ext;
     }
 
     private function fallbackRender(string $content, int $width): string

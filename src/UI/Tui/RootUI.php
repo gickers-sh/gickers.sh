@@ -8,6 +8,7 @@ use App\Identity\Domain\Model\User;
 use App\UI\Tui\Input\Keys;
 use App\UI\Tui\Page\Page;
 use Symfony\Component\Tui\Event\InputEvent;
+use Symfony\Component\Tui\Event\TickEvent;
 use Symfony\Component\Tui\Tui;
 
 /**
@@ -21,6 +22,7 @@ use Symfony\Component\Tui\Tui;
 final class RootUI implements TuiHost
 {
     private ?Page $active = null;
+    private ?string $busyIntervalId = null;
 
     public function __construct(
         private readonly Tui $tui,
@@ -42,9 +44,29 @@ final class RootUI implements TuiHost
                 $this->active->sync();
                 $event->stopPropagation();
                 $this->tui->requestRender();
+                $this->ensureBusyInterval();
             }
         });
+        $this->tui->onTick(function (TickEvent $event): bool {
+            $active = $this->active;
+            if (null === $active) {
+                $this->stopBusyInterval();
+
+                return false;
+            }
+            $busy = $active->tick($event->getDeltaTime() > 0.0 ? $event->getDeltaTime() : null);
+            if ($busy) {
+                $this->ensureBusyInterval();
+                $active->sync();
+                $this->tui->requestRender();
+            } else {
+                $this->stopBusyInterval();
+            }
+
+            return $busy;
+        });
     }
+
     public function start(Page $page): void
     {
         $terminal = $this->tui->getTerminal();
@@ -63,6 +85,7 @@ final class RootUI implements TuiHost
         $page->mount($this);
         $page->sync();
         $this->tui->requestRender();
+        $this->ensureBusyInterval();
     }
 
     public function tui(): Tui
@@ -102,8 +125,38 @@ final class RootUI implements TuiHost
 
     public function quit(): void
     {
+        $this->stopBusyInterval();
         // Disable mouse tracking and restore standard screen buffer.
         $this->tui->getTerminal()->write("\x1b[?1006l\x1b[?1002l\x1b[?1000l\x1b[?1049l");
         $this->tui->stop();
+    }
+
+    private function ensureBusyInterval(): void
+    {
+        if (null !== $this->busyIntervalId) {
+            return;
+        }
+        $this->busyIntervalId = $this->tui->scheduleInterval(function (): void {
+            $active = $this->active;
+            if (null === $active) {
+                $this->stopBusyInterval();
+
+                return;
+            }
+            if ($active->tick()) {
+                $active->sync();
+                $this->tui->requestRender();
+            } else {
+                $this->stopBusyInterval();
+            }
+        }, 0.08);
+    }
+
+    private function stopBusyInterval(): void
+    {
+        if (null !== $this->busyIntervalId) {
+            $this->tui->cancelInterval($this->busyIntervalId);
+            $this->busyIntervalId = null;
+        }
     }
 }

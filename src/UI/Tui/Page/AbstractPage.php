@@ -60,6 +60,11 @@ abstract class AbstractPage implements Page
         $this->contentWidget->markDirty();
     }
 
+    public function tick(?float $deltaTime = null): bool
+    {
+        return false;
+    }
+
     /**
      * Load data after the widget tree is mounted. Overridable.
      */

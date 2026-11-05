@@ -19,7 +19,10 @@ abstract class AbstractRepoTab implements RepoTab
     protected int $sel = 0;
     protected int $scroll = 0;
     protected int $rows = 20;
-    public function __construct(protected readonly RepoContext $ctx) {}
+
+    public function __construct(protected readonly RepoContext $ctx)
+    {
+    }
 
     public function footerText(): string
     {
@@ -45,6 +48,11 @@ abstract class AbstractRepoTab implements RepoTab
     {
         $this->sel = 0;
         $this->scroll = 0;
+    }
+
+    public function tick(?float $deltaTime = null): bool
+    {
+        return false;
     }
 
     protected function handleDocScroll(string $tok, ?string $txt, int $total): bool
@@ -104,7 +112,7 @@ abstract class AbstractRepoTab implements RepoTab
      */
     protected function messageBody(string $message, int $cols): array
     {
-        return [Screen::blank($cols), Screen::fit('  ' . $message, $cols)];
+        return [Screen::blank($cols), Screen::fit('  '.$message, $cols)];
     }
 
     /**
@@ -136,13 +144,13 @@ abstract class AbstractRepoTab implements RepoTab
     {
         return array_map(static function (string $line): string {
             if (str_starts_with($line, '+') && !str_starts_with($line, '+++')) {
-                return "\e[32m" . $line . "\e[0m";
+                return "\e[32m".$line."\e[0m";
             }
             if (str_starts_with($line, '-') && !str_starts_with($line, '---')) {
-                return "\e[31m" . $line . "\e[0m";
+                return "\e[31m".$line."\e[0m";
             }
             if (str_starts_with($line, '@@')) {
-                return "\e[36m" . $line . "\e[0m";
+                return "\e[36m".$line."\e[0m";
             }
 
             return $line;
@@ -152,25 +160,25 @@ abstract class AbstractRepoTab implements RepoTab
     protected function humanSize(int $bytes): string
     {
         if ($bytes < 1024) {
-            return $bytes . ' B';
+            return $bytes.' B';
         }
         if ($bytes < 1024 * 1024) {
-            return round($bytes / 1024, 1) . ' KB';
+            return round($bytes / 1024, 1).' KB';
         }
 
-        return round($bytes / (1024 * 1024), 1) . ' MB';
+        return round($bytes / (1024 * 1024), 1).' MB';
     }
 
     protected function relativeTime(int $timestamp): string
     {
         $diff = max(0, time() - $timestamp);
         if ($diff < 3600) {
-            return max(1, intdiv($diff, 60)) . 'm ago';
+            return max(1, intdiv($diff, 60)).'m ago';
         }
         if ($diff < 86400) {
-            return intdiv($diff, 3600) . 'h ago';
+            return intdiv($diff, 3600).'h ago';
         }
 
-        return intdiv($diff, 86400) . 'd ago';
+        return intdiv($diff, 86400).'d ago';
     }
 }

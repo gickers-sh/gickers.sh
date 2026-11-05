@@ -47,4 +47,10 @@ interface RepoTab
      * Reset transient state when this tab becomes active.
      */
     public function onActivate(): void;
+
+    /**
+     * Advance any tab-local asynchronous loading (file blob, commit diff, PR diff).
+     * Returns true while work is still in progress.
+     */
+    public function tick(?float $deltaTime = null): bool;
 }

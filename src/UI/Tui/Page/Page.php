@@ -29,4 +29,11 @@ interface Page
      * the current page state.
      */
     public function sync(): void;
+
+    /**
+     * Advance any in-flight asynchronous loading or spinner animations.
+     * Returns true while active work is still in progress (keeping fast ticking active),
+     * or false when idle.
+     */
+    public function tick(?float $deltaTime = null): bool;
 }
