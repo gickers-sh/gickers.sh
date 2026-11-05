@@ -58,8 +58,11 @@ final class TuiCommand extends Command
 
         $initialPage ??= $this->factory->selectionPage($actor);
         $root->start($initialPage);
-        $tui->run();
-
+        try {
+            $tui->run();
+        } finally {
+            $root->quit();
+        }
         return Command::SUCCESS;
     }
 }

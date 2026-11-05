@@ -7,8 +7,16 @@ namespace App\UI\Tui\Page;
 use App\CodeIntel\Application\Query\CodeIntelQuery;
 use App\Identity\Domain\Model\User;
 use App\PullRequest\Application\MergePullRequest;
+use App\PullRequest\Application\ClosePullRequest;
+use App\PullRequest\Application\CommentPullRequest;
+use App\PullRequest\Application\DeletePullRequest;
+use App\PullRequest\Application\OpenPullRequest;
+use App\PullRequest\Application\ReopenPullRequest;
+use App\PullRequest\Application\UpdatePullRequest;
 use App\PullRequest\Application\Query\PullRequestQuery;
 use App\Repo\Application\UpdateRepoSettings;
+use App\Repo\Application\DeleteFile;
+use App\Repo\Application\WriteFile;
 use App\Repo\Domain\Git\GitRepository;
 use App\Repo\Domain\Model\Repo;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
@@ -57,6 +65,14 @@ final class RepoPage extends AbstractPage
         UpdateRepoSettings $updateSettings,
         ?PullRequestQuery $pullRequestQuery = null,
         ?MergePullRequest $mergePullRequest = null,
+        ?WriteFile $writeFile = null,
+        ?DeleteFile $deleteFile = null,
+        ?OpenPullRequest $openPullRequest = null,
+        ?ClosePullRequest $closePullRequest = null,
+        ?ReopenPullRequest $reopenPullRequest = null,
+        ?DeletePullRequest $deletePullRequest = null,
+        ?CommentPullRequest $commentPullRequest = null,
+        ?UpdatePullRequest $updatePullRequest = null,
         string $sshPublicUrl = '',
     ) {
         $this->ctx = new RepoContext(
@@ -69,6 +85,14 @@ final class RepoPage extends AbstractPage
             $updateSettings,
             $pullRequestQuery,
             $mergePullRequest,
+            $writeFile,
+            $deleteFile,
+            $openPullRequest,
+            $closePullRequest,
+            $reopenPullRequest,
+            $deletePullRequest,
+            $commentPullRequest,
+            $updatePullRequest,
             $sshPublicUrl,
         );
         $this->tabs = [
@@ -102,7 +126,22 @@ final class RepoPage extends AbstractPage
 
         $active = $this->tabs[$this->tab];
         if ($active->capturesInput()) {
-            return $active->handleKey($seq);
+            // Overlays (file viewer, diffs…) own their keys; help and quit stay reachable for keys they leave unhandled.
+            if ($active->handleKey($seq)) {
+                return true;
+            }
+            if (Keys::CTRL_C === $tok) {
+                $this->host->quit();
+
+                return true;
+            }
+            if ('?' === $txt) {
+                $this->helpOpen = true;
+
+                return true;
+            }
+
+            return false;
         }
 
         if (Keys::CTRL_C === $tok) {
@@ -144,10 +183,15 @@ final class RepoPage extends AbstractPage
         $this->tab = $tab;
         $this->tabs[$tab]->onActivate();
     }
+    public function activeTab(): RepoTab
+    {
+        return $this->tabs[$this->tab];
+    }
+
 
     protected function headerLines(int $cols): array
     {
-        $name = $this->ctx->name.($this->ctx->db?->isPrivate() ? ' 🔒' : '');
+        $name = $this->ctx->name . ($this->ctx->db?->isPrivate() ? ' 🔒' : '');
         $desc = $this->ctx->db?->description() ?? '';
 
         return Screen::repoHeader($name, $desc, $this->ctx->cloneCommand(), $cols);
@@ -161,9 +205,9 @@ final class RepoPage extends AbstractPage
     protected function footerLines(int $cols): array
     {
         $active = $this->tabs[$this->tab];
-        $branch = '* '.$this->ctx->ref;
+        $branch = '* ' . $this->ctx->ref;
         if (null !== $this->ctx->flash) {
-            $status = "\e[7m".Screen::fit(' '.$this->ctx->flash, $cols)."\e[0m";
+            $status = "\e[7m" . Screen::fit(' ' . $this->ctx->flash, $cols) . "\e[0m";
         } else {
             $status = Screen::statusBar($cols, $this->ctx->name, $active->statusValue(), $active->statusInfo(), $branch);
         }
@@ -182,11 +226,36 @@ final class RepoPage extends AbstractPage
      */
     private function helpColumns(): array
     {
-        return [
+        $columns = [
             [['esc', 'back to menu'], ['tab', 'switch tab'], ['1–8', 'jump to tab']],
             [['↑/k', 'up'], ['↓/j', 'down'], ['g/G', 'top / bottom']],
             [['enter', 'open'], ['f/b', 'page down / up'], ['?', 'toggle help']],
         ];
+
+        $actions = $this->tabActionHelp();
+        if ([] !== $actions) {
+            $columns[] = $actions;
+        }
+
+        return $columns;
+    }
+
+    /**
+     * Per-tab action shortcuts for the help overlay, matching each tab's own key
+     * handling (write/PR/settings actions that are not covered by the generic
+     * navigation columns).
+     *
+     * @return list<array{0: string, 1: string}>
+     */
+    private function tabActionHelp(): array
+    {
+        return match ($this->tab) {
+            0 => [['e', 'edit readme'], ['^p', 'live preview']],
+            1 => [['e', 'edit file'], ['n', 'new file'], ['D', 'delete file'], ['p', 'render md'], ['^p', 'live preview']],
+            5 => [['n', 'new PR'], ['f', 'filter'], ['m', 'merge'], ['d', 'diff'], ['s', 'close / reopen'], ['e', 'edit'], ['c', 'comment'], ['x', 'delete']],
+            7 => [['e', 'edit settings']],
+            default => [],
+        };
     }
 
     protected function paintBody(int $cols, int $rows): array

@@ -9,8 +9,16 @@ use App\CodeIntel\Application\Query\CodeIntelQuery;
 use App\Identity\Domain\Model\User;
 use App\Identity\Domain\UserStore;
 use App\PullRequest\Application\MergePullRequest;
+use App\PullRequest\Application\ClosePullRequest;
+use App\PullRequest\Application\CommentPullRequest;
+use App\PullRequest\Application\DeletePullRequest;
+use App\PullRequest\Application\OpenPullRequest;
+use App\PullRequest\Application\ReopenPullRequest;
+use App\PullRequest\Application\UpdatePullRequest;
 use App\PullRequest\Application\Query\PullRequestQuery;
 use App\Repo\Application\CreateRepo;
+use App\Repo\Application\DeleteFile;
+use App\Repo\Application\WriteFile;
 use App\Repo\Application\Query\RepoQuery;
 use App\Repo\Application\UpdateRepoSettings;
 use App\Repo\Domain\Git\GitRepository;
@@ -43,8 +51,15 @@ final class TuiPageFactory
         private readonly RepoDirectory $repoDirectory,
         private readonly ?PullRequestQuery $pullRequestQuery = null,
         private readonly ?MergePullRequest $mergePullRequest = null,
-    ) {
-    }
+        private readonly ?WriteFile $writeFile = null,
+        private readonly ?DeleteFile $deleteFile = null,
+        private readonly ?OpenPullRequest $openPullRequest = null,
+        private readonly ?ClosePullRequest $closePullRequest = null,
+        private readonly ?ReopenPullRequest $reopenPullRequest = null,
+        private readonly ?DeletePullRequest $deletePullRequest = null,
+        private readonly ?CommentPullRequest $commentPullRequest = null,
+        private readonly ?UpdatePullRequest $updatePullRequest = null,
+    ) {}
 
     public function createRoot(Tui $tui, ?User $actor): RootUI
     {
@@ -58,7 +73,7 @@ final class TuiPageFactory
 
     public function selectionPage(?User $actor): SelectionPage
     {
-        return new SelectionPage($this->repoQuery, $this->createRepo, $this->settings, $actor);
+        return new SelectionPage($this->repoQuery, $this->createRepo, $this->settings, $actor, $this->reader, $this->renderer, $this->repoDirectory);
     }
 
     /**
@@ -70,12 +85,12 @@ final class TuiPageFactory
         $repo = $this->repoQuery->get($actor, $name);
         $git = $this->reader->openRepository($this->repoDirectory->pathFor($repo->name()));
 
-        return new RepoPage($git, $repo, $actor, $this->reader, $this->renderer, $this->codeIntel, $this->updateSettings, $this->pullRequestQuery, $this->mergePullRequest, $this->settings->sshPublicUrl);
+        return new RepoPage($git, $repo, $actor, $this->reader, $this->renderer, $this->codeIntel, $this->updateSettings, $this->pullRequestQuery, $this->mergePullRequest, $this->writeFile, $this->deleteFile, $this->openPullRequest, $this->closePullRequest, $this->reopenPullRequest, $this->deletePullRequest, $this->commentPullRequest, $this->updatePullRequest, $this->settings->sshPublicUrl);
     }
 
     public function repoPageForGit(?User $actor, GitRepository $git): RepoPage
     {
-        return new RepoPage($git, null, $actor, $this->reader, $this->renderer, $this->codeIntel, $this->updateSettings, $this->pullRequestQuery, $this->mergePullRequest, $this->settings->sshPublicUrl);
+        return new RepoPage($git, null, $actor, $this->reader, $this->renderer, $this->codeIntel, $this->updateSettings, $this->pullRequestQuery, $this->mergePullRequest, $this->writeFile, $this->deleteFile, $this->openPullRequest, $this->closePullRequest, $this->reopenPullRequest, $this->deletePullRequest, $this->commentPullRequest, $this->updatePullRequest, $this->settings->sshPublicUrl);
     }
 
     public function adminPage(?User $actor): AdminPage

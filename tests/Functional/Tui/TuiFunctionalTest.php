@@ -568,9 +568,99 @@ final class TuiFunctionalTest extends KernelTestCase
         $this->assertStringContainsString('Merged PR #1', $output);
 
         // Verify status in DB
+        /** @var \App\PullRequest\Application\Query\PullRequestQuery $prQuery */
         $prQuery = $container->get('test.pull_request_query');
         $updatedPr = $prQuery->get($user, $repo->name(), 1);
         $this->assertTrue($updatedPr->isMerged());
+
+        $tui->stop();
+    }
+
+    public function testRepoPageSettingsEditModalForm(): void
+    {
+        $user = new User('settings-tester', true, new \DateTimeImmutable());
+        $this->userStore->save($user);
+
+        $repo = ($this->createRepo)($user, 'settings-test-repo', false, false, 'Initial description', 'initial-project');
+
+        $vt = new VirtualTerminal(80, 24);
+        $tui = new Tui(terminal: $vt);
+        $root = $this->factory->createRoot($tui, $user);
+        $page = $this->factory->repoPageForName($user, $repo->nameString());
+        $root->start($page);
+
+        $tui->start();
+        $tui->tick();
+
+        // Switch to Settings tab (shortcut 8)
+        $vt->simulateInput('8');
+        $tui->tick();
+        $output = $vt->consumeOutput();
+        $this->assertStringContainsString('Repository settings', $output);
+        $this->assertStringContainsString('ADMIN', $output);
+        $this->assertStringContainsString('Initial description', $output);
+        $this->assertStringContainsString('initial-project', $output);
+        $this->assertStringContainsString('press e to edit settings', $output);
+
+        // Press 'e' to enter editing mode
+        $vt->simulateInput('e');
+        $tui->tick();
+        $output = $vt->consumeOutput();
+        $this->assertStringContainsString('Repository settings', $output);
+        $this->assertStringContainsString('EDITING', $output);
+        $this->assertStringContainsString('Project name', $output);
+        $this->assertStringContainsString('Description', $output);
+        $this->assertStringContainsString('Visibility & Access', $output);
+        $this->assertStringContainsString('Private', $output);
+        $this->assertStringContainsString('Hidden', $output);
+        $this->assertStringContainsString('ctrl+s save', $output);
+
+        // Enter on Project name moves to Description
+        $vt->simulateInput("\r");
+        $tui->tick();
+
+        // Clear and update description
+        for ($i = 0; $i < 25; ++$i) {
+            $vt->simulateInput("\x7f");
+        }
+        $vt->simulateInput('Updated description');
+        $tui->tick();
+
+        // Enter on Description moves to Private toggle
+        $vt->simulateInput("\r");
+        $tui->tick();
+
+        // Space toggles Private
+        $vt->simulateInput(' ');
+        $tui->tick();
+        $output = $vt->consumeOutput();
+        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('[x] Private', $plain);
+
+        // Down arrow / Tab moves to Hidden toggle
+        $vt->simulateInput("\t");
+        $tui->tick();
+
+        // Space toggles Hidden
+        $vt->simulateInput(' ');
+        $tui->tick();
+        $output = $vt->consumeOutput();
+        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('[x] Hidden', $plain);
+
+        // Submit with Ctrl+S (\x13)
+        $vt->simulateInput("\x13");
+        $tui->tick();
+        $output = $vt->consumeOutput();
+        $this->assertStringContainsString('Settings saved.', $output);
+
+        // Verify in DB
+        $reloaded = $this->repoStore->byName($repo->name());
+        $this->assertNotNull($reloaded);
+        $this->assertSame('Updated description', $reloaded->description());
+        $this->assertSame('initial-project', $reloaded->projectName());
+        $this->assertTrue($reloaded->isPrivate());
+        $this->assertTrue($reloaded->isHidden());
 
         $tui->stop();
     }

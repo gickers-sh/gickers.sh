@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\UI\Tui;
 
 use App\Identity\Domain\Model\User;
+use App\UI\Tui\Input\Keys;
 use App\UI\Tui\Page\Page;
 use Symfony\Component\Tui\Event\InputEvent;
 use Symfony\Component\Tui\Tui;
@@ -32,6 +33,11 @@ final class RootUI implements TuiHost
             if (null === $this->active) {
                 return;
             }
+            if (Keys::isRelease($event->getData())) {
+                $event->stopPropagation();
+
+                return;
+            }
             if ($this->active->handleKey($event->getData())) {
                 $this->active->sync();
                 $event->stopPropagation();
@@ -39,9 +45,13 @@ final class RootUI implements TuiHost
             }
         });
     }
-
     public function start(Page $page): void
     {
+        $terminal = $this->tui->getTerminal();
+        // Enable alternate screen buffer (\e[?1049h), SGR mouse mode (\e[?1006h), and button event mouse tracking (\e[?1002h).
+        // This prevents the terminal emulator window from scrolling its own history buffer on mouse wheel,
+        // routing wheel events directly to the application as ANSI mouse sequences.
+        $terminal->write("\x1b[?1049h\x1b[?1000h\x1b[?1002h\x1b[?1006h");
         $this->activate($page);
     }
 
@@ -92,6 +102,8 @@ final class RootUI implements TuiHost
 
     public function quit(): void
     {
+        // Disable mouse tracking and restore standard screen buffer.
+        $this->tui->getTerminal()->write("\x1b[?1006l\x1b[?1002l\x1b[?1000l\x1b[?1049l");
         $this->tui->stop();
     }
 }

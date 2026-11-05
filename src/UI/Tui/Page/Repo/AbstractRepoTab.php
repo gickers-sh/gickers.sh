@@ -18,10 +18,8 @@ abstract class AbstractRepoTab implements RepoTab
 
     protected int $sel = 0;
     protected int $scroll = 0;
-
-    public function __construct(protected readonly RepoContext $ctx)
-    {
-    }
+    protected int $rows = 20;
+    public function __construct(protected readonly RepoContext $ctx) {}
 
     public function footerText(): string
     {
@@ -51,18 +49,26 @@ abstract class AbstractRepoTab implements RepoTab
 
     protected function handleDocScroll(string $tok, ?string $txt, int $total): bool
     {
+        $maxScroll = max(0, $total - ($this->rows > 0 ? $this->rows : 20));
+        $pageStep = max(1, $this->rows > 0 ? $this->rows - 2 : 10);
+        $halfStep = max(1, (int) round(($this->rows > 0 ? $this->rows : 20) / 2));
+
         if (Keys::UP === $tok || 'k' === $txt) {
             $this->scroll = max(0, $this->scroll - 1);
         } elseif (Keys::DOWN === $tok || 'j' === $txt) {
-            $this->scroll = max(0, min($this->scroll + 1, max(0, $total - 1)));
-        } elseif (Keys::PAGE_UP === $tok) {
-            $this->scroll = max(0, $this->scroll - 10);
-        } elseif (Keys::PAGE_DOWN === $tok) {
-            $this->scroll = max(0, min($this->scroll + 10, max(0, $total - 1)));
+            $this->scroll = max(0, min($this->scroll + 1, $maxScroll));
+        } elseif (Keys::CTRL_D === $tok || 'd' === $txt) {
+            $this->scroll = max(0, min($this->scroll + $halfStep, $maxScroll));
+        } elseif (Keys::CTRL_U === $tok || 'u' === $txt) {
+            $this->scroll = max(0, $this->scroll - $halfStep);
+        } elseif (Keys::PAGE_DOWN === $tok || Keys::CTRL_F === $tok || 'f' === $txt || Keys::SPACE === $tok) {
+            $this->scroll = max(0, min($this->scroll + $pageStep, $maxScroll));
+        } elseif (Keys::PAGE_UP === $tok || Keys::CTRL_B === $tok || 'b' === $txt) {
+            $this->scroll = max(0, $this->scroll - $pageStep);
         } elseif (Keys::HOME === $tok || 'g' === $txt) {
             $this->scroll = 0;
         } elseif (Keys::END === $tok || 'G' === $txt) {
-            $this->scroll = max(0, $total - 1);
+            $this->scroll = $maxScroll;
         } else {
             return false;
         }
@@ -76,6 +82,10 @@ abstract class AbstractRepoTab implements RepoTab
             $this->sel = max(0, $this->sel - 1);
         } elseif (Keys::DOWN === $tok || 'j' === $txt) {
             $this->sel = max(0, min($this->sel + 1, max(0, $count - 1)));
+        } elseif (Keys::PAGE_UP === $tok) {
+            $this->sel = max(0, $this->sel - 10);
+        } elseif (Keys::PAGE_DOWN === $tok) {
+            $this->sel = max(0, min($this->sel + 10, max(0, $count - 1)));
         } elseif (Keys::HOME === $tok || 'g' === $txt) {
             $this->sel = 0;
         } elseif (Keys::END === $tok || 'G' === $txt) {
@@ -94,7 +104,7 @@ abstract class AbstractRepoTab implements RepoTab
      */
     protected function messageBody(string $message, int $cols): array
     {
-        return [Screen::blank($cols), Screen::fit('  '.$message, $cols)];
+        return [Screen::blank($cols), Screen::fit('  ' . $message, $cols)];
     }
 
     /**
@@ -104,8 +114,10 @@ abstract class AbstractRepoTab implements RepoTab
      */
     protected function docWindow(array $lines, int $cols, int $rows): array
     {
+        $this->rows = max(1, $rows);
         $total = \count($lines);
-        $top = max(0, min($this->scroll, max(0, $total - 1)));
+        $maxScroll = max(0, $total - $rows);
+        $top = max(0, min($this->scroll, $maxScroll));
         $out = [];
         for ($r = 0; $r < $rows; ++$r) {
             $idx = $top + $r;
@@ -124,13 +136,13 @@ abstract class AbstractRepoTab implements RepoTab
     {
         return array_map(static function (string $line): string {
             if (str_starts_with($line, '+') && !str_starts_with($line, '+++')) {
-                return "\e[32m".$line."\e[0m";
+                return "\e[32m" . $line . "\e[0m";
             }
             if (str_starts_with($line, '-') && !str_starts_with($line, '---')) {
-                return "\e[31m".$line."\e[0m";
+                return "\e[31m" . $line . "\e[0m";
             }
             if (str_starts_with($line, '@@')) {
-                return "\e[36m".$line."\e[0m";
+                return "\e[36m" . $line . "\e[0m";
             }
 
             return $line;
@@ -140,25 +152,25 @@ abstract class AbstractRepoTab implements RepoTab
     protected function humanSize(int $bytes): string
     {
         if ($bytes < 1024) {
-            return $bytes.' B';
+            return $bytes . ' B';
         }
         if ($bytes < 1024 * 1024) {
-            return round($bytes / 1024, 1).' KB';
+            return round($bytes / 1024, 1) . ' KB';
         }
 
-        return round($bytes / (1024 * 1024), 1).' MB';
+        return round($bytes / (1024 * 1024), 1) . ' MB';
     }
 
     protected function relativeTime(int $timestamp): string
     {
         $diff = max(0, time() - $timestamp);
         if ($diff < 3600) {
-            return max(1, intdiv($diff, 60)).'m ago';
+            return max(1, intdiv($diff, 60)) . 'm ago';
         }
         if ($diff < 86400) {
-            return intdiv($diff, 3600).'h ago';
+            return intdiv($diff, 3600) . 'h ago';
         }
 
-        return intdiv($diff, 86400).'d ago';
+        return intdiv($diff, 86400) . 'd ago';
     }
 }

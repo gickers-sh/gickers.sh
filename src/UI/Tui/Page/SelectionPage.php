@@ -8,12 +8,15 @@ use App\Identity\Domain\Model\User;
 use App\Repo\Application\CreateRepo;
 use App\Repo\Application\Query\RepoQuery;
 use App\Repo\Domain\Model\Repo;
+use App\Repo\Domain\RepoDirectory;
+use App\Repo\Infrastructure\Git\GitRepositoryReader;
 use App\Shared\Domain\Exception\AccessDenied;
 use App\Shared\Domain\Exception\Conflict;
 use App\Shared\Domain\Exception\InvalidInput;
 use App\Shared\Infrastructure\Config\ServerSettings;
 use App\UI\Tui\Input\Keys;
 use App\UI\Tui\Render\Screen;
+use App\UI\Tui\Render\TermstrapRenderer;
 use App\UI\Tui\Render\Theme;
 
 /**
@@ -27,22 +30,25 @@ use App\UI\Tui\Render\Theme;
  */
 final class SelectionPage extends AbstractPage
 {
-    private const TAB_FEED = 0;
-    private const TAB_REPOS = 1;
-    private const TAB_ABOUT = 2;
+    private const TAB_ABOUT = 0;
+    private const TAB_FEED = 1;
+    private const TAB_REPOS = 2;
     private const TAB_PROFILE = 3;
 
     /** @var list<string> */
-    private const TABS = ['Feed', 'My Repositories', 'About', 'Profile'];
+    private const TABS = ['About', 'Feed', 'My Repositories', 'Profile'];
 
-    private int $tab = self::TAB_FEED;
+    private int $tab = self::TAB_ABOUT;
 
     /** @var array<int,int> per-tab selected index */
     private array $selected = [0, 0, 0, 0];
+    private int $aboutScroll = 0;
+    private int $aboutRows = 20;
+    /** @var array{key: string, lines: list<string>}|null */
+    private ?array $aboutCache = null;
 
     private bool $newRepoOpen = false;
     private bool $helpOpen = false;
-
     /** @var array{name: string, description: string, private: bool} */
     private array $form = ['name' => '', 'description' => '', 'private' => false];
     private int $field = 0;
@@ -59,8 +65,10 @@ final class SelectionPage extends AbstractPage
         private readonly CreateRepo $createRepo,
         private readonly ServerSettings $settings,
         private readonly ?User $actor,
-    ) {
-    }
+        private readonly ?GitRepositoryReader $reader = null,
+        private readonly ?TermstrapRenderer $renderer = null,
+        private readonly ?RepoDirectory $repoDirectory = null,
+    ) {}
 
     protected function load(): void
     {
@@ -94,19 +102,56 @@ final class SelectionPage extends AbstractPage
 
                 return true;
             case Keys::UP:
-                $this->moveSelection(-1);
+                if (self::TAB_ABOUT === $this->tab) {
+                    $this->scrollAbout(-1);
+                } else {
+                    $this->moveSelection(-1);
+                }
 
                 return true;
             case Keys::DOWN:
-                $this->moveSelection(1);
+                if (self::TAB_ABOUT === $this->tab) {
+                    $this->scrollAbout(1);
+                } else {
+                    $this->moveSelection(1);
+                }
+
+                return true;
+            case Keys::PAGE_UP:
+            case Keys::CTRL_U:
+            case Keys::CTRL_B:
+                if (self::TAB_ABOUT === $this->tab) {
+                    $this->scrollAbout(-max(1, $this->aboutRows - 2));
+                } else {
+                    $this->moveSelection(-10);
+                }
+
+                return true;
+            case Keys::PAGE_DOWN:
+            case Keys::CTRL_D:
+            case Keys::CTRL_F:
+            case Keys::SPACE:
+                if (self::TAB_ABOUT === $this->tab) {
+                    $this->scrollAbout(max(1, $this->aboutRows - 2));
+                } else {
+                    $this->moveSelection(10);
+                }
 
                 return true;
             case Keys::HOME:
-                $this->selected[$this->tab] = 0;
+                if (self::TAB_ABOUT === $this->tab) {
+                    $this->aboutScroll = 0;
+                } else {
+                    $this->selected[$this->tab] = 0;
+                }
 
                 return true;
             case Keys::END:
-                $this->selected[$this->tab] = max(0, \count($this->currentList()) - 1);
+                if (self::TAB_ABOUT === $this->tab) {
+                    $this->aboutScroll = PHP_INT_MAX;
+                } else {
+                    $this->selected[$this->tab] = max(0, \count($this->currentList()) - 1);
+                }
 
                 return true;
             case Keys::ENTER:
@@ -121,19 +166,63 @@ final class SelectionPage extends AbstractPage
 
                 return true;
             case 'k':
-                $this->moveSelection(-1);
+                if (self::TAB_ABOUT === $this->tab) {
+                    $this->scrollAbout(-1);
+                } else {
+                    $this->moveSelection(-1);
+                }
 
                 return true;
             case 'j':
-                $this->moveSelection(1);
+                if (self::TAB_ABOUT === $this->tab) {
+                    $this->scrollAbout(1);
+                } else {
+                    $this->moveSelection(1);
+                }
+
+                return true;
+            case 'u':
+                if (self::TAB_ABOUT === $this->tab) {
+                    $this->scrollAbout(-(int) round($this->aboutRows / 2));
+                }
+
+                return true;
+            case 'd':
+                if (self::TAB_ABOUT === $this->tab) {
+                    $this->scrollAbout((int) round($this->aboutRows / 2));
+                }
+
+                return true;
+            case 'b':
+                if (self::TAB_ABOUT === $this->tab) {
+                    $this->scrollAbout(-max(1, $this->aboutRows - 2));
+                } else {
+                    $this->moveSelection(-10);
+                }
+
+                return true;
+            case 'f':
+                if (self::TAB_ABOUT === $this->tab) {
+                    $this->scrollAbout(max(1, $this->aboutRows - 2));
+                } else {
+                    $this->moveSelection(10);
+                }
 
                 return true;
             case 'g':
-                $this->selected[$this->tab] = 0;
+                if (self::TAB_ABOUT === $this->tab) {
+                    $this->aboutScroll = 0;
+                } else {
+                    $this->selected[$this->tab] = 0;
+                }
 
                 return true;
             case 'G':
-                $this->selected[$this->tab] = max(0, \count($this->currentList()) - 1);
+                if (self::TAB_ABOUT === $this->tab) {
+                    $this->aboutScroll = PHP_INT_MAX;
+                } else {
+                    $this->selected[$this->tab] = max(0, \count($this->currentList()) - 1);
+                }
 
                 return true;
             case 'n':
@@ -199,7 +288,7 @@ final class SelectionPage extends AbstractPage
                 trim($this->form['description']),
                 '',
             );
-        } catch (InvalidInput|Conflict|AccessDenied $e) {
+        } catch (InvalidInput | Conflict | AccessDenied $e) {
             $this->error = $e->getMessage();
 
             return;
@@ -209,7 +298,7 @@ final class SelectionPage extends AbstractPage
         $this->form = ['name' => '', 'description' => '', 'private' => false];
         $this->field = 0;
         $this->error = null;
-        $this->flash = 'Created '.$repo->nameString();
+        $this->flash = 'Created ' . $repo->nameString();
         $this->tab = self::TAB_REPOS;
         $this->load();
         $this->selectByName(self::TAB_REPOS, $repo->nameString());
@@ -275,7 +364,7 @@ final class SelectionPage extends AbstractPage
 
     protected function headerLines(int $cols): array
     {
-        return [' '.Screen::serverBadge($this->settings->name ?: 'Soft Serve'), ''];
+        return [' ' . Screen::serverBadge($this->settings->name ?: 'Soft Serve'), ''];
     }
 
     protected function tabBarLines(int $cols): array
@@ -361,7 +450,7 @@ final class SelectionPage extends AbstractPage
                 $repo->nameString(),
                 trim($repo->description()),
                 $this->cloneCommand($repo),
-                'Updated '.$this->relativeTime($repo->updatedAt()),
+                'Updated ' . $this->relativeTime($repo->updatedAt()),
                 $i === $sel,
                 $cols,
             );
@@ -398,7 +487,7 @@ final class SelectionPage extends AbstractPage
             return '';
         }
 
-        return 'git clone '.rtrim($url, '/').'/'.$repo->nameString().'.git';
+        return 'git clone ' . rtrim($url, '/') . '/' . $repo->nameString() . '.git';
     }
 
     private function relativeTime(\DateTimeImmutable $when): string
@@ -411,7 +500,7 @@ final class SelectionPage extends AbstractPage
             if ($diff >= $secs) {
                 $n = intdiv($diff, $secs);
 
-                return $n.' '.$unit.(1 === $n ? '' : 's').' ago';
+                return $n . ' ' . $unit . (1 === $n ? '' : 's') . ' ago';
             }
         }
 
@@ -423,26 +512,75 @@ final class SelectionPage extends AbstractPage
      */
     private function aboutBody(int $cols, int $rows): array
     {
-        $msg = [
-            '',
-            Theme::style('No readme found.', Theme::MUTED),
-            '',
-            Theme::style('Create a `.soft-serve` repository and add a README.md file to display readme.', Theme::MUTED),
-        ];
+        $this->aboutRows = max(1, $rows);
+        $lines = $this->aboutLines($cols);
+        $total = \count($lines);
+        $maxScroll = max(0, $total - $rows);
+        $top = max(0, min($this->aboutScroll, $maxScroll));
+        $this->aboutScroll = $top;
 
         $out = [];
-        foreach ($msg as $l) {
-            $out[] = Screen::fit($l, $cols);
-        }
-        while (\count($out) < $rows) {
-            $out[] = Screen::blank($cols);
+        for ($r = 0; $r < $rows; ++$r) {
+            $idx = $top + $r;
+            $out[] = $idx < $total ? Screen::fit($lines[$idx], $cols) : Screen::blank($cols);
         }
         if ($rows > 0) {
-            $ind = Theme::style('☰ 100%', Theme::MUTED);
-            $out[$rows - 1] = Screen::fit(str_repeat(' ', max(0, $cols - Screen::width($ind) - 1)).$ind, $cols);
+            $percent = $maxScroll > 0 ? (int) round($top / $maxScroll * 100) : 100;
+            $ind = Theme::style(sprintf('☰ %d%%', $percent), Theme::MUTED);
+            $out[$rows - 1] = Screen::fit(str_repeat(' ', max(0, $cols - Screen::width($ind) - 1)) . $ind, $cols);
         }
 
         return array_values($out);
+    }
+
+    private function scrollAbout(int $delta): void
+    {
+        $lines = $this->aboutLines(80);
+        $maxScroll = max(0, \count($lines) - $this->aboutRows);
+        $this->aboutScroll = max(0, min($this->aboutScroll + $delta, $maxScroll));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function aboutLines(int $cols): array
+    {
+        $cacheKey = (string) $cols;
+        if (null !== $this->aboutCache && $this->aboutCache['key'] === $cacheKey) {
+            return $this->aboutCache['lines'];
+        }
+
+        $lines = null;
+        if (null !== $this->reader && null !== $this->repoDirectory) {
+            try {
+                $softRepo = $this->repoQuery->get($this->actor, '.soft-serve');
+                $git = $this->reader->openRepository($this->repoDirectory->pathFor($softRepo->name()));
+                $doc = $this->reader->readme($git, 'HEAD');
+                if (null !== $doc) {
+                    if ($this->renderer?->isAvailable()) {
+                        $ansi = $this->renderer->renderDocument($doc['path'], $doc['content'], max(20, $cols - 2));
+                        $lines = preg_split('/\r\n|\r|\n/', rtrim($ansi, "\n")) ?: [];
+                    } else {
+                        $lines = preg_split('/\r\n|\r|\n/', rtrim($doc['content'], "\n")) ?: [];
+                    }
+                }
+            } catch (\Throwable) {
+                // No readable .soft-serve repository.
+            }
+        }
+
+        if (null === $lines) {
+            $lines = [
+                '',
+                Theme::style('No readme found.', Theme::MUTED),
+                '',
+                Theme::style('Create a `.soft-serve` repository and add a README.md file to display readme.', Theme::MUTED),
+            ];
+        }
+
+        $this->aboutCache = ['key' => $cacheKey, 'lines' => $lines];
+
+        return $lines;
     }
 
     /**
@@ -456,12 +594,12 @@ final class SelectionPage extends AbstractPage
 
         $lines = [
             '',
-            '  Username  '.$this->actor->username(),
-            '  Role      '.($this->actor->isAdmin() ? 'administrator' : 'user'),
-            '  Keys      '.\count($this->actor->publicKeys()),
+            '  Username  ' . $this->actor->username(),
+            '  Role      ' . ($this->actor->isAdmin() ? 'administrator' : 'user'),
+            '  Keys      ' . \count($this->actor->publicKeys()),
         ];
 
-        return array_map(static fn (string $l): string => Screen::fit($l, $cols), $lines);
+        return array_map(static fn(string $l): string => Screen::fit($l, $cols), $lines);
     }
 
     /**
@@ -476,7 +614,7 @@ final class SelectionPage extends AbstractPage
             '',
         ];
         $lines[] = null !== $this->error
-            ? "\e[31m! ".$this->error."\e[0m"
+            ? "\e[31m! " . $this->error . "\e[0m"
             : 'Enter: create · Tab: next · Esc: cancel';
 
         return $lines;
@@ -487,13 +625,13 @@ final class SelectionPage extends AbstractPage
         $cursor = $active ? '▏' : '';
         $text = sprintf('%-12s %s%s', $label, $value, $cursor);
 
-        return $active ? "\e[1m".$text."\e[0m" : $text;
+        return $active ? "\e[1m" . $text . "\e[0m" : $text;
     }
 
     private function toggleRow(string $label, bool $value, bool $active): string
     {
         $text = sprintf('%-12s %s', $label, $value ? '[x]' : '[ ]');
 
-        return $active ? "\e[1m".$text.'  (space to toggle)'."\e[0m" : $text;
+        return $active ? "\e[1m" . $text . '  (space to toggle)' . "\e[0m" : $text;
     }
 }

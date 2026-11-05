@@ -6,7 +6,7 @@ namespace App\UI\Tui\Render;
 
 use Termstrap\Termstrap;
 
-final class TermstrapRenderer implements SnippetRenderer
+final class TermstrapRenderer implements MarkdownRenderer
 {
     public const THEME_OVERRIDE_CSS = <<<'CSS'
 h1, h2, h3, h4, h5, h6 {
@@ -66,7 +66,7 @@ CSS;
                 $input = $content;
                 break;
             case '.gif':
-                $input = '<img src="'.htmlspecialchars($filename, \ENT_QUOTES, 'UTF-8').'" alt="Animated GIF" />';
+                $input = '<img src="' . htmlspecialchars($filename, \ENT_QUOTES, 'UTF-8') . '" alt="Animated GIF" />';
                 break;
             default:
                 $input = $content;
@@ -110,7 +110,8 @@ CSS;
     }
 
     /**
-     * Renders a single line / snippet for live preview in the editor.
+     * Renders a single line / snippet for live preview in the editor, matching
+     * Go Soft Serve `pkg/ui/render/renderer.go:RenderSnippet`.
      */
     public function renderSnippet(string $filename, string $snippet, int $width, string $docDefs = ''): string
     {
@@ -125,7 +126,7 @@ CSS;
 
         $renderInput = $content;
         if ('' !== $docDefs && str_contains($content, '][')) {
-            $renderInput = $content."\n\n".$docDefs;
+            $renderInput = $content . "\n\n" . $docDefs;
         }
 
         $ext = $this->normalizeExt($filename);
@@ -154,7 +155,7 @@ CSS;
         }
 
         if (!$this->termstrapAvailable || null === $this->termstrap) {
-            return $leadIndent.$this->fallbackRender($input, $width);
+            return $leadIndent . $this->fallbackRender($input, $width);
         }
 
         $termstrapOptions = [
@@ -172,15 +173,23 @@ CSS;
             $lines = explode("\n", $out);
             $target = '';
             foreach ($lines as $line) {
-                if ('' !== trim($line)) {
-                    $target = $line;
+                $stripped = preg_replace('/\e\[[0-9;]*m/', '', $line);
+                if ('' !== trim($stripped)) {
+                    $target = rtrim($line, " ");
                     break;
                 }
             }
+            if ('' === $target) {
+                if (str_starts_with($trimmed, '>')) {
+                    $target = "\e[38;5;240m│\e[0m ";
+                } else {
+                    $target = $content;
+                }
+            }
 
-            return $leadIndent.$target;
+            return $leadIndent . $target;
         } catch (\Throwable) {
-            return $leadIndent.$this->fallbackRender($input, $width);
+            return $leadIndent . $this->fallbackRender($input, $width);
         }
     }
 
@@ -210,7 +219,7 @@ CSS;
         $html = '<table class="table table-striped table-hover table-sm">';
         $html .= '<thead><tr>';
         foreach ($rows[0] as $col) {
-            $html .= '<th>'.htmlspecialchars((string) $col, \ENT_QUOTES, 'UTF-8').'</th>';
+            $html .= '<th>' . htmlspecialchars((string) $col, \ENT_QUOTES, 'UTF-8') . '</th>';
         }
         $html .= '</tr></thead>';
 
@@ -219,7 +228,7 @@ CSS;
             for ($i = 1; $i < count($rows); ++$i) {
                 $html .= '<tr>';
                 foreach ($rows[$i] as $col) {
-                    $html .= '<td>'.htmlspecialchars((string) $col, \ENT_QUOTES, 'UTF-8').'</td>';
+                    $html .= '<td>' . htmlspecialchars((string) $col, \ENT_QUOTES, 'UTF-8') . '</td>';
                 }
                 $html .= '</tr>';
             }
@@ -237,12 +246,12 @@ CSS;
             $lower = strtolower($filename);
 
             return match ($lower) {
-                'csv', 'tsv', 'html', 'htm', 'md', 'markdown', 'gif' => '.'.$lower,
+                'csv', 'tsv', 'html', 'htm', 'md', 'markdown', 'gif' => '.' . $lower,
                 default => '',
             };
         }
 
-        return '.'.$ext;
+        return '.' . $ext;
     }
 
     private function fallbackRender(string $content, int $width): string

@@ -50,7 +50,7 @@ final class BrowseCommand extends Command
         try {
             $git = $this->gitReader->openRepository($path);
         } catch (\Throwable $e) {
-            $output->writeln('<error>Failed to open git repository: '.$e->getMessage().'</error>');
+            $output->writeln('<error>Failed to open git repository: ' . $e->getMessage() . '</error>');
 
             return Command::FAILURE;
         }
@@ -59,7 +59,11 @@ final class BrowseCommand extends Command
         $tui = new Tui(terminal: $this->terminal ?? new Terminal());
         $root = $this->factory->createBrowseRoot($tui, $actor);
         $root->start($this->factory->repoPageForGit($actor, $git));
-        $tui->run();
+        try {
+            $tui->run();
+        } finally {
+            $root->quit();
+        }
 
         return Command::SUCCESS;
     }

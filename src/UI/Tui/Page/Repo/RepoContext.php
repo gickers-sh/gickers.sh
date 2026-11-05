@@ -9,10 +9,18 @@ use App\Identity\Domain\Model\User;
 use App\PullRequest\Application\MergePullRequest;
 use App\PullRequest\Application\Query\PullRequestQuery;
 use App\PullRequest\Domain\Model\PullRequest;
+use App\PullRequest\Application\ClosePullRequest;
+use App\PullRequest\Application\CommentPullRequest;
+use App\PullRequest\Application\DeletePullRequest;
+use App\PullRequest\Application\OpenPullRequest;
+use App\PullRequest\Application\ReopenPullRequest;
+use App\PullRequest\Application\UpdatePullRequest;
 use App\Repo\Application\UpdateRepoSettings;
 use App\Repo\Domain\Git\Commit;
 use App\Repo\Domain\Git\GitRepository;
 use App\Repo\Domain\Git\TreeEntry;
+use App\Repo\Application\DeleteFile;
+use App\Repo\Application\WriteFile;
 use App\Repo\Domain\Model\Repo;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
 use App\UI\Tui\Render\TermstrapRenderer;
@@ -58,10 +66,38 @@ final class RepoContext
         public readonly UpdateRepoSettings $updateSettings,
         public readonly ?PullRequestQuery $pullRequestQuery = null,
         public readonly ?MergePullRequest $mergePullRequest = null,
+        public readonly ?WriteFile $writeFile = null,
+        public readonly ?DeleteFile $deleteFile = null,
+        public readonly ?OpenPullRequest $openPullRequest = null,
+        public readonly ?ClosePullRequest $closePullRequest = null,
+        public readonly ?ReopenPullRequest $reopenPullRequest = null,
+        public readonly ?DeletePullRequest $deletePullRequest = null,
+        public readonly ?CommentPullRequest $commentPullRequest = null,
+        public readonly ?UpdatePullRequest $updatePullRequest = null,
         public readonly string $sshPublicUrl = '',
     ) {
         $this->name = $this->db?->nameString() ?? $this->git->name;
         $this->ref = $this->git->defaultBranch;
+    }
+
+    /**
+     * Whether the acting user may commit to this repository through the TUI:
+     * the repo is registered ({@see $db}), a user is authenticated and the write
+     * use cases are wired. Access level is enforced by the use cases themselves,
+     * which surface {@see \App\Shared\Domain\Exception\AccessDenied} as a flash.
+     */
+    public function canWrite(): bool
+    {
+        return null !== $this->db && null !== $this->actor && null !== $this->writeFile;
+    }
+
+    /**
+     * Whether the current {@see $ref} is a branch (not a tag or detached sha);
+     * commits can only target a branch.
+     */
+    public function currentRefIsBranch(): bool
+    {
+        return \in_array($this->ref, $this->branchList(), true);
     }
 
     public function switchRef(string $ref): void
@@ -74,7 +110,20 @@ final class RepoContext
         $this->treeCache = [];
         $this->commits = null;
         $this->subpath = '';
-        $this->flash = 'Switched to '.$ref;
+        $this->flash = 'Switched to ' . $ref;
+    }
+
+    /**
+     * Drops the memoised git data (tree, commits, readme, resolved shas) after a
+     * write so the Files/Commits/Readme tabs reflect the new commit on the next
+     * paint. The ref itself is unchanged, so {@see switchRef} would be a no-op.
+     */
+    public function invalidateGitCaches(): void
+    {
+        $this->shaCache = [];
+        $this->readmeCache = null;
+        $this->treeCache = [];
+        $this->commits = null;
     }
 
     /**
@@ -87,7 +136,7 @@ final class RepoContext
             return '';
         }
 
-        return 'git clone '.rtrim($this->sshPublicUrl, '/').'/'.$this->name.'.git';
+        return 'git clone ' . rtrim($this->sshPublicUrl, '/') . '/' . $this->name . '.git';
     }
 
     // --- data accessors (memoised) -----------------------------------------
@@ -113,7 +162,7 @@ final class RepoContext
      */
     public function tree(): array
     {
-        $key = $this->ref.':'.$this->subpath;
+        $key = $this->ref . ':' . $this->subpath;
         if (!isset($this->treeCache[$key])) {
             try {
                 $this->treeCache[$key] = array_values($this->reader->getTree($this->git, $this->ref, $this->subpath));
@@ -174,17 +223,12 @@ final class RepoContext
         return $this->refsData()['tags'];
     }
 
-    public function readmeLineCount(): int
-    {
-        return \count($this->readmeLines(120));
-    }
-
     /**
      * @return list<string>
      */
     public function readmeLines(int $cols): array
     {
-        $key = $this->ref.':'.$cols;
+        $key = $this->ref . ':' . $cols;
         if (null === $this->readmeCache || $this->readmeCache['key'] !== $key) {
             $doc = $this->reader->readme($this->git, $this->ref);
             if (null === $doc) {
@@ -199,6 +243,11 @@ final class RepoContext
         }
 
         return $this->readmeCache['lines'];
+    }
+
+    public function readmeLineCount(int $cols = 80): int
+    {
+        return \count($this->readmeLines($cols));
     }
 
     /**
