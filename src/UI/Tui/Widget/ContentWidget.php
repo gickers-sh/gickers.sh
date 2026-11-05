@@ -66,13 +66,15 @@ final class ContentWidget extends AbstractWidget implements VerticallyExpandable
     {
         $cols = max(0, $context->getColumns());
         $rows = max(0, $context->getRows());
+        $inner = max(0, $cols - 2 * Screen::MARGIN);
+        $pad = str_repeat(' ', Screen::MARGIN);
 
         $out = [];
-        foreach (($this->painter)($cols, $rows) as $line) {
+        foreach (($this->painter)($inner, $rows) as $line) {
             if ($this->expanded && \count($out) >= $rows) {
                 break;
             }
-            $out[] = Screen::fit($line, $cols);
+            $out[] = Screen::fit($pad.$line, $cols);
         }
 
         if ($this->expanded) {

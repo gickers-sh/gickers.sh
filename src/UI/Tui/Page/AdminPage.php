@@ -11,6 +11,7 @@ use App\Identity\Domain\UserStore;
 use App\Shared\Infrastructure\Config\ServerSettings;
 use App\UI\Tui\Input\Keys;
 use App\UI\Tui\Render\Screen;
+use App\UI\Tui\Render\Theme;
 
 /**
  * Server administration page (admins only): an Overview tab exposing the live
@@ -21,12 +22,6 @@ use App\UI\Tui\Render\Screen;
  */
 final class AdminPage extends AbstractPage
 {
-    private const TAB_OVERVIEW = 0;
-
-    /** @var list<string> */
-    private const TABS = ['Overview', 'Users'];
-
-    private int $tab = self::TAB_OVERVIEW;
     private int $sel = 0;
     private ?string $flash = null;
 
@@ -67,47 +62,28 @@ final class AdminPage extends AbstractPage
 
             return true;
         }
-        if (Keys::TAB === $tok) {
-            $this->tab = ($this->tab + 1) % \count(self::TABS);
-            $this->sel = 0;
-
-            return true;
-        }
-        if (Keys::BACKTAB === $tok) {
-            $this->tab = ($this->tab + \count(self::TABS) - 1) % \count(self::TABS);
-            $this->sel = 0;
-
-            return true;
-        }
 
         if (!$this->isAdmin()) {
             return false;
         }
 
-        if (self::TAB_OVERVIEW === $this->tab) {
-            if ('a' === $txt) {
-                $this->cycleAnonAccess();
-
-                return true;
-            }
-            if ('k' === $txt) {
-                $this->toggleKeyless();
-
-                return true;
-            }
-
-            return false;
-        }
-
-        // Users tab
-        $count = \count($this->users);
-        if (Keys::UP === $tok || 'k' === $txt) {
+        if (Keys::UP === $tok) {
             $this->sel = max(0, $this->sel - 1);
 
             return true;
         }
-        if (Keys::DOWN === $tok || 'j' === $txt) {
-            $this->sel = max(0, min($this->sel + 1, max(0, $count - 1)));
+        if (Keys::DOWN === $tok) {
+            $this->sel = min(1, $this->sel + 1);
+
+            return true;
+        }
+        if ('a' === $txt || (0 === $this->sel && (Keys::LEFT === $tok || Keys::RIGHT === $tok))) {
+            $this->cycleAnonAccess(Keys::LEFT === $tok ? -1 : 1);
+
+            return true;
+        }
+        if ('k' === $txt || (1 === $this->sel && Keys::SPACE === $tok)) {
+            $this->toggleKeyless();
 
             return true;
         }
@@ -115,9 +91,9 @@ final class AdminPage extends AbstractPage
         return false;
     }
 
-    private function cycleAnonAccess(): void
+    private function cycleAnonAccess(int $dir): void
     {
-        $next = AccessLevel::from(($this->serverPolicy->anonAccess()->value + 1) % 4);
+        $next = AccessLevel::from((($this->serverPolicy->anonAccess()->value + $dir) % 4 + 4) % 4);
         $this->serverPolicy->setAnonAccess($next);
         $this->flash = 'Anonymous access: '.$next->toString();
     }
@@ -129,28 +105,26 @@ final class AdminPage extends AbstractPage
         $this->flash = 'Keyless access: '.($value ? 'enabled' : 'disabled');
     }
 
-    protected function headerText(): string
+    protected function headerLines(int $cols): array
     {
-        return ' Admin — '.($this->settings->name ?: 'Soft Serve').' ';
+        return [' '.Screen::serverBadge($this->settings->name ?: 'Soft Serve'), ''];
     }
 
-    protected function tabBarText(): string
+    protected function tabBarLines(int $cols): array
     {
-        return Screen::tabBar(self::TABS, $this->tab, 120);
+        return [' '.Screen::serverBadge('Server administration'), ''];
     }
 
-    protected function footerText(): string
+    protected function footerLines(int $cols): array
     {
         if (null !== $this->flash) {
-            return ' '.$this->flash;
+            return [Screen::fit(Theme::style(' '.$this->flash, Theme::MUTED, italic: true), $cols)];
         }
         if (!$this->isAdmin()) {
-            return ' Esc: back';
+            return [Screen::fit(Theme::style('esc back', Theme::MUTED, italic: true), $cols)];
         }
 
-        return self::TAB_OVERVIEW === $this->tab
-            ? ' a: cycle anon access · k: toggle keyless · Tab: switch · q: back'
-            : ' ↑/↓ move · Tab: switch · q: back';
+        return [Screen::fit(Theme::style('↑/↓ field • ←/→ change access • space toggle • esc back', Theme::MUTED, italic: true), $cols)];
     }
 
     protected function paintBody(int $cols, int $rows): array
@@ -159,45 +133,27 @@ final class AdminPage extends AbstractPage
             return $this->messageBody('Access denied: administrator privileges required.', $cols);
         }
 
-        return self::TAB_OVERVIEW === $this->tab
-            ? $this->overviewBody($cols)
-            : $this->usersBody($cols, $rows);
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function overviewBody(int $cols): array
-    {
-        $lines = [
-            '',
-            '  Server         '.($this->settings->name ?: 'Soft Serve'),
-            '  Anon access    '.$this->serverPolicy->anonAccess()->toString(),
-            '  Keyless access '.($this->serverPolicy->allowKeyless() ? 'enabled' : 'disabled'),
-            '  Users          '.$this->userStore->count(),
-            '',
-            '  a  cycle anonymous access level (no-access → read-only → read-write → admin-access)',
-            '  k  toggle keyless access',
+        $out = [
+            $this->fieldLine('Anonymous access', $this->serverPolicy->anonAccess()->toString(), 0 === $this->sel, $cols),
+            $this->fieldLine('Allow keyless', $this->serverPolicy->allowKeyless() ? '[x]' : '[ ]', 1 === $this->sel, $cols),
+            Screen::blank($cols),
+            Screen::fit(Theme::style('Users ('.\count($this->users).'):', Theme::MUTED), $cols),
         ];
+        foreach ($this->users as $user) {
+            $out[] = Screen::fit('  '.Theme::style($user->username(), Theme::FG), $cols);
+        }
 
-        return array_map(static fn (string $l): string => Screen::fit($l, $cols), $lines);
+        return $out;
     }
 
-    /**
-     * @return list<string>
-     */
-    private function usersBody(int $cols, int $rows): array
+    private function fieldLine(string $label, string $value, bool $selected, int $cols): string
     {
-        if ([] === $this->users) {
-            return $this->messageBody('No users.', $cols);
+        if ($selected) {
+            $line = Theme::style('› '.$label, Theme::BLUE, bold: true).'  '.Theme::style($value, Theme::BLUE, bold: true);
+        } else {
+            $line = '  '.Theme::style($label, Theme::MUTED).'  '.Theme::style($value, Theme::FG);
         }
 
-        $items = [];
-        foreach ($this->users as $user) {
-            $meta = ($user->isAdmin() ? 'admin' : 'user').' · '.\count($user->publicKeys()).' key(s)';
-            $items[] = ['label' => $user->username(), 'meta' => $meta];
-        }
-
-        return Screen::listView($items, $this->sel, $rows, $cols);
+        return Screen::fit($line, $cols);
     }
 }

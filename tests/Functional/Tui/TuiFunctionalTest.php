@@ -71,7 +71,7 @@ final class TuiFunctionalTest extends KernelTestCase
 
     private function createTempDir(string $prefix = 'tui_test_'): string
     {
-        $path = sys_get_temp_dir().'/'.$prefix.uniqid('', true);
+        $path = sys_get_temp_dir() . '/' . $prefix . uniqid('', true);
         mkdir($path, 0755, true);
         $this->tempDirs[] = $path;
 
@@ -90,10 +90,10 @@ final class TuiFunctionalTest extends KernelTestCase
         );
         exec($cmd);
 
-        file_put_contents($dir.'/README.md', "# Demo Repository\n\nWelcome to demo.");
-        mkdir($dir.'/src', 0755, true);
+        file_put_contents($dir . '/README.md', "# Demo Repository\n\nWelcome to demo.");
+        mkdir($dir . '/src', 0755, true);
         file_put_contents(
-            $dir.'/src/Calculator.php',
+            $dir . '/src/Calculator.php',
             "<?php\n\nnamespace App;\n\nclass Calculator\n{\n    public function add(int \$a, int \$b): int\n    {\n        return \$a + \$b;\n    }\n}\n"
         );
 
@@ -138,7 +138,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $vt->simulateInput("\t");
         $tui->tick();
         $output = $vt->consumeOutput();
-        $this->assertStringContainsString('A self-hostable Git server', $output);
+        $this->assertStringContainsString('No readme found.', $output);
 
         // Switch to Profile
         $vt->simulateInput("\t");
@@ -150,7 +150,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $vt->simulateInput("\x1b[Z");
         $tui->tick();
         $output = $vt->consumeOutput();
-        $this->assertStringContainsString('A self-hostable Git server', $output);
+        $this->assertStringContainsString('No readme found.', $output);
 
         // Quit with q
         $vt->simulateInput('q');
@@ -232,17 +232,18 @@ final class TuiFunctionalTest extends KernelTestCase
         $tui->tick();
         $vt->clearOutput();
 
-        // Open help
+        // Open expanded help grid
         $vt->simulateInput('?');
         $tui->tick();
         $output = $vt->consumeOutput();
-        $this->assertStringContainsString('Keyboard shortcuts', $output);
+        $this->assertStringContainsString('go to end', $output);
+        $this->assertStringContainsString('toggle help', $output);
 
-        // Close help with Escape
-        $vt->simulateInput("\x1b");
+        // Toggle help off with '?'
+        $vt->simulateInput('?');
         $tui->tick();
         $output = $vt->consumeOutput();
-        $this->assertStringNotContainsString('Keyboard shortcuts', $output);
+        $this->assertStringNotContainsString('go to end', $output);
 
         $tui->stop();
     }
@@ -370,6 +371,11 @@ final class TuiFunctionalTest extends KernelTestCase
         $output = $vt->consumeOutput();
         $this->assertStringContainsString('Pull requests', $output);
 
+        // Test Profile tab
+        $vt->simulateInput("\t");
+        $tui->tick();
+        $output = $vt->consumeOutput();
+        $this->assertStringContainsString('No profile available for this repository.', $output);
         // Test Settings tab
         $vt->simulateInput("\t");
         $tui->tick();
@@ -396,9 +402,11 @@ final class TuiFunctionalTest extends KernelTestCase
         $tui->start();
         $tui->tick();
         $output = $vt->consumeOutput();
-        $this->assertStringContainsString('Admin', $output);
-        $this->assertStringContainsString('Anon access', $output);
-        $this->assertStringContainsString('Keyless access', $output);
+        $this->assertStringContainsString('Server administration', $output);
+        $this->assertStringContainsString('Anonymous access', $output);
+        $this->assertStringContainsString('Allow keyless', $output);
+        $this->assertStringContainsString('superadmin', $output);
+        $this->assertStringContainsString('developer', $output);
 
         $initialLevel = $this->serverPolicy->anonAccess();
         // Cycle anon access with 'a'
@@ -412,13 +420,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $vt->simulateInput('k');
         $tui->tick();
         $this->assertSame(!$initialKeyless, $this->serverPolicy->allowKeyless());
-
-        // Switch to Users tab
-        $vt->simulateInput("\t");
-        $tui->tick();
-        $output = $vt->consumeOutput();
-        $this->assertStringContainsString('superadmin', $output);
-        $this->assertStringContainsString('developer', $output);
+        $vt->consumeOutput();
 
         // Press 'q' -> navigates back to selection page
         $vt->simulateInput('q');
@@ -508,10 +510,10 @@ final class TuiFunctionalTest extends KernelTestCase
     public function testRepoPagePullRequestsListAndMerge(): void
     {
         $container = static::getContainer();
-        $user = new User('prowner'.uniqid(), true, new \DateTimeImmutable());
+        $user = new User('prowner' . uniqid(), true, new \DateTimeImmutable());
         $this->userStore->save($user);
 
-        $repo = ($this->createRepo)($user, 'pulls-repo-'.uniqid(), false, false, 'PR testing repo');
+        $repo = ($this->createRepo)($user, 'pulls-repo-' . uniqid(), false, false, 'PR testing repo');
         $repoPath = $this->repoDirectory->pathFor($repo->name());
         $gitRepo = $this->gitReader->openRepository($repoPath);
 

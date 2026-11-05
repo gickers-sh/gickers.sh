@@ -6,22 +6,24 @@ namespace App\UI\Tui\Page;
 
 use App\UI\Tui\Render\Screen;
 use App\UI\Tui\TuiHost;
+use App\UI\Tui\Widget\BarWidget;
 use App\UI\Tui\Widget\ContentWidget;
 use Symfony\Component\Tui\Widget\ContainerWidget;
-use Symfony\Component\Tui\Widget\TextWidget;
 
 /**
- * Shared chrome for every page: a header line, an optional tab bar, a
- * vertically-expanding {@see ContentWidget} body, and a footer line, stacked in
- * a single vertical {@see ContainerWidget}. Subclasses provide the four text
- * sources and paint the body. All input is handled by the subclass.
+ * Shared chrome for every page: a top margin, a header block, an optional tab
+ * bar, a vertically-expanding {@see ContentWidget} body, and a footer (status
+ * bar / help), stacked in a single vertical {@see ContainerWidget}. The chrome
+ * rows are width-aware {@see BarWidget}s so subclasses can right-align and
+ * stretch content to the real terminal width. All input is handled by the
+ * subclass.
  */
 abstract class AbstractPage implements Page
 {
     protected TuiHost $host;
-    protected TextWidget $headerWidget;
-    protected TextWidget $tabBarWidget;
-    protected TextWidget $footerWidget;
+    protected BarWidget $headerWidget;
+    protected BarWidget $tabBarWidget;
+    protected BarWidget $footerWidget;
     protected ContentWidget $contentWidget;
     protected ContainerWidget $root;
 
@@ -29,15 +31,17 @@ abstract class AbstractPage implements Page
     {
         $this->host = $host;
 
-        $this->headerWidget = new TextWidget('', true);
-        $this->tabBarWidget = new TextWidget('', true);
-        $this->footerWidget = new TextWidget('', true);
+        $marginTop = new BarWidget(static fn (int $cols): array => ['']);
+        $this->headerWidget = new BarWidget(fn (int $cols): array => $this->headerLines($cols));
+        $this->tabBarWidget = new BarWidget(fn (int $cols): array => $this->tabBarLines($cols));
+        $this->footerWidget = new BarWidget(fn (int $cols): array => $this->footerLines($cols));
         $this->contentWidget = new ContentWidget();
         $this->contentWidget->expandVertically(true);
         $this->contentWidget->setPainter(fn (int $cols, int $rows): array => $this->paintBody($cols, $rows));
 
         $this->root = new ContainerWidget();
         $this->root->expandVertically(true);
+        $this->root->add($marginTop);
         $this->root->add($this->headerWidget);
         $this->root->add($this->tabBarWidget);
         $this->root->add($this->contentWidget);
@@ -50,9 +54,9 @@ abstract class AbstractPage implements Page
 
     public function sync(): void
     {
-        $this->headerWidget->setText($this->headerText());
-        $this->tabBarWidget->setText($this->tabBarText());
-        $this->footerWidget->setText($this->footerText());
+        $this->headerWidget->markDirty();
+        $this->tabBarWidget->markDirty();
+        $this->footerWidget->markDirty();
         $this->contentWidget->markDirty();
     }
 
@@ -63,11 +67,53 @@ abstract class AbstractPage implements Page
     {
     }
 
-    abstract protected function headerText(): string;
+    protected function headerText(): string
+    {
+        return '';
+    }
 
-    abstract protected function tabBarText(): string;
+    protected function tabBarText(): string
+    {
+        return '';
+    }
 
-    abstract protected function footerText(): string;
+    protected function footerText(): string
+    {
+        return '';
+    }
+
+    /**
+     * Header rows for the given inner width. Defaults to the single-line
+     * {@see headerText()}; rich pages override.
+     *
+     * @return list<string>
+     */
+    protected function headerLines(int $cols): array
+    {
+        $t = $this->headerText();
+
+        return '' === trim($t) ? [] : [$t];
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function tabBarLines(int $cols): array
+    {
+        $t = $this->tabBarText();
+
+        return '' === trim($t) ? [] : [$t];
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function footerLines(int $cols): array
+    {
+        $t = $this->footerText();
+
+        return '' === trim($t) ? [] : [$t];
+    }
 
     /**
      * @return list<string>

@@ -70,12 +70,12 @@ final class TuiPageFactory
         $repo = $this->repoQuery->get($actor, $name);
         $git = $this->reader->openRepository($this->repoDirectory->pathFor($repo->name()));
 
-        return new RepoPage($git, $repo, $actor, $this->reader, $this->renderer, $this->codeIntel, $this->updateSettings, $this->pullRequestQuery, $this->mergePullRequest);
+        return new RepoPage($git, $repo, $actor, $this->reader, $this->renderer, $this->codeIntel, $this->updateSettings, $this->pullRequestQuery, $this->mergePullRequest, $this->settings->sshPublicUrl);
     }
 
     public function repoPageForGit(?User $actor, GitRepository $git): RepoPage
     {
-        return new RepoPage($git, null, $actor, $this->reader, $this->renderer, $this->codeIntel, $this->updateSettings, $this->pullRequestQuery, $this->mergePullRequest);
+        return new RepoPage($git, null, $actor, $this->reader, $this->renderer, $this->codeIntel, $this->updateSettings, $this->pullRequestQuery, $this->mergePullRequest, $this->settings->sshPublicUrl);
     }
 
     public function adminPage(?User $actor): AdminPage

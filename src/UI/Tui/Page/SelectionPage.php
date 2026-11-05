@@ -14,6 +14,7 @@ use App\Shared\Domain\Exception\InvalidInput;
 use App\Shared\Infrastructure\Config\ServerSettings;
 use App\UI\Tui\Input\Keys;
 use App\UI\Tui\Render\Screen;
+use App\UI\Tui\Render\Theme;
 
 /**
  * Landing page: a tabbed feed of readable repositories, the caller's own
@@ -73,11 +74,6 @@ final class SelectionPage extends AbstractPage
 
         if ($this->newRepoOpen) {
             return $this->handleModalKey($seq);
-        }
-        if ($this->helpOpen) {
-            $this->helpOpen = false;
-
-            return true;
         }
 
         $tok = Keys::normalize($seq);
@@ -145,7 +141,7 @@ final class SelectionPage extends AbstractPage
 
                 return true;
             case '?':
-                $this->helpOpen = true;
+                $this->helpOpen = !$this->helpOpen;
 
                 return true;
             case 'A':
@@ -277,30 +273,52 @@ final class SelectionPage extends AbstractPage
         };
     }
 
-    protected function headerText(): string
+    protected function headerLines(int $cols): array
     {
-        return ' codes.sh — '.($this->settings->name ?: 'Soft Serve').' ';
+        return [' '.Screen::serverBadge($this->settings->name ?: 'Soft Serve'), ''];
     }
 
-    protected function tabBarText(): string
+    protected function tabBarLines(int $cols): array
     {
-        return Screen::tabBar(self::TABS, $this->tab, 200);
+        return [Screen::tabBarDots(self::TABS, $this->tab, $cols), ''];
     }
 
-    protected function footerText(): string
+    protected function footerLines(int $cols): array
     {
         if (null !== $this->flash) {
-            return ' '.$this->flash;
+            return [Screen::helpLine([[trim($this->flash), '']], $cols)];
         }
         if ($this->newRepoOpen) {
-            return ' Enter: create · Tab: next field · Esc: cancel';
+            return [Screen::helpLine([['enter', 'create'], ['tab', 'next field'], ['esc', 'cancel']], $cols)];
         }
         if ($this->helpOpen) {
-            return ' Press any key to close';
+            return Screen::helpGrid([
+                [['tab', 'section']],
+                [['→/l', 'select']],
+                [['↑/k', 'up'], ['↓/j', 'down']],
+                [['g/home', 'go to start'], ['G/end', 'go to end']],
+                [['?', 'toggle help'], ['q', 'quit']],
+            ], $cols);
         }
-        $admin = $this->actor?->isAdmin() ? ' · A: admin' : '';
 
-        return ' ↑/↓ move · Enter: open · n: new'.$admin.' · ?: help · q: quit';
+        if (self::TAB_FEED === $this->tab || self::TAB_REPOS === $this->tab) {
+            return [Screen::helpLine([
+                ['↑↓', 'navigate'],
+                ['tab', 'section'],
+                ['→/l', 'select'],
+                ['↑/k', 'up'],
+                ['↓/j', 'down'],
+                ['q', 'quit'],
+                ['?', 'toggle help'],
+            ], $cols)];
+        }
+
+        return [Screen::helpLine([
+            ['↑↓', 'navigate'],
+            ['tab', 'section'],
+            ['q', 'quit'],
+            ['?', 'toggle help'],
+        ], $cols)];
     }
 
     protected function paintBody(int $cols, int $rows): array
@@ -310,21 +328,16 @@ final class SelectionPage extends AbstractPage
 
             return Screen::centerBlock($box, $cols, $rows);
         }
-        if ($this->helpOpen) {
-            $box = Screen::box('Keyboard shortcuts', $this->helpLines(), min(52, max(20, $cols - 4)));
-
-            return Screen::centerBlock($box, $cols, $rows);
-        }
 
         return match ($this->tab) {
-            self::TAB_FEED => $this->listBody($this->feed, 'No recent activity.', $cols, $rows),
-            self::TAB_REPOS => $this->listBody(
+            self::TAB_FEED => $this->feedBody($this->feed, 'No recent activity.', $cols, $rows),
+            self::TAB_REPOS => $this->feedBody(
                 $this->owned,
                 null !== $this->actor ? 'No repositories found.' : 'Sign in over SSH to see your repositories.',
                 $cols,
                 $rows,
             ),
-            self::TAB_ABOUT => $this->aboutBody($cols),
+            self::TAB_ABOUT => $this->aboutBody($cols, $rows),
             self::TAB_PROFILE => $this->profileBody($cols),
             default => [],
         };
@@ -335,40 +348,101 @@ final class SelectionPage extends AbstractPage
      *
      * @return list<string>
      */
-    private function listBody(array $list, string $empty, int $cols, int $rows): array
+    private function feedBody(array $list, string $empty, int $cols, int $rows): array
     {
         if ([] === $list) {
             return $this->messageBody($empty, $cols);
         }
 
-        $items = [];
-        foreach ($list as $repo) {
-            $meta = trim($repo->description());
-            if ('' === $meta && $repo->isPrivate()) {
-                $meta = 'private';
-            }
-            $items[] = ['label' => $repo->nameString(), 'meta' => $meta];
+        $sel = min($this->selected[$this->tab], \count($list) - 1);
+        $blocks = [];
+        foreach ($list as $i => $repo) {
+            $blocks[] = Screen::repoItem(
+                $repo->nameString(),
+                trim($repo->description()),
+                $this->cloneCommand($repo),
+                'Updated '.$this->relativeTime($repo->updatedAt()),
+                $i === $sel,
+                $cols,
+            );
         }
 
-        return Screen::listView($items, $this->selected[$this->tab], $rows, $cols);
+        $lines = [];
+        $blockStart = [];
+        foreach ($blocks as $bi => $block) {
+            if ($bi > 0) {
+                $lines[] = '';
+            }
+            $blockStart[$bi] = \count($lines);
+            foreach ($block as $l) {
+                $lines[] = $l;
+            }
+        }
+
+        $offset = 0;
+        if (\count($lines) > $rows) {
+            $offset = max(0, min(($blockStart[$sel] ?? 0) - 1, \count($lines) - $rows));
+        }
+        $view = \array_slice($lines, $offset, $rows);
+        while (\count($view) < $rows) {
+            $view[] = Screen::blank($cols);
+        }
+
+        return $view;
+    }
+
+    private function cloneCommand(Repo $repo): string
+    {
+        $url = $this->settings->sshPublicUrl;
+        if ('' === $url) {
+            return '';
+        }
+
+        return 'git clone '.rtrim($url, '/').'/'.$repo->nameString().'.git';
+    }
+
+    private function relativeTime(\DateTimeImmutable $when): string
+    {
+        $diff = time() - $when->getTimestamp();
+        if ($diff < 60) {
+            return 'just now';
+        }
+        foreach ([[31536000, 'year'], [2592000, 'month'], [86400, 'day'], [3600, 'hour'], [60, 'minute']] as [$secs, $unit]) {
+            if ($diff >= $secs) {
+                $n = intdiv($diff, $secs);
+
+                return $n.' '.$unit.(1 === $n ? '' : 's').' ago';
+            }
+        }
+
+        return 'just now';
     }
 
     /**
      * @return list<string>
      */
-    private function aboutBody(int $cols): array
+    private function aboutBody(int $cols, int $rows): array
     {
-        $lines = [
+        $msg = [
             '',
-            '  '.($this->settings->name ?: 'Soft Serve'),
+            Theme::style('No readme found.', Theme::MUTED),
             '',
-            '  A self-hostable Git server for the command line.',
-            '',
-            '  SSH   '.$this->settings->sshPublicUrl,
-            '  HTTP  '.$this->settings->httpPublicUrl,
+            Theme::style('Create a `.soft-serve` repository and add a README.md file to display readme.', Theme::MUTED),
         ];
 
-        return array_map(static fn (string $l): string => Screen::fit($l, $cols), $lines);
+        $out = [];
+        foreach ($msg as $l) {
+            $out[] = Screen::fit($l, $cols);
+        }
+        while (\count($out) < $rows) {
+            $out[] = Screen::blank($cols);
+        }
+        if ($rows > 0) {
+            $ind = Theme::style('☰ 100%', Theme::MUTED);
+            $out[$rows - 1] = Screen::fit(str_repeat(' ', max(0, $cols - Screen::width($ind) - 1)).$ind, $cols);
+        }
+
+        return array_values($out);
     }
 
     /**
@@ -421,23 +495,5 @@ final class SelectionPage extends AbstractPage
         $text = sprintf('%-12s %s', $label, $value ? '[x]' : '[ ]');
 
         return $active ? "\e[1m".$text.'  (space to toggle)'."\e[0m" : $text;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function helpLines(): array
-    {
-        return [
-            '↑/↓ or j/k    Move selection',
-            'Enter         Open repository',
-            'Tab           Next tab',
-            'n             New repository',
-            'A             Admin (admins only)',
-            '?             Toggle this help',
-            'q / Esc       Quit',
-            '',
-            'Press any key to close.',
-        ];
     }
 }
