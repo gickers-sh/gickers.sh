@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Repo\Infrastructure\Git;
 
 use App\Repo\Domain\Git\GitRepository;
-use Symfony\Component\Process\Process;
 
 final class GitRepositoryWriter
 {
@@ -78,9 +77,7 @@ final class GitRepositoryWriter
         }
 
         // 1. Hash object and write blob into git object database
-        $hashProcess = new Process(['git', 'hash-object', '-w', '--stdin'], $repo->path);
-        $hashProcess->setInput($content);
-        $hashProcess->run();
+        $hashProcess = GitCommand::run($repo->path, ['hash-object', '-w', '--stdin'], $content);
         if (!$hashProcess->isSuccessful()) {
             throw new \RuntimeException('Failed to hash-object: '.$hashProcess->getErrorOutput());
         }
@@ -108,48 +105,44 @@ final class GitRepositoryWriter
             // 4. Read tree of parent commit if exists
             $mode = '100644';
             if (null !== $parentCommit) {
-                $readTree = new Process(['git', 'read-tree', $parentCommit], $repo->path, $env);
-                $readTree->run();
+                $readTree = GitCommand::run($repo->path, ['read-tree', $parentCommit], null, $env);
                 if (!$readTree->isSuccessful()) {
                     throw new \RuntimeException('Failed to read-tree: '.$readTree->getErrorOutput());
                 }
 
                 // Preserve 100755 if previously executable
-                $lsTree = new Process(['git', 'ls-tree', $parentCommit, '--', $cleanPath], $repo->path);
-                $lsTree->run();
+                $lsTree = GitCommand::run($repo->path, ['ls-tree', $parentCommit, '--', $cleanPath]);
                 if ($lsTree->isSuccessful() && str_starts_with(trim($lsTree->getOutput()), '100755')) {
                     $mode = '100755';
                 }
             }
 
             // 5. Update index with new blob
-            $updateIndex = new Process(
-                ['git', 'update-index', '--add', '--cacheinfo', sprintf('%s,%s,%s', $mode, $blobHash, $cleanPath)],
+            $updateIndex = GitCommand::run(
                 $repo->path,
+                ['update-index', '--add', '--cacheinfo', sprintf('%s,%s,%s', $mode, $blobHash, $cleanPath)],
+                null,
                 $env
             );
-            $updateIndex->run();
             if (!$updateIndex->isSuccessful()) {
                 throw new \RuntimeException('Failed to update-index: '.$updateIndex->getErrorOutput());
             }
 
             // 6. Write tree
-            $writeTree = new Process(['git', 'write-tree'], $repo->path, $env);
-            $writeTree->run();
+            $writeTree = GitCommand::run($repo->path, ['write-tree'], null, $env);
             if (!$writeTree->isSuccessful()) {
                 throw new \RuntimeException('Failed to write-tree: '.$writeTree->getErrorOutput());
             }
             $treeHash = trim($writeTree->getOutput());
 
             // 7. Commit tree
-            $commitArgs = ['git', 'commit-tree', $treeHash, '-m', $message];
+            $commitArgs = ['commit-tree', $treeHash, '-m', $message];
             if (null !== $parentCommit) {
                 $commitArgs[] = '-p';
                 $commitArgs[] = $parentCommit;
             }
 
-            $commitTree = new Process($commitArgs, $repo->path, $env);
-            $commitTree->run();
+            $commitTree = GitCommand::run($repo->path, $commitArgs, null, $env);
             if (!$commitTree->isSuccessful()) {
                 throw new \RuntimeException('Failed to commit-tree: '.$commitTree->getErrorOutput());
             }
@@ -157,12 +150,11 @@ final class GitRepositoryWriter
 
             // 8. Update ref
             $refName = str_starts_with($branch, 'refs/') ? $branch : 'refs/heads/'.$branch;
-            $updateRefArgs = ['git', 'update-ref', $refName, $commitHash];
+            $updateRefArgs = ['update-ref', new Revision($refName), $commitHash];
             if (null !== $parentCommit) {
                 $updateRefArgs[] = $parentCommit;
             }
-            $updateRef = new Process($updateRefArgs, $repo->path);
-            $updateRef->run();
+            $updateRef = GitCommand::run($repo->path, $updateRefArgs);
             if (!$updateRef->isSuccessful()) {
                 throw new \RuntimeException('Failed to update-ref: '.$updateRef->getErrorOutput());
             }
@@ -209,8 +201,7 @@ final class GitRepositoryWriter
         }
 
         // Verify file exists on target ref
-        $lsTree = new Process(['git', 'ls-tree', $parentCommit, '--', $cleanPath], $repo->path);
-        $lsTree->run();
+        $lsTree = GitCommand::run($repo->path, ['ls-tree', $parentCommit, '--', $cleanPath]);
         if (!$lsTree->isSuccessful() || '' === trim($lsTree->getOutput())) {
             throw new \InvalidArgumentException(sprintf('File "%s" does not exist on ref "%s".', $cleanPath, $branch));
         }
@@ -235,35 +226,36 @@ final class GitRepositoryWriter
 
         try {
             // Read parent tree into temp index
-            $readTree = new Process(['git', 'read-tree', $parentCommit], $repo->path, $env);
-            $readTree->run();
+            $readTree = GitCommand::run($repo->path, ['read-tree', $parentCommit], null, $env);
             if (!$readTree->isSuccessful()) {
                 throw new \RuntimeException('Failed to read-tree: '.$readTree->getErrorOutput());
             }
 
             // Remove file from index via --index-info (works cleanly in bare repos without worktree)
-            $updateIndex = new Process(['git', 'update-index', '--index-info'], $repo->path, $env);
-            $updateIndex->setInput(sprintf("0 0000000000000000000000000000000000000000\t%s\n", $cleanPath));
-            $updateIndex->run();
+            $updateIndex = GitCommand::run(
+                $repo->path,
+                ['update-index', '--index-info'],
+                sprintf("0 0000000000000000000000000000000000000000\t%s\n", $cleanPath),
+                $env
+            );
             if (!$updateIndex->isSuccessful()) {
                 throw new \RuntimeException('Failed to update-index --index-info: '.$updateIndex->getErrorOutput());
             }
 
             // Write tree
-            $writeTree = new Process(['git', 'write-tree'], $repo->path, $env);
-            $writeTree->run();
+            $writeTree = GitCommand::run($repo->path, ['write-tree'], null, $env);
             if (!$writeTree->isSuccessful()) {
                 throw new \RuntimeException('Failed to write-tree: '.$writeTree->getErrorOutput());
             }
             $treeHash = trim($writeTree->getOutput());
 
             // Commit tree
-            $commitTree = new Process(
-                ['git', 'commit-tree', $treeHash, '-p', $parentCommit, '-m', $message],
+            $commitTree = GitCommand::run(
                 $repo->path,
+                ['commit-tree', $treeHash, '-p', $parentCommit, '-m', $message],
+                null,
                 $env
             );
-            $commitTree->run();
             if (!$commitTree->isSuccessful()) {
                 throw new \RuntimeException('Failed to commit-tree: '.$commitTree->getErrorOutput());
             }
@@ -271,8 +263,7 @@ final class GitRepositoryWriter
 
             // Update ref
             $refName = str_starts_with($branch, 'refs/') ? $branch : 'refs/heads/'.$branch;
-            $updateRef = new Process(['git', 'update-ref', $refName, $commitHash, $parentCommit], $repo->path);
-            $updateRef->run();
+            $updateRef = GitCommand::run($repo->path, ['update-ref', new Revision($refName), $commitHash, $parentCommit]);
             if (!$updateRef->isSuccessful()) {
                 throw new \RuntimeException('Failed to update-ref: '.$updateRef->getErrorOutput());
             }
@@ -304,14 +295,12 @@ final class GitRepositoryWriter
         }
 
         $refName = 'refs/heads/'.$branchName;
-        $check = new Process(['git', 'show-ref', '--verify', $refName], $repo->path);
-        $check->run();
+        $check = GitCommand::run($repo->path, ['show-ref', '--verify', new Revision($refName)]);
         if ($check->isSuccessful()) {
             throw new \RuntimeException(sprintf('Branch "%s" already exists.', $branchName));
         }
 
-        $create = new Process(['git', 'update-ref', $refName, $sha], $repo->path);
-        $create->mustRun();
+        GitCommand::mustRun($repo->path, ['update-ref', new Revision($refName), $sha]);
     }
 
     /**
@@ -320,8 +309,7 @@ final class GitRepositoryWriter
     public function deleteBranch(GitRepository $repo, string $branchName): void
     {
         $refName = str_starts_with($branchName, 'refs/heads/') ? $branchName : 'refs/heads/'.$branchName;
-        $process = new Process(['git', 'update-ref', '-d', $refName], $repo->path);
-        $process->run();
+        $process = GitCommand::run($repo->path, ['update-ref', '-d', new Revision($refName)]);
         if (!$process->isSuccessful()) {
             throw new \RuntimeException(sprintf('Failed to delete branch "%s": %s', $branchName, $process->getErrorOutput()));
         }
@@ -343,12 +331,10 @@ final class GitRepositoryWriter
                 'GIT_TAGGER_NAME' => $authorName,
                 'GIT_TAGGER_EMAIL' => $authorEmail,
             ];
-            $process = new Process(['git', 'tag', '-a', $tagName, '-m', $message, $target], $repo->path, $env);
+            GitCommand::mustRun($repo->path, ['tag', '-a', '-m', $message, new Revision($tagName), new Revision($target)], null, $env);
         } else {
-            $process = new Process(['git', 'tag', $tagName, $target], $repo->path);
+            GitCommand::mustRun($repo->path, ['tag', new Revision($tagName), new Revision($target)]);
         }
-
-        $process->mustRun();
     }
 
     /**
@@ -356,8 +342,7 @@ final class GitRepositoryWriter
      */
     public function deleteTag(GitRepository $repo, string $tagName): void
     {
-        $process = new Process(['git', 'tag', '-d', $tagName], $repo->path);
-        $process->run();
+        $process = GitCommand::run($repo->path, ['tag', '-d', new Revision($tagName)]);
         if (!$process->isSuccessful()) {
             throw new \RuntimeException(sprintf('Failed to delete tag "%s": %s', $tagName, $process->getErrorOutput()));
         }
@@ -377,14 +362,12 @@ final class GitRepositoryWriter
         }
 
         // Check if head is already merged into base
-        $ancestorProc = new Process(['git', 'merge-base', '--is-ancestor', $headSHA, $baseSHA], $repo->path);
-        $ancestorProc->run();
+        $ancestorProc = GitCommand::run($repo->path, ['merge-base', '--is-ancestor', $headSHA, $baseSHA]);
         if ($ancestorProc->isSuccessful()) {
             return false;
         }
 
-        $mergeTree = new Process(['git', 'merge-tree', '--write-tree', $baseSHA, $headSHA], $repo->path);
-        $mergeTree->run();
+        $mergeTree = GitCommand::run($repo->path, ['merge-tree', '--write-tree', $baseSHA, $headSHA]);
 
         return $mergeTree->isSuccessful();
     }
@@ -419,8 +402,7 @@ final class GitRepositoryWriter
         }
 
         // Check if already merged
-        $ancestorCheck = new Process(['git', 'merge-base', '--is-ancestor', $headSHA, $baseSHA], $repo->path);
-        $ancestorCheck->run();
+        $ancestorCheck = GitCommand::run($repo->path, ['merge-base', '--is-ancestor', $headSHA, $baseSHA]);
         if ($ancestorCheck->isSuccessful()) {
             throw new \RuntimeException('Pull request is already merged.');
         }
@@ -428,21 +410,18 @@ final class GitRepositoryWriter
         $refName = str_starts_with($baseBranch, 'refs/') ? $baseBranch : 'refs/heads/'.$baseBranch;
 
         if ('fast-forward' === $strategy) {
-            $ffCheck = new Process(['git', 'merge-base', '--is-ancestor', $baseSHA, $headSHA], $repo->path);
-            $ffCheck->run();
+            $ffCheck = GitCommand::run($repo->path, ['merge-base', '--is-ancestor', $baseSHA, $headSHA]);
             if (!$ffCheck->isSuccessful()) {
                 throw new \RuntimeException('Fast-forward merge not possible: base branch has diverged.');
             }
 
-            $updateRef = new Process(['git', 'update-ref', $refName, $headSHA, $baseSHA], $repo->path);
-            $updateRef->mustRun();
+            GitCommand::mustRun($repo->path, ['update-ref', new Revision($refName), $headSHA, $baseSHA]);
 
             return $headSHA;
         }
 
         // Strategies 'merge' and 'squash' use in-memory merge-tree
-        $mergeTree = new Process(['git', 'merge-tree', '--write-tree', $baseSHA, $headSHA], $repo->path);
-        $mergeTree->run();
+        $mergeTree = GitCommand::run($repo->path, ['merge-tree', '--write-tree', $baseSHA, $headSHA]);
         if (!$mergeTree->isSuccessful()) {
             throw new \RuntimeException('Merge conflict detected.');
         }
@@ -456,7 +435,7 @@ final class GitRepositoryWriter
             'GIT_COMMITTER_EMAIL' => $authorEmail,
         ];
 
-        $commitArgs = ['git', 'commit-tree', $treeSHA];
+        $commitArgs = ['commit-tree', $treeSHA];
         if ('merge' === $strategy) {
             $commitArgs[] = '-p';
             $commitArgs[] = $baseSHA;
@@ -470,12 +449,9 @@ final class GitRepositoryWriter
         $commitArgs[] = '-m';
         $commitArgs[] = $message;
 
-        $commitTree = new Process($commitArgs, $repo->path, $env);
-        $commitTree->mustRun();
-        $newCommitSHA = trim($commitTree->getOutput());
+        $newCommitSHA = trim(GitCommand::mustRun($repo->path, $commitArgs, null, $env));
 
-        $updateRef = new Process(['git', 'update-ref', $refName, $newCommitSHA, $baseSHA], $repo->path);
-        $updateRef->mustRun();
+        GitCommand::mustRun($repo->path, ['update-ref', new Revision($refName), $newCommitSHA, $baseSHA]);
 
         return $newCommitSHA;
     }
@@ -500,10 +476,7 @@ final class GitRepositoryWriter
      */
     public function formatPatch(GitRepository $repo, string $baseRef, string $headRef): string
     {
-        $process = new Process(['git', 'format-patch', '--stdout', sprintf('%s..%s', $baseRef, $headRef)], $repo->path);
-        $process->mustRun();
-
-        return $process->getOutput();
+        return GitCommand::mustRun($repo->path, ['format-patch', '--stdout', new Revision(sprintf('%s..%s', $baseRef, $headRef))]);
     }
 
     /**
@@ -511,16 +484,16 @@ final class GitRepositoryWriter
      */
     private function resolveCommitSha(GitRepository $repo, string $refOrSha): ?string
     {
+        $rev = new Revision($refOrSha);
         $candidates = [
-            $refOrSha,
-            'refs/heads/'.$refOrSha,
-            'refs/tags/'.$refOrSha,
-            $refOrSha.'^{commit}',
+            $rev,
+            new Revision('refs/heads/'.$rev->value),
+            new Revision('refs/tags/'.$rev->value),
+            new Revision($rev->value.'^{commit}'),
         ];
 
         foreach ($candidates as $cand) {
-            $process = new Process(['git', 'rev-parse', '--verify', $cand], $repo->path);
-            $process->run();
+            $process = GitCommand::run($repo->path, ['rev-parse', '--verify', $cand]);
             if ($process->isSuccessful()) {
                 $sha = trim($process->getOutput());
                 if ('' !== $sha) {

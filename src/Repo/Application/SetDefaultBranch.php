@@ -9,9 +9,10 @@ use App\Access\Domain\AccessLevel;
 use App\Identity\Domain\Model\User;
 use App\Repo\Domain\RepoName;
 use App\Repo\Infrastructure\Git\BareRepositoryStorage;
+use App\Repo\Infrastructure\Git\GitCommand;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
+use App\Repo\Infrastructure\Git\Revision;
 use App\Shared\Domain\Exception\NotFound;
-use Symfony\Component\Process\Process;
 
 /**
  * Points the repository's HEAD at an existing branch. Requires read-write access
@@ -47,7 +48,6 @@ final readonly class SetDefaultBranch
             throw new NotFound(sprintf('branch "%s" not found', $branch));
         }
 
-        $process = new Process(['git', 'symbolic-ref', 'HEAD', 'refs/heads/'.$branch], $gitRepo->path);
-        $process->mustRun();
+        GitCommand::mustRun($gitRepo->path, ['symbolic-ref', 'HEAD', new Revision('refs/heads/'.$branch)]);
     }
 }

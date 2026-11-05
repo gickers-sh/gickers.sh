@@ -7,6 +7,8 @@ namespace App\Tests\Integration\Repo\Git;
 use App\Repo\Domain\Git\GitRepository;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
 use App\Repo\Infrastructure\Git\GitRepositoryWriter;
+use App\Shared\Domain\Exception\InvalidInput;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
 
@@ -199,5 +201,53 @@ final class GitRepositoryReaderTest extends TestCase
 
         $readme = $this->reader->readme($repo, 'main');
         $this->assertNull($readme);
+    }
+
+    /**
+     * A revision that looks like an option must never reach git as one: `git show --output=<file>` writes a file.
+     *
+     * @return iterable<string, array{\Closure(GitRepositoryReader, GitRepository, string): mixed}>
+     */
+    public static function optionLikeRevisionCalls(): iterable
+    {
+        yield 'show' => [static fn (GitRepositoryReader $r, GitRepository $repo, string $rev) => $r->show($repo, $rev)];
+        yield 'commits' => [static fn (GitRepositoryReader $r, GitRepository $repo, string $rev) => $r->getCommits($repo, $rev)];
+        yield 'diff' => [static fn (GitRepositoryReader $r, GitRepository $repo, string $rev) => $r->getDiff($repo, $rev)];
+        yield 'tree' => [static fn (GitRepositoryReader $r, GitRepository $repo, string $rev) => $r->getTree($repo, $rev)];
+        yield 'blame' => [static fn (GitRepositoryReader $r, GitRepository $repo, string $rev) => $r->getBlame($repo, $rev, 'a.txt')];
+    }
+
+    #[DataProvider('optionLikeRevisionCalls')]
+    public function testOptionLikeRevisionIsRejectedWithoutSideEffect(\Closure $call): void
+    {
+        $dir = $this->createTempDir('reader_inject_');
+        (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
+        $repo = $this->reader->openRepository($dir);
+        (new GitRepositoryWriter())->writeFile($repo, 'main', 'a.txt', "a\n", 'add', 'Tester', 'test@codes.sh');
+        $target = $this->createTempDir('reader_inject_out_').'/written';
+
+        try {
+            $call($this->reader, $repo, '--output='.$target);
+            $this->fail('option-like revision was accepted');
+        } catch (InvalidInput) {
+        }
+
+        $this->assertFileDoesNotExist($target);
+    }
+
+    public function testShowAndBlameStillResolveRegularRevisions(): void
+    {
+        $dir = $this->createTempDir('reader_show_');
+        (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
+        $repo = $this->reader->openRepository($dir);
+        (new GitRepositoryWriter())->writeFile($repo, 'main', '-dash.txt', "dash line\n", 'add dash file', 'Tester', 'test@codes.sh');
+
+        $this->assertStringContainsString('add dash file', (string) $this->reader->show($repo, 'main'));
+        $this->assertStringNotContainsString('add dash file', (string) $this->reader->show($repo, 'main~0', patchOnly: true));
+        $this->assertNull($this->reader->show($repo, 'no-such-ref'));
+
+        $blame = $this->reader->getBlame($repo, 'main', '-dash.txt');
+        $this->assertCount(1, $blame);
+        $this->assertStringContainsString('dash line', $blame[0]);
     }
 }

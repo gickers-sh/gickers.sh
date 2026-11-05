@@ -9,13 +9,13 @@ use App\CodeIntel\Application\Message\IndexCommit;
 use App\Repo\Domain\RepoDirectory;
 use App\Repo\Domain\RepoName;
 use App\Repo\Domain\RepoStore;
+use App\Repo\Infrastructure\Git\GitCommand;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Process\Process;
 
 #[AsCommand(
     name: 'soft:admin:reindex-codeintel',
@@ -75,16 +75,14 @@ final class ReindexCodeIntelCommand extends Command
             }
 
             // Get HEAD commit SHA
-            $process = new Process(['git', 'rev-parse', 'HEAD'], $path);
-            $process->run();
+            $process = GitCommand::run($path, ['rev-parse', 'HEAD']);
             $headSha = trim($process->getOutput());
             if (!$process->isSuccessful() || '' === $headSha) {
                 $output->writeln(sprintf('<comment>Skipping %s: no HEAD commit</comment>', $name));
                 continue;
             }
 
-            $refProcess = new Process(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], $path);
-            $refProcess->run();
+            $refProcess = GitCommand::run($path, ['rev-parse', '--abbrev-ref', 'HEAD']);
             $refShort = trim($refProcess->getOutput()) ?: 'HEAD';
             $shortSha = substr($headSha, 0, min(7, strlen($headSha)));
             $output->writeln(sprintf('Indexing <info>%s</info> at %s (%s)...', $name, $refShort, $shortSha));

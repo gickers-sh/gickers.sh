@@ -6,6 +6,7 @@ namespace App\UI\Ssh\Command\Repo;
 
 use App\Repo\Application\Query\RepoQuery;
 use App\Repo\Infrastructure\Git\BareRepositoryStorage;
+use App\Repo\Infrastructure\Git\GitRepositoryReader;
 use App\Shared\Domain\Exception\NotFound;
 use App\UI\Ssh\Command\AbstractSshCommand;
 use App\UI\Ssh\SshSession;
@@ -14,7 +15,6 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Process\Process;
 
 final class RepoCommitCommand extends AbstractSshCommand
 {
@@ -27,6 +27,7 @@ final class RepoCommitCommand extends AbstractSshCommand
         SshSession $sshSession,
         private readonly RepoQuery $repoQuery,
         private readonly BareRepositoryStorage $storage,
+        private readonly GitRepositoryReader $reader,
     ) {
         parent::__construct($sshSession);
     }
@@ -48,26 +49,16 @@ final class RepoCommitCommand extends AbstractSshCommand
         $patchOnly = (bool) $input->getOption('patch');
 
         $repo = $this->repoQuery->get($this->actor(), $name);
-        $repoPath = $this->storage->pathFor($repo->name());
-
-        if (!is_dir($repoPath)) {
+        if (!is_dir($this->storage->pathFor($repo->name()))) {
             throw new NotFound(sprintf("repository '%s' not found", $name));
         }
 
-        $cmd = ['git', 'show'];
-        if ($patchOnly) {
-            $cmd[] = '--format=';
-        }
-        $cmd[] = $sha;
-
-        $proc = new Process($cmd, $repoPath);
-        $proc->run();
-
-        if (!$proc->isSuccessful()) {
+        $shown = $this->reader->show($this->storage->open($repo->name()), $sha, $patchOnly);
+        if (null === $shown) {
             throw new NotFound(sprintf("commit '%s' not found", $sha));
         }
 
-        $this->writeRaw($output, $proc->getOutput());
+        $this->writeRaw($output, $shown);
 
         return Command::SUCCESS;
     }

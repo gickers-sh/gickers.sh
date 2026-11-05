@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\CodeIntel\Infrastructure;
 
+use App\Repo\Infrastructure\Git\GitCommand;
+use App\Repo\Infrastructure\Git\Revision;
 use Symfony\Component\Process\Process;
 
 /**
@@ -26,8 +28,7 @@ final class GitArchiveExtractor
             throw new \RuntimeException('Failed to create temporary directory for codeintel indexing');
         }
 
-        $archiveProcess = new Process(['git', 'archive', '--format=tar', $sha], $repoPath);
-        $archiveProcess->run();
+        $archiveProcess = GitCommand::run($repoPath, ['archive', '--format=tar', new Revision($sha)]);
         if (!$archiveProcess->isSuccessful()) {
             $this->cleanup($tmpDir);
 

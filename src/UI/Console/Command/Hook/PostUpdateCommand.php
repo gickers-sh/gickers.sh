@@ -7,13 +7,13 @@ namespace App\UI\Console\Command\Hook;
 use App\Repo\Domain\RepoName;
 use App\Repo\Infrastructure\Git\BareRepositoryStorage;
 use App\Repo\Infrastructure\Git\CustomHookRunner;
+use App\Repo\Infrastructure\Git\GitCommand;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Process\Process;
 
 #[AsCommand(
     name: 'soft:hook:post-update',
@@ -77,8 +77,7 @@ final class PostUpdateCommand extends Command
 
     private function updateLastModified(string $repoPath): void
     {
-        $process = new Process(['git', 'log', '-1', '--format=%cI', 'HEAD'], $repoPath);
-        $process->run();
+        $process = GitCommand::run($repoPath, ['log', '-1', '--format=%cI', 'HEAD']);
         if ($process->isSuccessful()) {
             $timestamp = trim($process->getOutput());
             if ('' !== $timestamp) {

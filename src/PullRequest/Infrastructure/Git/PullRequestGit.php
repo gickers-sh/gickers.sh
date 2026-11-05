@@ -8,10 +8,11 @@ use App\PullRequest\Domain\MergeStrategy;
 use App\PullRequest\Domain\Model\PullRequest;
 use App\Repo\Domain\Model\Repo;
 use App\Repo\Domain\RepoDirectory;
+use App\Repo\Infrastructure\Git\GitCommand;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
 use App\Repo\Infrastructure\Git\GitRepositoryWriter;
+use App\Repo\Infrastructure\Git\Revision;
 use App\Shared\Domain\Exception\InvalidInput;
-use Symfony\Component\Process\Process;
 
 /**
  * Git plumbing specific to pull requests: materialising `refs/pull/<n>/head`,
@@ -67,16 +68,15 @@ final class PullRequestGit
             if (null === $headSha) {
                 throw new InvalidInput(\sprintf('head branch %s does not exist', $headRef));
             }
-            (new Process(['git', 'update-ref', $targetPullRef, $headSha], $targetPath))->mustRun();
+            GitCommand::mustRun($targetPath, ['update-ref', new Revision($targetPullRef), $headSha]);
 
             return $headSha;
         }
 
-        $fetch = new Process(
-            ['git', 'fetch', '--force', $headPath, \sprintf('%s:%s', $headRefClean, $targetPullRef)],
+        $fetch = GitCommand::run(
             $targetPath,
+            ['fetch', '--force', $headPath, new Revision(\sprintf('%s:%s', $headRefClean, $targetPullRef))],
         );
-        $fetch->run();
         if (!$fetch->isSuccessful()) {
             throw new InvalidInput(\sprintf('head branch %s does not exist', $headRef));
         }
@@ -104,8 +104,7 @@ final class PullRequestGit
             ? \sprintf('%s...%s', $baseRef, $pullRef)
             : \sprintf('%s...%s', $pr->baseCommit(), $pr->headCommit());
 
-        $process = new Process(['git', 'diff', $spec], $path);
-        $process->run();
+        $process = GitCommand::run($path, ['diff', new Revision($spec)]);
         if (!$process->isSuccessful()) {
             return '';
         }
@@ -153,8 +152,7 @@ final class PullRequestGit
 
     private function revParse(string $repoPath, string $ref): ?string
     {
-        $process = new Process(['git', 'rev-parse', '--verify', '--quiet', $ref.'^{commit}'], $repoPath);
-        $process->run();
+        $process = GitCommand::run($repoPath, ['rev-parse', '--verify', '--quiet', new Revision($ref.'^{commit}')]);
         if (!$process->isSuccessful()) {
             return null;
         }

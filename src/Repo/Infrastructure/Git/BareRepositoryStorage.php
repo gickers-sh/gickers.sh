@@ -10,7 +10,6 @@ use App\Repo\Domain\RepoName;
 use App\Shared\Infrastructure\Config\ServerSettings;
 use Symfony\Component\DependencyInjection\Attribute\AsAlias;
 use Symfony\Component\Filesystem\Filesystem;
-use Symfony\Component\Process\Process;
 
 #[AsAlias(RepoDirectory::class)]
 final class BareRepositoryStorage implements RepoDirectory
@@ -100,13 +99,10 @@ final class BareRepositoryStorage implements RepoDirectory
             }
         }
 
-        $process = new Process(['git', 'init', '--bare', '--initial-branch='.$defaultBranch, $path]);
-        $process->run();
+        $process = GitCommand::run(dirname($path), ['init', '--bare', '--initial-branch='.$defaultBranch, $path]);
         if (!$process->isSuccessful()) {
-            $fallback = new Process(['git', 'init', '--bare', $path]);
-            $fallback->mustRun();
-            $symRef = new Process(['git', 'symbolic-ref', 'HEAD', 'refs/heads/'.$defaultBranch], $path);
-            $symRef->mustRun();
+            GitCommand::mustRun(dirname($path), ['init', '--bare', $path]);
+            GitCommand::mustRun($path, ['symbolic-ref', 'HEAD', new Revision('refs/heads/'.$defaultBranch)]);
         }
 
         if ('' !== $description) {
@@ -170,12 +166,10 @@ final class BareRepositoryStorage implements RepoDirectory
             mkdir($parentDir, 0755, true);
         }
 
-        $process = new Process(['git', 'clone', '--bare', $sourcePath, $targetPath]);
-        $process->mustRun();
+        GitCommand::mustRun($parentDir, ['clone', '--bare', $sourcePath, $targetPath]);
 
         // Remove origin remote
-        $rmRemote = new Process(['git', 'remote', 'remove', 'origin'], $targetPath);
-        $rmRemote->run();
+        GitCommand::run($targetPath, ['remote', 'remove', 'origin']);
 
         if ('' !== $description) {
             file_put_contents($targetPath.'/description', $description."\n");
@@ -203,15 +197,14 @@ final class BareRepositoryStorage implements RepoDirectory
             mkdir($parentDir, 0755, true);
         }
 
-        $args = ['git', 'clone', '--bare'];
+        $args = ['clone', '--bare'];
         if ($mirror) {
             $args[] = '--mirror';
         }
         $args[] = $remoteUrl;
         $args[] = $targetPath;
 
-        $process = new Process($args);
-        $process->mustRun();
+        GitCommand::mustRun($parentDir, $args);
 
         touch($targetPath.'/git-daemon-export-ok');
 

@@ -10,7 +10,6 @@ use App\Repo\Domain\Git\DiffFile;
 use App\Repo\Domain\Git\GitRepository;
 use App\Repo\Domain\Git\Refs;
 use App\Repo\Domain\Git\TreeEntry;
-use Symfony\Component\Process\Process;
 
 final class GitRepositoryReader
 {
@@ -37,8 +36,7 @@ final class GitRepositoryReader
             $gitDir = $realPath;
         } else {
             // Verify via git command if inside a working tree or bare repo
-            $process = new Process(['git', 'rev-parse', '--is-bare-repository'], $realPath);
-            $process->run();
+            $process = GitCommand::run($realPath, ['rev-parse', '--is-bare-repository']);
             if (!$process->isSuccessful()) {
                 throw new \RuntimeException(sprintf('Path "%s" is not a valid git repository.', $path));
             }
@@ -64,8 +62,7 @@ final class GitRepositoryReader
 
         // Default / HEAD branch
         $defaultBranch = 'main';
-        $headProcess = new Process(['git', 'symbolic-ref', '--short', 'HEAD'], $realPath);
-        $headProcess->run();
+        $headProcess = GitCommand::run($realPath, ['symbolic-ref', '--short', 'HEAD']);
         if ($headProcess->isSuccessful()) {
             $head = trim($headProcess->getOutput());
             if ('' !== $head) {
@@ -73,8 +70,7 @@ final class GitRepositoryReader
             }
         } else {
             // Fallback: rev-parse abbrev-ref HEAD
-            $headProcess = new Process(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], $realPath);
-            $headProcess->run();
+            $headProcess = GitCommand::run($realPath, ['rev-parse', '--abbrev-ref', 'HEAD']);
             if ($headProcess->isSuccessful()) {
                 $head = trim($headProcess->getOutput());
                 if ('' !== $head && 'HEAD' !== $head) {
@@ -85,8 +81,7 @@ final class GitRepositoryReader
 
         // Latest commit time / updatedAt
         $updatedAt = null;
-        $timeProcess = new Process(['git', 'log', '-1', '--format=%ct', 'HEAD'], $realPath);
-        $timeProcess->run();
+        $timeProcess = GitCommand::run($realPath, ['log', '-1', '--format=%ct', 'HEAD']);
         if ($timeProcess->isSuccessful()) {
             $ct = trim($timeProcess->getOutput());
             if ('' !== $ct && ctype_digit($ct)) {
@@ -102,8 +97,7 @@ final class GitRepositoryReader
 
         // Project name (read from git config if present)
         $projectName = null;
-        $pnameProcess = new Process(['git', 'config', 'codes.project-name'], $realPath);
-        $pnameProcess->run();
+        $pnameProcess = GitCommand::run($realPath, ['config', 'codes.project-name']);
         if ($pnameProcess->isSuccessful()) {
             $pname = trim($pnameProcess->getOutput());
             if ('' !== $pname) {
@@ -131,14 +125,13 @@ final class GitRepositoryReader
      */
     public function getTree(GitRepository $repo, string $ref = 'HEAD', string $subpath = ''): array
     {
-        $args = ['git', 'ls-tree', '-l', '-z', $ref];
+        $args = ['ls-tree', '-l', '-z', new Revision($ref)];
         if ('' !== $subpath) {
             $args[] = '--';
             $args[] = rtrim($subpath, '/').'/';
         }
 
-        $process = new Process($args, $repo->path);
-        $process->run();
+        $process = GitCommand::run($repo->path, $args);
 
         if (!$process->isSuccessful()) {
             throw new \RuntimeException(sprintf('Failed to get tree for ref "%s": %s', $ref, $process->getErrorOutput()));
@@ -200,8 +193,7 @@ final class GitRepositoryReader
     public function getBlob(GitRepository $repo, string $ref, string $path): string
     {
         $target = sprintf('%s:%s', $ref, ltrim($path, '/'));
-        $process = new Process(['git', 'cat-file', '-p', $target], $repo->path);
-        $process->run();
+        $process = GitCommand::run($repo->path, ['cat-file', '-p', new Revision($target)]);
 
         if (!$process->isSuccessful()) {
             throw new \RuntimeException(sprintf('Failed to get blob "%s": %s', $target, $process->getErrorOutput()));
@@ -270,18 +262,16 @@ final class GitRepositoryReader
     {
         $format = '%H%x00%h%x00%an%x00%ae%x00%at%x00%s%x00%b';
         $args = [
-            'git',
             'log',
             '-z',
             '--format=format:'.$format,
             '-n',
             (string) $limit,
             '--skip='.(string) $offset,
-            $ref,
+            new Revision($ref),
         ];
 
-        $process = new Process($args, $repo->path);
-        $process->run();
+        $process = GitCommand::run($repo->path, $args);
 
         if (!$process->isSuccessful()) {
             throw new \RuntimeException(sprintf('Failed to get commits for ref "%s": %s', $ref, $process->getErrorOutput()));
@@ -332,21 +322,18 @@ final class GitRepositoryReader
     public function getDiff(GitRepository $repo, string $refA, ?string $refB = null): Diff
     {
         if (null !== $refB && '' !== $refB) {
-            $args = ['git', 'diff', sprintf('%s..%s', $refA, $refB)];
+            $args = ['diff', new Revision(sprintf('%s..%s', $refA, $refB))];
         } else {
-            $args = ['git', 'show', '--patch', '--format=', $refA];
-            $testProcess = new Process($args, $repo->path);
-            $testProcess->run();
+            $testProcess = GitCommand::run($repo->path, ['show', '--patch', '--format=', new Revision($refA)]);
             if ($testProcess->isSuccessful() && '' !== $testProcess->getOutput()) {
                 return $this->parseDiffOutput($testProcess->getOutput());
             }
 
             // Fallback to git diff $refA
-            $args = ['git', 'diff', $refA];
+            $args = ['diff', new Revision($refA)];
         }
 
-        $process = new Process($args, $repo->path);
-        $process->run();
+        $process = GitCommand::run($repo->path, $args);
 
         if (!$process->isSuccessful()) {
             throw new \RuntimeException(sprintf('Failed to get diff: %s', $process->getErrorOutput()));
@@ -356,13 +343,28 @@ final class GitRepositoryReader
     }
 
     /**
+     * Output of `git show [--format=] <revision>`, or null when the revision does not resolve.
+     */
+    public function show(GitRepository $repo, string $revision, bool $patchOnly = false): ?string
+    {
+        $args = ['show'];
+        if ($patchOnly) {
+            $args[] = '--format=';
+        }
+        $args[] = new Revision($revision);
+
+        $process = GitCommand::run($repo->path, $args);
+
+        return $process->isSuccessful() ? $process->getOutput() : null;
+    }
+
+    /**
      * Get repository branches, current branch, and tags.
      */
     public function getRefs(GitRepository $repo): Refs
     {
         // Branches
-        $branchProcess = new Process(['git', 'branch', '--list', '--format=%(refname:short)'], $repo->path);
-        $branchProcess->run();
+        $branchProcess = GitCommand::run($repo->path, ['branch', '--list', '--format=%(refname:short)']);
         $branches = [];
         if ($branchProcess->isSuccessful()) {
             $raw = trim($branchProcess->getOutput());
@@ -374,8 +376,7 @@ final class GitRepositoryReader
 
         // Current branch
         $currentBranch = $repo->defaultBranch;
-        $currProcess = new Process(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], $repo->path);
-        $currProcess->run();
+        $currProcess = GitCommand::run($repo->path, ['rev-parse', '--abbrev-ref', 'HEAD']);
         if ($currProcess->isSuccessful()) {
             $curr = trim($currProcess->getOutput());
             if ('' !== $curr && 'HEAD' !== $curr) {
@@ -384,8 +385,7 @@ final class GitRepositoryReader
         }
 
         // Tags
-        $tagProcess = new Process(['git', 'tag', '--list'], $repo->path);
-        $tagProcess->run();
+        $tagProcess = GitCommand::run($repo->path, ['tag', '--list']);
         $tags = [];
         if ($tagProcess->isSuccessful()) {
             $raw = trim($tagProcess->getOutput());
@@ -409,8 +409,8 @@ final class GitRepositoryReader
      */
     public function getBlame(GitRepository $repo, string $ref, string $path): array
     {
-        $process = new Process(['git', 'blame', '--date=short', $ref, '--', ltrim($path, '/')], $repo->path);
-        $process->run();
+        // No `--` here: blame rejects `--end-of-options <rev> -- <path>`; after the marker the path is positional anyway.
+        $process = GitCommand::run($repo->path, ['blame', '--date=short', new Revision($ref), ltrim($path, '/')]);
         if (!$process->isSuccessful()) {
             return [];
         }

@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace App\UI\Http\Git;
 
 use App\Identity\Domain\Model\User;
+use App\Repo\Infrastructure\Git\GitCommand;
+use App\Repo\Infrastructure\Git\Revision;
 use App\Shared\Infrastructure\Config\ServerSettings;
 use App\Shared\Infrastructure\Git\PktLine;
 use App\Shared\Infrastructure\Process\EnvCommand;
-use Symfony\Component\Process\Process;
 
 /**
  * Handles Git Smart HTTP server processes (stateless-rpc for upload-pack and receive-pack)
@@ -220,14 +221,12 @@ final readonly class GitServiceProcess
      */
     public function ensureDefaultBranch(string $repoPath): void
     {
-        $headProc = new Process(['git', 'rev-parse', '--verify', 'HEAD'], $repoPath);
-        $headProc->run();
+        $headProc = GitCommand::run($repoPath, ['rev-parse', '--verify', 'HEAD']);
         if ($headProc->isSuccessful()) {
             return;
         }
 
-        $branchProc = new Process(['git', 'branch', '--format=%(refname:short)'], $repoPath);
-        $branchProc->run();
+        $branchProc = GitCommand::run($repoPath, ['branch', '--format=%(refname:short)']);
         if (!$branchProc->isSuccessful()) {
             return;
         }
@@ -245,8 +244,7 @@ final readonly class GitServiceProcess
             }
         }
 
-        $symRefProc = new Process(['git', 'symbolic-ref', 'HEAD', 'refs/heads/'.$target], $repoPath);
-        $symRefProc->run();
+        GitCommand::run($repoPath, ['symbolic-ref', 'HEAD', new Revision('refs/heads/'.$target)]);
     }
 
     /**
@@ -254,8 +252,7 @@ final readonly class GitServiceProcess
      */
     public function updateServerInfo(string $repoPath): void
     {
-        $proc = new Process(['git', 'update-server-info'], $repoPath);
-        $proc->run();
+        GitCommand::run($repoPath, ['update-server-info']);
     }
 
     /**
