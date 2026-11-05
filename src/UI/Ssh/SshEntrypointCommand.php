@@ -38,6 +38,9 @@ final class SshEntrypointCommand extends Command
         private readonly SshCliApplication $cliApplication,
         private readonly ExceptionRenderer $exceptionRenderer,
         private readonly IssueLfsToken $issueLfsToken,
+        private readonly Help\CommandCatalog $commandCatalog,
+        private readonly Help\HelpRenderer $helpRenderer,
+        private readonly \App\Shared\Infrastructure\Config\ServerSettings $serverSettings,
     ) {
         parent::__construct();
     }
@@ -147,11 +150,50 @@ final class SshEntrypointCommand extends Command
                 return Command::SUCCESS;
             }
 
+            // Help routing: `help [path…]`, a trailing `--help`/`-h`, or a bare
+            // command group all render cobra-style usage, matching upstream.
+            $helpOutput = $this->renderHelp($tokens, $firstToken);
+            if (null !== $helpOutput) {
+                $output->write($helpOutput, false, OutputInterface::OUTPUT_RAW);
+
+                return Command::SUCCESS;
+            }
+
             // CLI application routing
             return $this->cliApplication->runWithTokens($tokens, $output);
         } catch (\Throwable $e) {
             return $this->exceptionRenderer->render($e, $output);
         }
+    }
+
+    /**
+     * Returns cobra-style help text when the tokens request help, or null when
+     * the command should execute normally.
+     *
+     * Handles `help [path…]`, a `--help`/`-h` flag anywhere in the tokens, and a
+     * bare command group (e.g. `repo`, `settings`) invoked with no subcommand.
+     *
+     * @param list<string> $tokens
+     */
+    private function renderHelp(array $tokens, string $firstToken): ?string
+    {
+        $wantsHelpFlag = in_array('--help', $tokens, true) || in_array('-h', $tokens, true);
+
+        if ('help' !== $firstToken && !$wantsHelpFlag) {
+            // A bare command group (no subcommand, no args) prints its help.
+            [$node, $consumed] = $this->commandCatalog->resolvePrefix($tokens);
+            if ($consumed !== count($tokens) || $node->runnable || !$node->hasChildren()) {
+                return null;
+            }
+        } elseif ('help' === $firstToken) {
+            [$node] = $this->commandCatalog->resolvePrefix(array_slice($tokens, 1));
+        } else {
+            [$node] = $this->commandCatalog->resolvePrefix($tokens);
+        }
+
+        $sshCommand = Help\HelpRenderer::sshCommandFromPublicUrl($this->serverSettings->sshPublicUrl);
+
+        return $this->helpRenderer->render($node, $sshCommand);
     }
 
     private function resolveFingerprint(InputInterface $input): ?string

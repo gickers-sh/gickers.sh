@@ -31,7 +31,7 @@ final readonly class ExceptionRenderer
             'exception' => $exception,
         ]);
 
-        $errOutput->writeln('Error: An unexpected error occurred.', OutputInterface::OUTPUT_RAW);
+        $errOutput->writeln(sprintf('Error: %s', $exception->getMessage()), OutputInterface::OUTPUT_RAW);
 
         return 1;
     }

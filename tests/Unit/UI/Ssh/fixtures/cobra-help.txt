@@ -1,0 +1,892 @@
+########## ROOT help
+Soft Serve is a self-hostable Git server for the command line.
+
+Usage:
+  ssh -p 2223 localhost [command]
+
+Available Commands:
+  help                 Help about any command
+  info                 Show your info
+  jwt                  Generate a JSON Web Token
+  pr                   Manage pull requests
+  pubkey               Manage your public keys
+  repo                 Manage repositories
+  set-username         Set your username
+  settings             Manage server settings
+  token                Manage access tokens
+  user                 Manage users
+
+Flags:
+  -h, --help   help for this command
+
+Use "ssh -p 2223 localhost [command] --help" for more information about a command.
+########## help info
+Show your info
+
+Usage:
+   info [flags]
+
+Flags:
+  -h, --help   help for info
+########## help jwt
+Generate a JSON Web Token
+
+Usage:
+   jwt [repository1 repository2...] [flags]
+
+Flags:
+  -h, --help   help for jwt
+########## help pr
+Manage pull requests
+
+Usage:
+  ssh -p 2223 localhost pr [command]
+
+Aliases:
+  pr, prs, pull-request, pull-requests
+
+Available Commands:
+  close       Close a pull request without merging
+  comment     Add a comment to a pull request
+  create      Create a new pull request
+  delete      Permanently delete a pull request
+  diff        Show diff for a pull request
+  list        List pull requests for a repository
+  merge       Merge a pull request
+  reopen      Reopen a closed pull request
+  view        View details of a pull request
+
+Flags:
+  -h, --help   help for pr
+
+Use "ssh -p 2223 localhost pr [command] --help" for more information about a command.
+########## help pr close
+Close a pull request without merging
+
+Usage:
+   pr close REPOSITORY NUMBER [flags]
+
+Flags:
+  -h, --help   help for close
+########## help pr comment
+Add a comment to a pull request
+
+Usage:
+   pr comment REPOSITORY NUMBER BODY... [flags]
+
+Flags:
+  -h, --help   help for comment
+########## help pr create
+Create a new pull request
+
+Usage:
+   pr create REPOSITORY --head <[REPO:]BRANCH> [--base <BRANCH>] [--title <TITLE>] [--body <BODY>] [flags]
+
+Flags:
+  -B, --base string    target branch to merge into (defaults to default branch)
+  -b, --body string    description/body of the pull request
+  -H, --head string    source branch to merge from (e.g. 'my-feature' or 'my-fork:feature')
+  -h, --help           help for create
+  -t, --title string   title of the pull request
+########## help pr delete
+Permanently delete a pull request
+
+Usage:
+   pr delete REPOSITORY NUMBER [flags]
+
+Aliases:
+  delete, rm
+
+Flags:
+  -h, --help   help for delete
+########## help pr diff
+Show diff for a pull request
+
+Usage:
+   pr diff REPOSITORY NUMBER [flags]
+
+Flags:
+  -h, --help   help for diff
+########## help pr list
+List pull requests for a repository
+
+Usage:
+   pr list REPOSITORY [flags]
+
+Flags:
+  -h, --help            help for list
+  -s, --status string   filter by status (open, closed, merged, all) (default "open")
+########## help pr merge
+Merge a pull request
+
+Usage:
+   pr merge REPOSITORY NUMBER [flags]
+
+Flags:
+  -h, --help           help for merge
+  -t, --title string   custom merge commit title
+########## help pr reopen
+Reopen a closed pull request
+
+Usage:
+   pr reopen REPOSITORY NUMBER [flags]
+
+Flags:
+  -h, --help   help for reopen
+########## help pr view
+View details of a pull request
+
+Usage:
+   pr view REPOSITORY NUMBER [flags]
+
+Flags:
+  -h, --help   help for view
+########## help pubkey
+Manage your public keys
+
+Usage:
+  ssh -p 2223 localhost pubkey [command]
+
+Aliases:
+  pubkey, pubkeys, publickey, publickeys
+
+Available Commands:
+  add         Add a public key
+  list        List public keys
+  remove      Remove a public key
+
+Flags:
+  -h, --help   help for pubkey
+
+Use "ssh -p 2223 localhost pubkey [command] --help" for more information about a command.
+########## help pubkey add
+Add a public key
+
+Usage:
+   pubkey add AUTHORIZED_KEY [flags]
+
+Flags:
+  -h, --help   help for add
+########## help pubkey list
+List public keys
+
+Usage:
+   pubkey list [flags]
+
+Aliases:
+  list, ls
+
+Flags:
+  -h, --help   help for list
+########## help pubkey remove
+Remove a public key
+
+Usage:
+   pubkey remove AUTHORIZED_KEY [flags]
+
+Flags:
+  -h, --help   help for remove
+########## help repo
+Manage repositories
+
+Usage:
+  ssh -p 2223 localhost repo [command]
+
+Aliases:
+  repo, repos, repository, repositories
+
+Available Commands:
+  blob         Print out the contents of file at path
+  branch       Manage repository branches
+  collab       Manage collaborators
+  commit       Print out the contents of a diff
+  create       Create a new repository
+  delete       Delete a repository
+  description  Set or get the description for a repository
+  fork         Fork an existing repository
+  hidden       Hide or unhide a repository
+  import       Import a new repository from remote
+  info         Get information about a repository
+  list         List repositories
+  mirror       Set or get a repository mirror property
+  pr           Manage pull requests
+  private      Set or get a repository private property
+  project-name Set or get the project name for a repository
+  rename       Rename an existing repository
+  tag          Manage repository tags
+  tree         Print repository tree at path
+  webhook      Manage repository webhooks
+
+Flags:
+  -h, --help   help for repo
+
+Use "ssh -p 2223 localhost repo [command] --help" for more information about a command.
+########## help repo blob
+Print out the contents of file at path
+
+Usage:
+   repo blob REPOSITORY [REFERENCE] [PATH] [flags]
+
+Aliases:
+  blob, cat, show
+
+Flags:
+  -c, --color        Colorize output
+  -h, --help         help for blob
+  -l, --linenumber   Print line numbers
+  -r, --raw          Print raw contents
+########## help repo branch
+Manage repository branches
+
+Usage:
+  ssh -p 2223 localhost repo branch [command]
+
+Available Commands:
+  default     Set or get the default branch
+  delete      Delete a branch
+  list        List repository branches
+
+Flags:
+  -h, --help   help for branch
+
+Use "ssh -p 2223 localhost repo branch [command] --help" for more information about a command.
+########## help repo branch default
+Set or get the default branch
+
+Usage:
+   repo branch default REPOSITORY [BRANCH] [flags]
+
+Flags:
+  -h, --help   help for default
+########## help repo branch delete
+Delete a branch
+
+Usage:
+   repo branch delete REPOSITORY BRANCH [flags]
+
+Aliases:
+  delete, remove, rm, del
+
+Flags:
+  -h, --help   help for delete
+########## help repo branch list
+List repository branches
+
+Usage:
+   repo branch list REPOSITORY [flags]
+
+Flags:
+  -h, --help   help for list
+########## help repo collab
+Manage collaborators
+
+Usage:
+  ssh -p 2223 localhost repo collab [command]
+
+Aliases:
+  collab, collabs, collaborator, collaborators
+
+Available Commands:
+  add         Add a collaborator to a repo
+  list        List collaborators for a repo
+  remove      Remove a collaborator from a repo
+
+Flags:
+  -h, --help   help for collab
+
+Use "ssh -p 2223 localhost repo collab [command] --help" for more information about a command.
+########## help repo collab add
+Add a collaborator to a repo. LEVEL can be one of: no-access, read-only, read-write, or admin-access. Defaults to read-write.
+
+Usage:
+   repo collab add REPOSITORY USERNAME [LEVEL] [flags]
+
+Flags:
+  -h, --help   help for add
+########## help repo collab list
+List collaborators for a repo
+
+Usage:
+   repo collab list REPOSITORY [flags]
+
+Flags:
+  -h, --help   help for list
+########## help repo collab remove
+Remove a collaborator from a repo
+
+Usage:
+   repo collab remove REPOSITORY USERNAME [flags]
+
+Flags:
+  -h, --help   help for remove
+########## help repo commit
+Print out the contents of a diff
+
+Usage:
+   repo commit repo SHA [flags]
+
+Flags:
+  -c, --color   Colorize output
+  -h, --help    help for commit
+  -p, --patch   Output patch only
+########## help repo create
+Create a new repository
+
+Usage:
+   repo create REPOSITORY [flags]
+
+Flags:
+  -d, --description string   set the repository description
+  -h, --help                 help for create
+  -H, --hidden               hide the repository from the UI
+  -n, --name string          set the project name
+  -p, --private              make the repository private
+########## help repo delete
+Delete a repository
+
+Usage:
+   repo delete REPOSITORY [flags]
+
+Aliases:
+  delete, del, remove, rm
+
+Flags:
+  -h, --help   help for delete
+########## help repo description
+Set or get the description for a repository
+
+Usage:
+   repo description REPOSITORY [DESCRIPTION] [flags]
+
+Aliases:
+  description, desc
+
+Flags:
+  -h, --help   help for description
+########## help repo fork
+Fork an existing repository
+
+Usage:
+   repo fork SOURCE [NEW_NAME] [flags]
+
+Flags:
+  -d, --description string   set the repository description
+  -h, --help                 help for fork
+  -H, --hidden               hide the repository from the UI
+  -n, --name string          set the project name
+  -p, --private              make the repository private
+########## help repo hidden
+Hide or unhide a repository
+
+Usage:
+   repo hidden REPOSITORY [TRUE|FALSE] [flags]
+
+Aliases:
+  hidden, hide
+
+Flags:
+  -h, --help   help for hidden
+########## help repo import
+Import a new repository from remote
+
+Usage:
+   repo import REPOSITORY REMOTE [flags]
+
+Flags:
+  -d, --description string    set the repository description
+  -h, --help                  help for import
+  -H, --hidden                hide the repository from the UI
+      --lfs                   pull Git LFS objects
+      --lfs-endpoint string   set the Git LFS endpoint
+  -m, --mirror                mirror the repository
+  -n, --name string           set the project name
+  -p, --private               make the repository private
+########## help repo info
+Get information about a repository
+
+Usage:
+   repo info REPOSITORY [flags]
+
+Flags:
+  -h, --help   help for info
+########## help repo list
+List repositories
+
+Usage:
+   repo list [flags]
+
+Aliases:
+  list, ls
+
+Flags:
+  -a, --all    List all repositories
+  -h, --help   help for list
+########## help repo mirror
+Set or get a repository mirror property
+
+Usage:
+   repo mirror REPOSITORY [true|false] [flags]
+
+Flags:
+  -h, --help   help for mirror
+########## help repo pr
+Manage pull requests
+
+Usage:
+  ssh -p 2223 localhost repo pr [command]
+
+Aliases:
+  pr, prs, pull-request, pull-requests
+
+Available Commands:
+  close       Close a pull request without merging
+  comment     Add a comment to a pull request
+  create      Create a new pull request
+  delete      Permanently delete a pull request
+  diff        Show diff for a pull request
+  list        List pull requests for a repository
+  merge       Merge a pull request
+  reopen      Reopen a closed pull request
+  view        View details of a pull request
+
+Flags:
+  -h, --help   help for pr
+
+Use "ssh -p 2223 localhost repo pr [command] --help" for more information about a command.
+########## help repo pr close
+Close a pull request without merging
+
+Usage:
+   repo pr close REPOSITORY NUMBER [flags]
+
+Flags:
+  -h, --help   help for close
+########## help repo pr comment
+Add a comment to a pull request
+
+Usage:
+   repo pr comment REPOSITORY NUMBER BODY... [flags]
+
+Flags:
+  -h, --help   help for comment
+########## help repo pr create
+Create a new pull request
+
+Usage:
+   repo pr create REPOSITORY --head <[REPO:]BRANCH> [--base <BRANCH>] [--title <TITLE>] [--body <BODY>] [flags]
+
+Flags:
+  -B, --base string    target branch to merge into (defaults to default branch)
+  -b, --body string    description/body of the pull request
+  -H, --head string    source branch to merge from (e.g. 'my-feature' or 'my-fork:feature')
+  -h, --help           help for create
+  -t, --title string   title of the pull request
+########## help repo pr delete
+Permanently delete a pull request
+
+Usage:
+   repo pr delete REPOSITORY NUMBER [flags]
+
+Aliases:
+  delete, rm
+
+Flags:
+  -h, --help   help for delete
+########## help repo pr diff
+Show diff for a pull request
+
+Usage:
+   repo pr diff REPOSITORY NUMBER [flags]
+
+Flags:
+  -h, --help   help for diff
+########## help repo pr list
+List pull requests for a repository
+
+Usage:
+   repo pr list REPOSITORY [flags]
+
+Flags:
+  -h, --help            help for list
+  -s, --status string   filter by status (open, closed, merged, all) (default "open")
+########## help repo pr merge
+Merge a pull request
+
+Usage:
+   repo pr merge REPOSITORY NUMBER [flags]
+
+Flags:
+  -h, --help           help for merge
+  -t, --title string   custom merge commit title
+########## help repo pr reopen
+Reopen a closed pull request
+
+Usage:
+   repo pr reopen REPOSITORY NUMBER [flags]
+
+Flags:
+  -h, --help   help for reopen
+########## help repo pr view
+View details of a pull request
+
+Usage:
+   repo pr view REPOSITORY NUMBER [flags]
+
+Flags:
+  -h, --help   help for view
+########## help repo private
+Set or get a repository private property
+
+Usage:
+   repo private REPOSITORY [true|false] [flags]
+
+Flags:
+  -h, --help   help for private
+########## help repo project-name
+Set or get the project name for a repository
+
+Usage:
+   repo project-name REPOSITORY [NAME] [flags]
+
+Aliases:
+  project-name, project
+
+Flags:
+  -h, --help   help for project-name
+########## help repo rename
+Rename an existing repository
+
+Usage:
+   repo rename REPOSITORY NEW_NAME [flags]
+
+Aliases:
+  rename, mv, move
+
+Flags:
+  -h, --help   help for rename
+########## help repo tag
+Manage repository tags
+
+Usage:
+  ssh -p 2223 localhost repo tag [command]
+
+Available Commands:
+  delete      Delete a tag
+  list        List repository tags
+
+Flags:
+  -h, --help   help for tag
+
+Use "ssh -p 2223 localhost repo tag [command] --help" for more information about a command.
+########## help repo tag delete
+Delete a tag
+
+Usage:
+   repo tag delete REPOSITORY TAG [flags]
+
+Aliases:
+  delete, remove, rm, del
+
+Flags:
+  -h, --help   help for delete
+########## help repo tag list
+List repository tags
+
+Usage:
+   repo tag list REPOSITORY [flags]
+
+Aliases:
+  list, ls
+
+Flags:
+  -h, --help   help for list
+########## help repo tree
+Print repository tree at path
+
+Usage:
+   repo tree REPOSITORY [REFERENCE] [PATH] [flags]
+
+Flags:
+  -h, --help   help for tree
+########## help repo webhook
+Manage repository webhooks
+
+Usage:
+  ssh -p 2223 localhost repo webhook [command]
+
+Aliases:
+  webhook, webhooks
+
+Available Commands:
+  create      Create a repository webhook
+  delete      Delete a repository webhook
+  deliveries  Manage webhook deliveries
+  list        List repository webhooks
+  update      Update a repository webhook
+
+Flags:
+  -h, --help   help for webhook
+
+Use "ssh -p 2223 localhost repo webhook [command] --help" for more information about a command.
+########## help repo webhook create
+Create a repository webhook
+
+Usage:
+   repo webhook create REPOSITORY URL [flags]
+
+Flags:
+  -a, --active              whether the webhook is active (default true)
+  -c, --content-type json   content type of the webhook payload, can be either json or `form` (default "json")
+  -e, --events strings      events to trigger the webhook, available events are (branch_tag_create, branch_tag_delete, collaborator, push, repository, repository_visibility_change)
+  -h, --help                help for create
+  -s, --secret string       secret to sign the webhook payload
+########## help repo webhook delete
+Delete a repository webhook
+
+Usage:
+   repo webhook delete REPOSITORY WEBHOOK_ID [flags]
+
+Flags:
+  -h, --help   help for delete
+########## help repo webhook deliveries
+Manage webhook deliveries
+
+Usage:
+  ssh -p 2223 localhost repo webhook deliveries [command]
+
+Aliases:
+  deliveries, delivery, deliver
+
+Available Commands:
+  get         Get a webhook delivery
+  list        List webhook deliveries
+  redeliver   Redeliver a webhook delivery
+
+Flags:
+  -h, --help   help for deliveries
+
+Use "ssh -p 2223 localhost repo webhook deliveries [command] --help" for more information about a command.
+########## help repo webhook deliveries get
+Get a webhook delivery
+
+Usage:
+   repo webhook deliveries get REPOSITORY WEBHOOK_ID DELIVERY_ID [flags]
+
+Flags:
+  -h, --help   help for get
+########## help repo webhook deliveries list
+List webhook deliveries
+
+Usage:
+   repo webhook deliveries list REPOSITORY WEBHOOK_ID [flags]
+
+Flags:
+  -h, --help   help for list
+########## help repo webhook deliveries redeliver
+Redeliver a webhook delivery
+
+Usage:
+   repo webhook deliveries redeliver REPOSITORY WEBHOOK_ID DELIVERY_ID [flags]
+
+Flags:
+  -h, --help   help for redeliver
+########## help repo webhook list
+List repository webhooks
+
+Usage:
+   repo webhook list REPOSITORY [flags]
+
+Flags:
+  -h, --help   help for list
+########## help repo webhook update
+Update a repository webhook
+
+Usage:
+   repo webhook update REPOSITORY WEBHOOK_ID [flags]
+
+Flags:
+  -a, --active string       whether the webhook is active
+  -c, --content-type json   content type of the webhook payload, can be either json or `form`
+  -e, --events strings      events to trigger the webhook, available events are (branch_tag_create, branch_tag_delete, collaborator, push, repository, repository_visibility_change)
+  -h, --help                help for update
+  -s, --secret string       secret to sign the webhook payload
+  -u, --url string          webhook URL
+########## help set-username
+Set your username
+
+Usage:
+   set-username USERNAME [flags]
+
+Flags:
+  -h, --help   help for set-username
+########## help settings
+Manage server settings
+
+Usage:
+  ssh -p 2223 localhost settings [command]
+
+Available Commands:
+  allow-keyless Set or get allow keyless access to repositories
+  anon-access   Set or get the default access level for anonymous users
+
+Flags:
+  -h, --help   help for settings
+
+Use "ssh -p 2223 localhost settings [command] --help" for more information about a command.
+########## help settings allow-keyless
+Set or get allow keyless access to repositories
+
+Usage:
+   settings allow-keyless [true|false] [flags]
+
+Flags:
+  -h, --help   help for allow-keyless
+########## help settings anon-access
+Set or get the default access level for anonymous users
+
+Usage:
+   settings anon-access [ACCESS_LEVEL] [flags]
+
+Flags:
+  -h, --help   help for anon-access
+########## help token
+Manage access tokens
+
+Usage:
+  ssh -p 2223 localhost token [command]
+
+Aliases:
+  token, access-token
+
+Available Commands:
+  create      Create a new access token
+  delete      Delete an access token
+  list        List access tokens
+
+Flags:
+  -h, --help   help for token
+
+Use "ssh -p 2223 localhost token [command] --help" for more information about a command.
+########## help token create
+Create a new access token
+
+Usage:
+   token create NAME [flags]
+
+Flags:
+      --expires-in string   Token expiration time (e.g. 1y, 3mo, 2w, 5d4h, 1h30m)
+  -h, --help                help for create
+########## help token delete
+Delete an access token
+
+Usage:
+   token delete ID [flags]
+
+Aliases:
+  delete, rm, remove
+
+Flags:
+  -h, --help   help for delete
+########## help token list
+List access tokens
+
+Usage:
+   token list [flags]
+
+Aliases:
+  list, ls
+
+Flags:
+  -h, --help   help for list
+########## help user
+Manage users
+
+Usage:
+  ssh -p 2223 localhost user [command]
+
+Aliases:
+  user, users
+
+Available Commands:
+  add-pubkey    Add a public key to a user
+  create        Create a new user
+  delete        Delete a user
+  info          Show information about a user
+  list          List users
+  remove-pubkey Remove a public key from a user
+  set-admin     Make a user an admin
+  set-username  Change a user's username
+
+Flags:
+  -h, --help   help for user
+
+Use "ssh -p 2223 localhost user [command] --help" for more information about a command.
+########## help user add-pubkey
+Add a public key to a user
+
+Usage:
+   user add-pubkey USERNAME AUTHORIZED_KEY [flags]
+
+Flags:
+  -h, --help   help for add-pubkey
+########## help user create
+Create a new user
+
+Usage:
+   user create USERNAME [flags]
+
+Flags:
+  -a, --admin        make the user an admin
+  -h, --help         help for create
+  -k, --key string   add a public key to the user
+########## help user delete
+Delete a user
+
+Usage:
+   user delete USERNAME [flags]
+
+Flags:
+  -h, --help   help for delete
+########## help user info
+Show information about a user
+
+Usage:
+   user info USERNAME [flags]
+
+Flags:
+  -h, --help   help for info
+########## help user list
+List users
+
+Usage:
+   user list [flags]
+
+Aliases:
+  list, ls
+
+Flags:
+  -h, --help   help for list
+########## help user remove-pubkey
+Remove a public key from a user
+
+Usage:
+   user remove-pubkey USERNAME AUTHORIZED_KEY [flags]
+
+Flags:
+  -h, --help   help for remove-pubkey
+########## help user set-admin
+Make a user an admin
+
+Usage:
+   user set-admin USERNAME [true|false] [flags]
+
+Flags:
+  -h, --help   help for set-admin
+########## help user set-username
+Change a user's username
+
+Usage:
+   user set-username USERNAME NEW_USERNAME [flags]
+
+Flags:
+  -h, --help   help for set-username
