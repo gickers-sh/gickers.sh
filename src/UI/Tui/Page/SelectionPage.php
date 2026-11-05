@@ -7,6 +7,7 @@ namespace App\UI\Tui\Page;
 use App\Identity\Domain\Model\User;
 use App\Repo\Application\CreateRepo;
 use App\Repo\Application\Query\RepoQuery;
+use App\Repo\Domain\Git\GitRepository;
 use App\Repo\Domain\Model\Repo;
 use App\Repo\Domain\RepoDirectory;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
@@ -16,8 +17,10 @@ use App\Shared\Domain\Exception\InvalidInput;
 use App\Shared\Infrastructure\Config\ServerSettings;
 use App\UI\Tui\Input\Keys;
 use App\UI\Tui\Render\Screen;
+use App\UI\Tui\Render\Spinner;
 use App\UI\Tui\Render\TermstrapRenderer;
 use App\UI\Tui\Render\Theme;
+use Symfony\Component\Process\Process;
 
 /**
  * Landing page: a tabbed feed of readable repositories, the caller's own
@@ -44,9 +47,18 @@ final class SelectionPage extends AbstractPage
     private array $selected = [0, 0, 0, 0];
     private int $aboutScroll = 0;
     private int $aboutRows = 20;
+    private int $lastAboutCols = 76;
     /** @var array{key: string, lines: list<string>}|null */
     private ?array $aboutCache = null;
 
+    private bool $aboutDocResolved = false;
+    /** @var array{path: string, content: string}|null */
+    private ?array $aboutDoc = null;
+    /** @var array{git: GitRepository, stage: 'tree'|'blob', process: Process, path?: string}|null */
+    private ?array $aboutJob = null;
+    /** @var array{key: string, process: Process, fallback: list<string>}|null */
+    private ?array $aboutRenderJob = null;
+    private Spinner $spinner;
     private bool $newRepoOpen = false;
     private bool $helpOpen = false;
     /** @var array{name: string, description: string, private: bool} */
@@ -68,12 +80,169 @@ final class SelectionPage extends AbstractPage
         private readonly ?GitRepositoryReader $reader = null,
         private readonly ?TermstrapRenderer $renderer = null,
         private readonly ?RepoDirectory $repoDirectory = null,
-    ) {}
+    ) {
+        $this->spinner = new Spinner();
+    }
 
     protected function load(): void
     {
         $this->feed = $this->repoQuery->visibleTo($this->actor);
         $this->owned = null !== $this->actor ? $this->repoQuery->ownedBy($this->actor) : [];
+    }
+
+    public function tick(?float $deltaTime = null): bool
+    {
+        $busy = false;
+
+        if (null !== $this->aboutJob) {
+            $busy = true;
+            $this->pollAboutJob();
+        }
+
+        if (null !== $this->aboutRenderJob) {
+            $busy = true;
+            $this->pollAboutRenderJob();
+        }
+
+        if ($busy) {
+            $this->spinner->advance($deltaTime);
+        }
+
+        return $busy;
+    }
+
+    private function pollAboutJob(): void
+    {
+        if (null === $this->aboutJob || $this->aboutJob['process']->isRunning()) {
+            return;
+        }
+
+        $job = $this->aboutJob;
+        $this->aboutJob = null;
+        $proc = $job['process'];
+        $git = $job['git'];
+
+        if ('tree' === $job['stage']) {
+            if (!$proc->isSuccessful() || null === $this->reader) {
+                $this->aboutDocResolved = true;
+                $this->aboutDoc = null;
+
+                return;
+            }
+            $entries = $this->reader->parseTreeOutput($proc->getOutput());
+            $entry = $this->reader->findReadmeEntry($entries);
+            if (null === $entry) {
+                $this->aboutDocResolved = true;
+                $this->aboutDoc = null;
+
+                return;
+            }
+            try {
+                $this->aboutJob = [
+                    'git' => $git,
+                    'stage' => 'blob',
+                    'path' => $entry->path,
+                    'process' => $this->reader->startBlobProcess($git, 'HEAD', $entry->path),
+                ];
+            } catch (\Throwable) {
+                $this->aboutDocResolved = true;
+                $this->aboutDoc = null;
+            }
+
+            return;
+        }
+
+        $this->aboutDocResolved = true;
+        $this->aboutDoc = $proc->isSuccessful()
+            ? ['path' => $job['path'] ?? 'README.md', 'content' => $proc->getOutput()]
+            : null;
+        $this->aboutCache = null;
+        if (null !== $this->aboutDoc) {
+            $this->isAboutLoading($this->lastAboutCols);
+        }
+    }
+
+    private function pollAboutRenderJob(): void
+    {
+        if (null === $this->aboutRenderJob || $this->aboutRenderJob['process']->isRunning()) {
+            return;
+        }
+
+        $job = $this->aboutRenderJob;
+        $this->aboutRenderJob = null;
+        $proc = $job['process'];
+        $lines = $proc->isSuccessful()
+            ? (preg_split('/\r\n|\r|\n/', rtrim($proc->getOutput(), "\n")) ?: [])
+            : $job['fallback'];
+        $this->aboutCache = ['key' => $job['key'], 'lines' => $lines];
+    }
+
+    private function isAboutLoading(?int $cols = null): bool
+    {
+        if ($this->aboutDocResolved) {
+            if (null === $this->aboutDoc) {
+                return false;
+            }
+            if (null !== $cols) {
+                $this->lastAboutCols = $cols;
+            } else {
+                $cols = $this->lastAboutCols;
+            }
+            $cacheKey = (string) $cols;
+            if (null !== $this->aboutCache && $this->aboutCache['key'] === $cacheKey) {
+                return false;
+            }
+            if (null === $this->renderer || !$this->renderer->isAvailable()) {
+                $lines = preg_split('/\r\n|\r|\n/', rtrim($this->aboutDoc['content'], "\n")) ?: [];
+                $this->aboutCache = ['key' => $cacheKey, 'lines' => $lines];
+
+                return false;
+            }
+            if (null === $this->aboutRenderJob || $this->aboutRenderJob['key'] !== $cacheKey) {
+                if (null !== $this->aboutRenderJob && $this->aboutRenderJob['process']->isRunning()) {
+                    $this->aboutRenderJob['process']->stop(0);
+                }
+                $fallback = preg_split('/\r\n|\r|\n/', rtrim($this->aboutDoc['content'], "\n")) ?: [];
+                try {
+                    $this->aboutRenderJob = [
+                        'key' => $cacheKey,
+                        'process' => $this->renderer->startRenderDocumentProcess($this->aboutDoc['path'], $this->aboutDoc['content'], max(20, $cols - 2)),
+                        'fallback' => $fallback,
+                    ];
+                } catch (\Throwable) {
+                    $this->aboutCache = ['key' => $cacheKey, 'lines' => $fallback];
+
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        if (null !== $this->aboutJob) {
+            return true;
+        }
+        if (null === $this->reader || null === $this->repoDirectory) {
+            $this->aboutDocResolved = true;
+            $this->aboutDoc = null;
+
+            return false;
+        }
+        try {
+            $softRepo = $this->repoQuery->get($this->actor, '.soft-serve');
+            $git = $this->reader->openRepository($this->repoDirectory->pathFor($softRepo->name()));
+            $this->aboutJob = [
+                'git' => $git,
+                'stage' => 'tree',
+                'process' => $this->reader->startTreeProcess($git, 'HEAD', ''),
+            ];
+
+            return true;
+        } catch (\Throwable) {
+            $this->aboutDocResolved = true;
+            $this->aboutDoc = null;
+
+            return false;
+        }
     }
 
     public function handleKey(string $seq): bool
@@ -148,7 +317,7 @@ final class SelectionPage extends AbstractPage
                 return true;
             case Keys::END:
                 if (self::TAB_ABOUT === $this->tab) {
-                    $this->aboutScroll = PHP_INT_MAX;
+                    $this->aboutScroll = \PHP_INT_MAX;
                 } else {
                     $this->selected[$this->tab] = max(0, \count($this->currentList()) - 1);
                 }
@@ -219,7 +388,7 @@ final class SelectionPage extends AbstractPage
                 return true;
             case 'G':
                 if (self::TAB_ABOUT === $this->tab) {
-                    $this->aboutScroll = PHP_INT_MAX;
+                    $this->aboutScroll = \PHP_INT_MAX;
                 } else {
                     $this->selected[$this->tab] = max(0, \count($this->currentList()) - 1);
                 }
@@ -288,7 +457,7 @@ final class SelectionPage extends AbstractPage
                 trim($this->form['description']),
                 '',
             );
-        } catch (InvalidInput | Conflict | AccessDenied $e) {
+        } catch (InvalidInput|Conflict|AccessDenied $e) {
             $this->error = $e->getMessage();
 
             return;
@@ -298,7 +467,7 @@ final class SelectionPage extends AbstractPage
         $this->form = ['name' => '', 'description' => '', 'private' => false];
         $this->field = 0;
         $this->error = null;
-        $this->flash = 'Created ' . $repo->nameString();
+        $this->flash = 'Created '.$repo->nameString();
         $this->tab = self::TAB_REPOS;
         $this->load();
         $this->selectByName(self::TAB_REPOS, $repo->nameString());
@@ -364,7 +533,7 @@ final class SelectionPage extends AbstractPage
 
     protected function headerLines(int $cols): array
     {
-        return [' ' . Screen::serverBadge($this->settings->name ?: 'Soft Serve'), ''];
+        return [' '.Screen::serverBadge($this->settings->name ?: 'Soft Serve'), ''];
     }
 
     protected function tabBarLines(int $cols): array
@@ -450,7 +619,7 @@ final class SelectionPage extends AbstractPage
                 $repo->nameString(),
                 trim($repo->description()),
                 $this->cloneCommand($repo),
-                'Updated ' . $this->relativeTime($repo->updatedAt()),
+                'Updated '.$this->relativeTime($repo->updatedAt()),
                 $i === $sel,
                 $cols,
             );
@@ -487,7 +656,7 @@ final class SelectionPage extends AbstractPage
             return '';
         }
 
-        return 'git clone ' . rtrim($url, '/') . '/' . $repo->nameString() . '.git';
+        return 'git clone '.rtrim($url, '/').'/'.$repo->nameString().'.git';
     }
 
     private function relativeTime(\DateTimeImmutable $when): string
@@ -500,7 +669,7 @@ final class SelectionPage extends AbstractPage
             if ($diff >= $secs) {
                 $n = intdiv($diff, $secs);
 
-                return $n . ' ' . $unit . (1 === $n ? '' : 's') . ' ago';
+                return $n.' '.$unit.(1 === $n ? '' : 's').' ago';
             }
         }
 
@@ -513,6 +682,9 @@ final class SelectionPage extends AbstractPage
     private function aboutBody(int $cols, int $rows): array
     {
         $this->aboutRows = max(1, $rows);
+        if ($this->isAboutLoading($cols)) {
+            return Screen::spinnerBody($this->spinner, 'Loading README...', $cols);
+        }
         $lines = $this->aboutLines($cols);
         $total = \count($lines);
         $maxScroll = max(0, $total - $rows);
@@ -527,7 +699,7 @@ final class SelectionPage extends AbstractPage
         if ($rows > 0) {
             $percent = $maxScroll > 0 ? (int) round($top / $maxScroll * 100) : 100;
             $ind = Theme::style(sprintf('☰ %d%%', $percent), Theme::MUTED);
-            $out[$rows - 1] = Screen::fit(str_repeat(' ', max(0, $cols - Screen::width($ind) - 1)) . $ind, $cols);
+            $out[$rows - 1] = Screen::fit(str_repeat(' ', max(0, $cols - Screen::width($ind) - 1)).$ind, $cols);
         }
 
         return array_values($out);
@@ -535,6 +707,9 @@ final class SelectionPage extends AbstractPage
 
     private function scrollAbout(int $delta): void
     {
+        if ($this->isAboutLoading()) {
+            return;
+        }
         $lines = $this->aboutLines(80);
         $maxScroll = max(0, \count($lines) - $this->aboutRows);
         $this->aboutScroll = max(0, min($this->aboutScroll + $delta, $maxScroll));
@@ -551,24 +726,25 @@ final class SelectionPage extends AbstractPage
         }
 
         $lines = null;
-        if (null !== $this->reader && null !== $this->repoDirectory) {
+        if (!$this->aboutDocResolved && null !== $this->reader && null !== $this->repoDirectory) {
             try {
                 $softRepo = $this->repoQuery->get($this->actor, '.soft-serve');
                 $git = $this->reader->openRepository($this->repoDirectory->pathFor($softRepo->name()));
-                $doc = $this->reader->readme($git, 'HEAD');
-                if (null !== $doc) {
-                    if ($this->renderer?->isAvailable()) {
-                        $ansi = $this->renderer->renderDocument($doc['path'], $doc['content'], max(20, $cols - 2));
-                        $lines = preg_split('/\r\n|\r|\n/', rtrim($ansi, "\n")) ?: [];
-                    } else {
-                        $lines = preg_split('/\r\n|\r|\n/', rtrim($doc['content'], "\n")) ?: [];
-                    }
-                }
+                $this->aboutDoc = $this->reader->readme($git, 'HEAD');
             } catch (\Throwable) {
-                // No readable .soft-serve repository.
+                $this->aboutDoc = null;
             }
+            $this->aboutDocResolved = true;
         }
 
+        if (null !== $this->aboutDoc) {
+            if ($this->renderer?->isAvailable()) {
+                $ansi = $this->renderer->renderDocument($this->aboutDoc['path'], $this->aboutDoc['content'], max(20, $cols - 2));
+                $lines = preg_split('/\r\n|\r|\n/', rtrim($ansi, "\n")) ?: [];
+            } else {
+                $lines = preg_split('/\r\n|\r|\n/', rtrim($this->aboutDoc['content'], "\n")) ?: [];
+            }
+        }
         if (null === $lines) {
             $lines = [
                 '',
@@ -594,12 +770,12 @@ final class SelectionPage extends AbstractPage
 
         $lines = [
             '',
-            '  Username  ' . $this->actor->username(),
-            '  Role      ' . ($this->actor->isAdmin() ? 'administrator' : 'user'),
-            '  Keys      ' . \count($this->actor->publicKeys()),
+            '  Username  '.$this->actor->username(),
+            '  Role      '.($this->actor->isAdmin() ? 'administrator' : 'user'),
+            '  Keys      '.\count($this->actor->publicKeys()),
         ];
 
-        return array_map(static fn(string $l): string => Screen::fit($l, $cols), $lines);
+        return array_map(static fn (string $l): string => Screen::fit($l, $cols), $lines);
     }
 
     /**
@@ -614,7 +790,7 @@ final class SelectionPage extends AbstractPage
             '',
         ];
         $lines[] = null !== $this->error
-            ? "\e[31m! " . $this->error . "\e[0m"
+            ? "\e[31m! ".$this->error."\e[0m"
             : 'Enter: create · Tab: next · Esc: cancel';
 
         return $lines;
@@ -625,13 +801,13 @@ final class SelectionPage extends AbstractPage
         $cursor = $active ? '▏' : '';
         $text = sprintf('%-12s %s%s', $label, $value, $cursor);
 
-        return $active ? "\e[1m" . $text . "\e[0m" : $text;
+        return $active ? "\e[1m".$text."\e[0m" : $text;
     }
 
     private function toggleRow(string $label, bool $value, bool $active): string
     {
         $text = sprintf('%-12s %s', $label, $value ? '[x]' : '[ ]');
 
-        return $active ? "\e[1m" . $text . '  (space to toggle)' . "\e[0m" : $text;
+        return $active ? "\e[1m".$text.'  (space to toggle)'."\e[0m" : $text;
     }
 }

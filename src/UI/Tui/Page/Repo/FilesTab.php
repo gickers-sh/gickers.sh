@@ -11,6 +11,7 @@ use App\UI\Tui\Render\CommitForm;
 use App\UI\Tui\Render\InlineEditor;
 use App\UI\Tui\Render\Screen;
 use App\UI\Tui\Render\Theme;
+use Symfony\Component\Process\Process;
 
 /**
  * Files tab: a directory browser over the current ref, opening a
@@ -21,6 +22,8 @@ final class FilesTab extends AbstractRepoTab
 {
     private bool $fileOpen = false;
     private string $filePath = '';
+    /** @var array{path: string, process: Process, targetLine: int, targetCol: int, flash?: string}|null */
+    private ?array $blobJob = null;
     /** @var list<string> */
     private array $fileRaw = [];
     private int $cursorLine = 0;
@@ -29,9 +32,11 @@ final class FilesTab extends AbstractRepoTab
     private int $filePreviewScroll = 0;
     /** @var array{key: string, lines: list<string>}|null */
     private ?array $filePreviewCache = null;
+    /** @var array{key: string, process: Process}|null */
+    private ?array $filePreviewJob = null;
     private int $cols = 80;
 
-    /** @var list<string>|null ANSI-highlighted lines parallel to $fileRaw; null = plain text */
+    /** @var list<string>|null ANSI-highlighted lines parallel to; null = plain text */
     private ?array $highlighted = null;
     private ?CodeHighlighter $highlighter = null;
 
@@ -81,6 +86,10 @@ final class FilesTab extends AbstractRepoTab
     {
         parent::onActivate();
         $this->fileOpen = false;
+        if (null !== $this->blobJob && $this->blobJob['process']->isRunning()) {
+            $this->blobJob['process']->stop(0);
+        }
+        $this->blobJob = null;
         $this->refsOpen = false;
         $this->editing = false;
         $this->newFilePrompt = false;
@@ -89,6 +98,71 @@ final class FilesTab extends AbstractRepoTab
         $this->filePreview = false;
         $this->filePreviewScroll = 0;
         $this->filePreviewCache = null;
+        if (null !== $this->filePreviewJob && $this->filePreviewJob['process']->isRunning()) {
+            $this->filePreviewJob['process']->stop(0);
+        }
+        $this->filePreviewJob = null;
+    }
+
+    public function tick(?float $deltaTime = null): bool
+    {
+        $busy = false;
+
+        if (null !== $this->blobJob) {
+            $busy = true;
+            $this->pollBlobJob();
+        }
+
+        if (null !== $this->filePreviewJob) {
+            $busy = true;
+            $this->pollFilePreviewJob();
+        }
+
+        if ($busy) {
+            $this->ctx->spinner->advance($deltaTime);
+        }
+
+        return $busy;
+    }
+
+    private function pollBlobJob(): void
+    {
+        if (null === $this->blobJob || $this->blobJob['process']->isRunning()) {
+            return;
+        }
+
+        $job = $this->blobJob;
+        $this->blobJob = null;
+        $proc = $job['process'];
+        if (!$proc->isSuccessful()) {
+            $this->fileOpen = false;
+            $this->ctx->flash = 'Cannot open '.$job['path'];
+
+            return;
+        }
+
+        $this->loadFile($job['path'], $proc->getOutput());
+        $this->fileOpen = true;
+        $this->cursorLine = max(0, min($job['targetLine'], max(0, \count($this->fileRaw) - 1)));
+        $this->cursorCol = max(0, $job['targetCol']);
+        if (isset($job['flash'])) {
+            $this->ctx->flash = $job['flash'];
+        }
+    }
+
+    private function pollFilePreviewJob(): void
+    {
+        if (null === $this->filePreviewJob || $this->filePreviewJob['process']->isRunning()) {
+            return;
+        }
+
+        $job = $this->filePreviewJob;
+        $this->filePreviewJob = null;
+        $proc = $job['process'];
+        $lines = $proc->isSuccessful()
+            ? (preg_split('/\r\n|\r|\n/', rtrim($proc->getOutput(), "\n")) ?: [])
+            : $this->fileRaw;
+        $this->filePreviewCache = ['key' => $job['key'], 'lines' => $lines];
     }
 
     public function footerText(): string
@@ -104,7 +178,7 @@ final class FilesTab extends AbstractRepoTab
         }
         if ($this->editing) {
             $hint = $this->editor->previewSupported()
-                ? ('Ctrl+P: ' . $this->editor->previewMode() . ' · ')
+                ? ('Ctrl+P: '.$this->editor->previewMode().' · ')
                 : '';
 
             return sprintf(' Ln %d, Col %d · %sCtrl+S: save · Esc: discard', $this->editor->line() + 1, $this->editor->col() + 1, $hint);
@@ -120,7 +194,7 @@ final class FilesTab extends AbstractRepoTab
             return sprintf(' Ln %d, Col %d · %se: edit · d: definition · r: references · Esc: back', $this->cursorLine + 1, $this->cursorCol + 1, $pHint);
         }
 
-        return ' n: new · D: delete · ' . self::BASE_FOOTER;
+        return ' n: new · D: delete · '.self::BASE_FOOTER;
     }
 
     public function statusValue(): string
@@ -135,7 +209,7 @@ final class FilesTab extends AbstractRepoTab
             return '[NEW FILE]';
         }
         if ($this->editing) {
-            return $this->editPath . ($this->isNewFile ? ' [NEW]' : ' [EDIT]');
+            return $this->editPath.($this->isNewFile ? ' [NEW]' : ' [EDIT]');
         }
         if ($this->fileOpen && $this->filePreview) {
             return '[PREVIEW]';
@@ -170,13 +244,24 @@ final class FilesTab extends AbstractRepoTab
 
     private function handleTabKey(string $tok, ?string $txt): bool
     {
+        if ($this->ctx->isTreeLoading()) {
+            if ((Keys::BACKSPACE === $tok || Keys::LEFT === $tok || 'h' === $txt) && '' !== $this->ctx->subpath) {
+                $this->ctx->subpath = $this->parentPath($this->ctx->subpath);
+                $this->sel = 0;
+
+                return true;
+            }
+
+            return false;
+        }
+
         $entries = $this->ctx->tree();
         if ('n' === $txt) {
             if (!$this->checkCanWrite()) {
                 return true;
             }
             $this->newFilePrompt = true;
-            $this->newFilePathInput = '' !== $this->ctx->subpath ? rtrim($this->ctx->subpath, '/') . '/' : '';
+            $this->newFilePathInput = '' !== $this->ctx->subpath ? rtrim($this->ctx->subpath, '/').'/' : '';
 
             return true;
         }
@@ -227,11 +312,22 @@ final class FilesTab extends AbstractRepoTab
         $last = max(0, \count($this->fileRaw) - 1);
 
         if (Keys::ESCAPE === $tok || 'q' === $txt) {
+            if (null !== $this->blobJob && $this->blobJob['process']->isRunning()) {
+                $this->blobJob['process']->stop(0);
+            }
+            $this->blobJob = null;
+            if (null !== $this->filePreviewJob && $this->filePreviewJob['process']->isRunning()) {
+                $this->filePreviewJob['process']->stop(0);
+            }
+            $this->filePreviewJob = null;
             $this->fileOpen = false;
             $this->filePreview = false;
             $this->filePreviewScroll = 0;
 
             return true;
+        }
+        if (null !== $this->blobJob) {
+            return false;
         }
 
         if ('p' === $txt && $this->isMarkdownFile()) {
@@ -242,6 +338,9 @@ final class FilesTab extends AbstractRepoTab
         }
 
         if ($this->filePreview) {
+            if ($this->isFilePreviewLoading($this->cols > 0 ? $this->cols : 80)) {
+                return false;
+            }
             $lines = $this->filePreviewLines($this->cols > 0 ? $this->cols : 80);
             $total = \count($lines);
             $bodyRows = max(1, ($this->rows > 0 ? $this->rows : 24) - 1);
@@ -347,19 +446,53 @@ final class FilesTab extends AbstractRepoTab
 
     // --- actions -----------------------------------------------------------
 
-    private function openFile(string $path): void
+    private function openFile(string $path, bool $async = true, int $targetLine = 0, int $targetCol = 0, ?string $flash = null): void
     {
+        if (null !== $this->blobJob && $this->blobJob['process']->isRunning()) {
+            $this->blobJob['process']->stop(0);
+        }
+        $this->blobJob = null;
+
+        if ($async) {
+            try {
+                $proc = $this->ctx->reader->startBlobProcess($this->ctx->git, $this->ctx->ref, $path);
+                $job = [
+                    'path' => $path,
+                    'process' => $proc,
+                    'targetLine' => $targetLine,
+                    'targetCol' => $targetCol,
+                ];
+                if (null !== $flash) {
+                    $job['flash'] = $flash;
+                }
+                $this->blobJob = $job;
+                $this->filePath = $path;
+                $this->fileOpen = true;
+                $this->cursorLine = $targetLine;
+                $this->cursorCol = $targetCol;
+
+                return;
+            } catch (\Throwable) {
+                $this->ctx->flash = 'Cannot open '.$path;
+
+                return;
+            }
+        }
+
         try {
             $content = $this->ctx->reader->getBlob($this->ctx->git, $this->ctx->ref, $path);
         } catch (\Throwable) {
-            $this->ctx->flash = 'Cannot open ' . $path;
+            $this->ctx->flash = 'Cannot open '.$path;
 
             return;
         }
         $this->loadFile($path, $content);
         $this->fileOpen = true;
-        $this->cursorLine = 0;
-        $this->cursorCol = 0;
+        $this->cursorLine = max(0, min($targetLine, max(0, \count($this->fileRaw) - 1)));
+        $this->cursorCol = max(0, $targetCol);
+        if (null !== $flash) {
+            $this->ctx->flash = $flash;
+        }
     }
 
     private function gotoDefinition(): void
@@ -400,20 +533,15 @@ final class FilesTab extends AbstractRepoTab
 
     private function openLocation(SymbolLocation $loc): void
     {
+        $flash = '→ '.$loc->path.':'.($loc->line + 1);
         if ($loc->path !== $this->filePath) {
-            try {
-                $content = $this->ctx->reader->getBlob($this->ctx->git, $this->ctx->ref, $loc->path);
-            } catch (\Throwable) {
-                $this->ctx->flash = 'Cannot open ' . $loc->path;
+            $this->openFile($loc->path, true, $loc->line, $loc->col, $flash);
 
-                return;
-            }
-            $this->loadFile($loc->path, $content);
-            $this->fileOpen = true;
+            return;
         }
         $this->cursorLine = max(0, min($loc->line, \count($this->fileRaw) - 1));
         $this->cursorCol = max(0, $loc->col);
-        $this->ctx->flash = '→ ' . $loc->path . ':' . ($loc->line + 1);
+        $this->ctx->flash = $flash;
     }
 
     private function loadFile(string $path, string $content): void
@@ -425,6 +553,10 @@ final class FilesTab extends AbstractRepoTab
         $this->filePreview = false;
         $this->filePreviewScroll = 0;
         $this->filePreviewCache = null;
+        if (null !== $this->filePreviewJob && $this->filePreviewJob['process']->isRunning()) {
+            $this->filePreviewJob['process']->stop(0);
+        }
+        $this->filePreviewJob = null;
     }
 
     private function currentLineLength(): int
@@ -441,7 +573,6 @@ final class FilesTab extends AbstractRepoTab
         return false === $pos ? '' : substr($path, 0, $pos);
     }
 
-
     private function checkCanWrite(): bool
     {
         if (!$this->ctx->canWrite()) {
@@ -457,6 +588,7 @@ final class FilesTab extends AbstractRepoTab
 
         return true;
     }
+
     private function startEditing(): void
     {
         $this->editing = true;
@@ -499,7 +631,7 @@ final class FilesTab extends AbstractRepoTab
         if ($this->isCtrlS($seq)) {
             $this->commitPrompt = true;
             $this->commitAction = $this->isNewFile ? 'create' : 'update';
-            $this->commitForm->reset(($this->isNewFile ? 'Create ' : 'Update ') . $this->editPath);
+            $this->commitForm->reset(($this->isNewFile ? 'Create ' : 'Update ').$this->editPath);
 
             return true;
         }
@@ -539,8 +671,8 @@ final class FilesTab extends AbstractRepoTab
             if ('' === $raw) {
                 return true;
             }
-            if ('' !== $this->ctx->subpath && !str_starts_with($raw, '/') && !str_starts_with($raw, $this->ctx->subpath . '/')) {
-                $raw = $this->ctx->subpath . '/' . $raw;
+            if ('' !== $this->ctx->subpath && !str_starts_with($raw, '/') && !str_starts_with($raw, $this->ctx->subpath.'/')) {
+                $raw = $this->ctx->subpath.'/'.$raw;
             }
             $clean = $this->cleanPath($raw);
             if ('' === $clean) {
@@ -555,6 +687,7 @@ final class FilesTab extends AbstractRepoTab
             $this->editor->enableMarkdownPreview($this->ctx->renderer, $this->editPath);
             $this->editorHighlighted = null;
             $this->editorDirty = true;
+
             return true;
         }
 
@@ -586,7 +719,7 @@ final class FilesTab extends AbstractRepoTab
 
         if ('y' === $txt || 'Y' === $txt) {
             $path = $this->deleteTargetPath;
-            $message = 'Delete ' . $path;
+            $message = 'Delete '.$path;
             $this->executeCommit('delete', $path, $message);
 
             return true;
@@ -666,14 +799,14 @@ final class FilesTab extends AbstractRepoTab
                 );
             }
         } catch (\Throwable $e) {
-            $this->ctx->flash = 'Commit failed: ' . $e->getMessage();
+            $this->ctx->flash = 'Commit failed: '.$e->getMessage();
 
             return false;
         }
 
         $this->ctx->invalidateGitCaches();
         $shortSha = substr($sha, 0, 7);
-        $this->ctx->flash = 'Committed ' . $shortSha;
+        $this->ctx->flash = 'Committed '.$shortSha;
 
         $this->commitPrompt = false;
         $this->confirmDelete = false;
@@ -685,9 +818,7 @@ final class FilesTab extends AbstractRepoTab
             $this->fileOpen = false;
             $this->sel = max(0, min($this->sel, max(0, \count($this->ctx->tree()) - 1)));
         } else {
-            $this->openFile($path);
-            $this->cursorLine = $this->editor->line();
-            $this->cursorCol = $this->editor->col();
+            $this->openFile($path, false, $this->editor->line(), $this->editor->col());
         }
 
         return true;
@@ -725,11 +856,15 @@ final class FilesTab extends AbstractRepoTab
      */
     private function paintFiles(int $cols, int $rows): array
     {
-        $entries = $this->ctx->tree();
-        $crumb = '  /' . $this->ctx->subpath;
-        $header = "\e[2m" . Screen::fit($crumb, $cols) . "\e[0m";
+        $crumb = '  /'.$this->ctx->subpath;
+        $header = "\e[2m".Screen::fit($crumb, $cols)."\e[0m";
         $bodyRows = max(1, $rows - 1);
 
+        if ($this->ctx->isTreeLoading()) {
+            return array_merge([$header], Screen::spinnerBody($this->ctx->spinner, 'Loading files...', $cols));
+        }
+
+        $entries = $this->ctx->tree();
         if ([] === $entries) {
             return array_merge([$header], $this->messageBody('Empty directory.', $cols));
         }
@@ -762,12 +897,15 @@ final class FilesTab extends AbstractRepoTab
 
     public function statusInfo(): string
     {
+        if ($this->ctx->isTreeLoading()) {
+            return '…';
+        }
         $count = \count($this->ctx->tree());
         if (0 === $count) {
             return '';
         }
 
-        return '# ' . (min($this->sel, $count - 1) + 1) . '/' . $count;
+        return '# '.(min($this->sel, $count - 1) + 1).'/'.$count;
     }
 
     private function modeString(\App\Repo\Domain\Git\TreeEntry $entry): string
@@ -785,10 +923,10 @@ final class FilesTab extends AbstractRepoTab
         $rwx = '';
         foreach ([6, 3, 0] as $shift) {
             $p = ($perm >> $shift) & 7;
-            $rwx .= (0 !== ($p & 4) ? 'r' : '-') . (0 !== ($p & 2) ? 'w' : '-') . (0 !== ($p & 1) ? 'x' : '-');
+            $rwx .= (0 !== ($p & 4) ? 'r' : '-').(0 !== ($p & 2) ? 'w' : '-').(0 !== ($p & 1) ? 'x' : '-');
         }
 
-        return $type . $rwx;
+        return $type.$rwx;
     }
 
     /**
@@ -796,11 +934,16 @@ final class FilesTab extends AbstractRepoTab
      */
     private function paintFile(int $cols, int $rows): array
     {
+        if (null !== $this->blobJob) {
+            $crumb = "\e[2m".Screen::fit('  '.$this->filePath, $cols)."\e[0m";
+
+            return array_merge([$crumb], Screen::spinnerBody($this->ctx->spinner, 'Loading '.$this->filePath.'...', $cols));
+        }
+
         if ($this->filePreview) {
             return $this->paintFilePreview($cols, $rows);
         }
-
-        $crumb = "\e[2m" . Screen::fit('  ' . $this->filePath, $cols) . "\e[0m";
+        $crumb = "\e[2m".Screen::fit('  '.$this->filePath, $cols)."\e[0m";
         $rows = max(1, $rows - 1);
         $count = \count($this->fileRaw);
         $gutter = max(3, \strlen((string) $count));
@@ -818,22 +961,26 @@ final class FilesTab extends AbstractRepoTab
             $code = $this->highlighted[$idx] ?? $this->fileRaw[$idx];
             $num = str_pad((string) ($idx + 1), $gutter, ' ', \STR_PAD_LEFT);
             if ($idx === $this->cursorLine) {
-                $g = "\e[7m" . $num . '▶' . "\e[0m" . ' ';
+                $g = "\e[7m".$num.'▶'."\e[0m".' ';
             } else {
-                $g = "\e[2m" . $num . '│' . "\e[0m" . ' ';
+                $g = "\e[2m".$num.'│'."\e[0m".' ';
             }
-            $rowsOut[] = Screen::fit($g . Screen::truncate($code, $codeWidth), $cols);
+            $rowsOut[] = Screen::fit($g.Screen::truncate($code, $codeWidth), $cols);
         }
 
         return $rowsOut;
     }
+
     /**
      * @return list<string>
      */
     private function paintFilePreview(int $cols, int $rows): array
     {
-        $crumb = "\e[2m" . Screen::fit('  ' . $this->filePath, $cols) . "\e[0m";
+        $crumb = "\e[2m".Screen::fit('  '.$this->filePath, $cols)."\e[0m";
         $bodyRows = max(1, $rows - 1);
+        if ($this->isFilePreviewLoading($cols)) {
+            return array_merge([$crumb], Screen::spinnerBody($this->ctx->spinner, 'Rendering preview...', $cols));
+        }
         $lines = $this->filePreviewLines($cols);
         $total = \count($lines);
         $maxScroll = max(0, $total - $bodyRows);
@@ -848,12 +995,42 @@ final class FilesTab extends AbstractRepoTab
         return $rowsOut;
     }
 
+    private function isFilePreviewLoading(int $cols): bool
+    {
+        $key = $this->filePath.':'.$cols;
+        if (null !== $this->filePreviewCache && $this->filePreviewCache['key'] === $key) {
+            return false;
+        }
+        if (!$this->ctx->renderer->isAvailable()) {
+            $this->filePreviewCache = ['key' => $key, 'lines' => $this->fileRaw];
+
+            return false;
+        }
+        if (null === $this->filePreviewJob || $this->filePreviewJob['key'] !== $key) {
+            if (null !== $this->filePreviewJob && $this->filePreviewJob['process']->isRunning()) {
+                $this->filePreviewJob['process']->stop(0);
+            }
+            try {
+                $this->filePreviewJob = [
+                    'key' => $key,
+                    'process' => $this->ctx->renderer->startRenderDocumentProcess($this->filePath, implode("\n", $this->fileRaw), max(20, $cols - 2)),
+                ];
+            } catch (\Throwable) {
+                $this->filePreviewCache = ['key' => $key, 'lines' => $this->fileRaw];
+
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /**
      * @return list<string>
      */
     private function filePreviewLines(int $cols): array
     {
-        $key = $this->filePath . ':' . $cols;
+        $key = $this->filePath.':'.$cols;
         if (null === $this->filePreviewCache || $this->filePreviewCache['key'] !== $key) {
             $content = implode("\n", $this->fileRaw);
             if ($this->ctx->renderer->isAvailable()) {
@@ -874,7 +1051,7 @@ final class FilesTab extends AbstractRepoTab
 
     private function isMarkdownFile(): bool
     {
-        if (CodeHighlighter::languageFor($this->filePath) === 'markdown') {
+        if ('markdown' === CodeHighlighter::languageFor($this->filePath)) {
             return true;
         }
         $ext = strtolower(pathinfo($this->filePath, \PATHINFO_EXTENSION));
@@ -889,9 +1066,9 @@ final class FilesTab extends AbstractRepoTab
     {
         $items = [];
         foreach ($this->refs as $loc) {
-            $items[] = ['label' => $loc->path, 'meta' => ($loc->line + 1) . ':' . ($loc->col + 1)];
+            $items[] = ['label' => $loc->path, 'meta' => ($loc->line + 1).':'.($loc->col + 1)];
         }
-        $header = "\e[2m" . Screen::fit('  ' . \count($this->refs) . ' reference(s)', $cols) . "\e[0m";
+        $header = "\e[2m".Screen::fit('  '.\count($this->refs).' reference(s)', $cols)."\e[0m";
 
         return array_merge([$header], Screen::listView($items, $this->refSel, max(1, $rows - 1), $cols));
     }
@@ -902,7 +1079,7 @@ final class FilesTab extends AbstractRepoTab
     private function paintEditor(int $cols, int $rows): array
     {
         $tag = $this->isNewFile ? '[NEW]' : '[EDIT]';
-        $label = $tag . ' ' . $this->editPath;
+        $label = $tag.' '.$this->editPath;
 
         if ($this->editorDirty) {
             $this->refreshEditorHighlighting();
@@ -934,16 +1111,16 @@ final class FilesTab extends AbstractRepoTab
     {
         $title = 'New File';
         $boxWidth = min(60, max(40, $cols - 4));
-        $dir = '' === $this->ctx->subpath ? '/' : '/' . $this->ctx->subpath;
+        $dir = '' === $this->ctx->subpath ? '/' : '/'.$this->ctx->subpath;
 
         $lines = [
             '',
-            '  ' . Theme::style('Directory: ', Theme::MUTED) . Theme::style($dir, Theme::FG),
+            '  '.Theme::style('Directory: ', Theme::MUTED).Theme::style($dir, Theme::FG),
             '',
-            '  ' . Theme::style('File path:', Theme::BLUE, bold: true),
-            '  > ' . $this->newFilePathInput . '▏',
+            '  '.Theme::style('File path:', Theme::BLUE, bold: true),
+            '  > '.$this->newFilePathInput.'▏',
             '',
-            '  ' . Theme::style('Enter: open editor · Esc: cancel', Theme::MUTED, italic: true),
+            '  '.Theme::style('Enter: open editor · Esc: cancel', Theme::MUTED, italic: true),
         ];
 
         $box = Screen::box($title, $lines, $boxWidth);
@@ -961,9 +1138,9 @@ final class FilesTab extends AbstractRepoTab
 
         $lines = [
             '',
-            '  ' . Theme::style('Delete ' . $this->deleteTargetPath . '?', Theme::SELECTOR, bold: true),
+            '  '.Theme::style('Delete '.$this->deleteTargetPath.'?', Theme::SELECTOR, bold: true),
             '',
-            '  ' . Theme::style('y: confirm delete · n/Esc: cancel', Theme::MUTED, italic: true),
+            '  '.Theme::style('y: confirm delete · n/Esc: cancel', Theme::MUTED, italic: true),
         ];
 
         $box = Screen::box($title, $lines, $boxWidth);
@@ -977,8 +1154,8 @@ final class FilesTab extends AbstractRepoTab
     private function paintCommitPrompt(int $cols, int $rows): array
     {
         $authorName = $this->ctx->actor?->username() ?? 'anonymous';
-        $authorEmail = $authorName . '@noreply.codes.sh';
+        $authorEmail = $authorName.'@noreply.codes.sh';
 
-        return $this->commitForm->paint($cols, $rows, $authorName . ' <' . $authorEmail . '>', $this->editPath);
+        return $this->commitForm->paint($cols, $rows, $authorName.' <'.$authorEmail.'>', $this->editPath);
     }
 }

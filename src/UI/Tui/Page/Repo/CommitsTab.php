@@ -6,6 +6,7 @@ namespace App\UI\Tui\Page\Repo;
 
 use App\UI\Tui\Input\Keys;
 use App\UI\Tui\Render\Screen;
+use Symfony\Component\Process\Process;
 
 /**
  * Commits tab: a list of recent commits, opening a scrollable coloured diff.
@@ -16,6 +17,9 @@ final class CommitsTab extends AbstractRepoTab
     /** @var list<string> */
     private array $diffLines = [];
 
+    /** @var array{sha: string, process: Process}|null */
+    private ?array $diffJob = null;
+
     public function capturesInput(): bool
     {
         return $this->diffOpen;
@@ -25,6 +29,46 @@ final class CommitsTab extends AbstractRepoTab
     {
         parent::onActivate();
         $this->diffOpen = false;
+        if (null !== $this->diffJob && $this->diffJob['process']->isRunning()) {
+            $this->diffJob['process']->stop(0);
+        }
+        $this->diffJob = null;
+    }
+
+    public function tick(?float $deltaTime = null): bool
+    {
+        if (null === $this->diffJob) {
+            return false;
+        }
+
+        $this->ctx->spinner->advance($deltaTime);
+        if ($this->diffJob['process']->isRunning()) {
+            return true;
+        }
+
+        $job = $this->diffJob;
+        $this->diffJob = null;
+        $proc = $job['process'];
+        if ($proc->isSuccessful() && '' !== $proc->getOutput()) {
+            $diff = $this->ctx->reader->parseDiffOutput($proc->getOutput());
+            $this->diffLines = preg_split('/\r\n|\r|\n/', rtrim($diff->rawDiff, "\n")) ?: [];
+            $this->diffOpen = true;
+            $this->scroll = 0;
+
+            return true;
+        }
+
+        try {
+            $diff = $this->ctx->reader->getDiff($this->ctx->git, $job['sha']);
+            $this->diffLines = preg_split('/\r\n|\r|\n/', rtrim($diff->rawDiff, "\n")) ?: [];
+            $this->diffOpen = true;
+            $this->scroll = 0;
+        } catch (\Throwable) {
+            $this->diffOpen = false;
+            $this->ctx->flash = 'Cannot load diff.';
+        }
+
+        return true;
     }
 
     public function footerText(): string
@@ -42,6 +86,9 @@ final class CommitsTab extends AbstractRepoTab
             return $this->handleDiffKey($seq);
         }
 
+        if ($this->ctx->isCommitsLoading()) {
+            return false;
+        }
         $tok = Keys::normalize($seq);
         $txt = Keys::text($seq);
         $commits = $this->ctx->commitList();
@@ -59,9 +106,16 @@ final class CommitsTab extends AbstractRepoTab
         $tok = Keys::normalize($seq);
         $txt = Keys::text($seq);
         if (Keys::ESCAPE === $tok || 'q' === $txt) {
+            if (null !== $this->diffJob && $this->diffJob['process']->isRunning()) {
+                $this->diffJob['process']->stop(0);
+            }
+            $this->diffJob = null;
             $this->diffOpen = false;
 
             return true;
+        }
+        if (null !== $this->diffJob) {
+            return false;
         }
 
         return $this->handleDocScroll($tok, $txt, \count($this->diffLines));
@@ -69,22 +123,35 @@ final class CommitsTab extends AbstractRepoTab
 
     private function openDiff(string $sha): void
     {
-        try {
-            $diff = $this->ctx->reader->getDiff($this->ctx->git, $sha);
-        } catch (\Throwable) {
-            $this->ctx->flash = 'Cannot load diff.';
-
-            return;
+        if (null !== $this->diffJob && $this->diffJob['process']->isRunning()) {
+            $this->diffJob['process']->stop(0);
         }
-        $this->diffLines = preg_split('/\r\n|\r|\n/', rtrim($diff->rawDiff, "\n")) ?: [];
-        $this->diffOpen = true;
-        $this->scroll = 0;
+        try {
+            $this->diffJob = [
+                'sha' => $sha,
+                'process' => $this->ctx->reader->startCommitDiffProcess($this->ctx->git, $sha),
+            ];
+            $this->diffLines = [];
+            $this->diffOpen = true;
+            $this->scroll = 0;
+        } catch (\Throwable) {
+            $this->diffJob = null;
+            $this->ctx->flash = 'Cannot load diff.';
+        }
     }
 
     public function paintBody(int $cols, int $rows): array
     {
         if ($this->diffOpen) {
+            if (null !== $this->diffJob) {
+                return Screen::spinnerBody($this->ctx->spinner, 'Loading diff...', $cols);
+            }
+
             return $this->docWindow($this->colourDiff($this->diffLines), $cols, $rows);
+        }
+
+        if ($this->ctx->isCommitsLoading()) {
+            return Screen::spinnerBody($this->ctx->spinner, 'Loading commits...', $cols);
         }
 
         $commits = $this->ctx->commitList();
@@ -125,6 +192,9 @@ final class CommitsTab extends AbstractRepoTab
 
     public function statusValue(): string
     {
+        if ($this->ctx->isCommitsLoading()) {
+            return '';
+        }
         $commits = $this->ctx->commitList();
         if ([] === $commits) {
             return '';
@@ -136,6 +206,9 @@ final class CommitsTab extends AbstractRepoTab
 
     public function statusInfo(): string
     {
+        if ($this->ctx->isCommitsLoading()) {
+            return '…';
+        }
         $count = \count($this->ctx->commitList());
         if (0 === $count) {
             return '';

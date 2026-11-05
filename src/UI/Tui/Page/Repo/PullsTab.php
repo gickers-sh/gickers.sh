@@ -12,6 +12,7 @@ use App\Shared\Domain\Exception\InvalidInput;
 use App\Shared\Domain\Exception\NotFound;
 use App\UI\Tui\Input\Keys;
 use App\UI\Tui\Render\Screen;
+use Symfony\Component\Process\Process;
 use Symfony\Component\Tui\Input\KeyParser;
 
 /**
@@ -27,6 +28,7 @@ final class PullsTab extends AbstractRepoTab
     private bool $prMergeConfirm = false;
     private bool $prDeleteConfirm = false;
     private bool $prDiffOpen = false;
+    private ?Process $prDiffProcess = null;
     /** @var list<string> */
     private array $prDiffLines = [];
     private int $prDiffScroll = 0;
@@ -73,9 +75,38 @@ final class PullsTab extends AbstractRepoTab
         $this->prMergeConfirm = false;
         $this->prDeleteConfirm = false;
         $this->prDiffOpen = false;
+        if (null !== $this->prDiffProcess && $this->prDiffProcess->isRunning()) {
+            $this->prDiffProcess->stop(0);
+        }
+        $this->prDiffProcess = null;
         $this->prFormOpen = false;
         $this->prEditOpen = false;
         $this->prCommentOpen = false;
+    }
+
+    public function tick(?float $deltaTime = null): bool
+    {
+        if (null === $this->prDiffProcess) {
+            return false;
+        }
+
+        $this->ctx->spinner->advance($deltaTime);
+        if ($this->prDiffProcess->isRunning()) {
+            return true;
+        }
+
+        $proc = $this->prDiffProcess;
+        $this->prDiffProcess = null;
+        if ($proc->isSuccessful()) {
+            $raw = $proc->getOutput();
+            $this->prDiffLines = preg_split('/\r\n|\r|\n/', rtrim($raw, "\n")) ?: [];
+            $this->prDiffScroll = 0;
+        } else {
+            $this->prDiffOpen = false;
+            $this->ctx->flash = 'Failed to load diff.';
+        }
+
+        return true;
     }
 
     public function footerText(): string
@@ -103,7 +134,7 @@ final class PullsTab extends AbstractRepoTab
             $statusAction = ($pr?->isOpen() ?? true) ? 's: close' : 's: reopen';
             $mergeAction = ($pr?->isOpen() ?? true) ? 'm: merge · ' : '';
 
-            return ' ' . $mergeAction . $statusAction . ' · e: edit · c: comment · d: diff · x: delete · Esc: back';
+            return ' '.$mergeAction.$statusAction.' · e: edit · c: comment · d: diff · x: delete · Esc: back';
         }
 
         return ' ↑/↓ move · Enter: view · n: new · f: filter · m: merge · Tab: next · q: back';
@@ -118,7 +149,7 @@ final class PullsTab extends AbstractRepoTab
             null => 'all',
         };
 
-        return 'filter: ' . $filter;
+        return 'filter: '.$filter;
     }
 
     public function statusInfo(): string
@@ -159,8 +190,11 @@ final class PullsTab extends AbstractRepoTab
 
     private function handlePullsTabKey(string $tok, ?string $txt): bool
     {
-        $pulls = $this->currentPulls();
+        if ($this->ctx->isPullsLoading()) {
+            return false;
+        }
 
+        $pulls = $this->currentPulls();
         if (Keys::ENTER === $tok && [] !== $pulls) {
             $pr = $this->selectedPull();
             if (null !== $pr) {
@@ -397,7 +431,7 @@ final class PullsTab extends AbstractRepoTab
             $this->prFormOpen = false;
             $this->filterStatus = PullRequestStatus::Open;
             $this->sel = 0;
-        } catch (AccessDenied | NotFound | Conflict | InvalidInput | \RuntimeException $e) {
+        } catch (AccessDenied|NotFound|Conflict|InvalidInput|\RuntimeException $e) {
             $this->ctx->flash = $e->getMessage();
         }
     }
@@ -429,13 +463,17 @@ final class PullsTab extends AbstractRepoTab
         }
 
         if ('d' === $txt && null !== $this->ctx->pullRequestQuery && null !== $this->ctx->db) {
+            if (null !== $this->prDiffProcess && $this->prDiffProcess->isRunning()) {
+                $this->prDiffProcess->stop(0);
+            }
             try {
-                $raw = $this->ctx->pullRequestQuery->diff($this->ctx->actor, $this->ctx->db->name(), $pr->number());
-                $this->prDiffLines = preg_split('/\r\n|\r|\n/', rtrim($raw, "\n")) ?: [];
+                $this->prDiffProcess = $this->ctx->pullRequestQuery->startDiffProcess($this->ctx->actor, $this->ctx->db->name(), $pr->number());
+                $this->prDiffLines = [];
                 $this->prDiffScroll = 0;
                 $this->prDiffOpen = true;
             } catch (\Throwable $e) {
-                $this->ctx->flash = 'Failed to load diff: ' . $e->getMessage();
+                $this->prDiffProcess = null;
+                $this->ctx->flash = 'Failed to load diff: '.$e->getMessage();
             }
 
             return true;
@@ -457,7 +495,7 @@ final class PullsTab extends AbstractRepoTab
                     ($this->ctx->closePullRequest)($this->ctx->actor, $this->ctx->db->name(), $pr->number());
                     $this->ctx->flash = sprintf('Closed PR #%d', $pr->number());
                     $this->ctx->pullsCache = null;
-                } catch (AccessDenied | NotFound | Conflict | InvalidInput | \RuntimeException $e) {
+                } catch (AccessDenied|NotFound|Conflict|InvalidInput|\RuntimeException $e) {
                     $this->ctx->flash = $e->getMessage();
                 }
 
@@ -473,7 +511,7 @@ final class PullsTab extends AbstractRepoTab
                     ($this->ctx->reopenPullRequest)($this->ctx->actor, $this->ctx->db->name(), $pr->number());
                     $this->ctx->flash = sprintf('Reopened PR #%d', $pr->number());
                     $this->ctx->pullsCache = null;
-                } catch (AccessDenied | NotFound | Conflict | InvalidInput | \RuntimeException $e) {
+                } catch (AccessDenied|NotFound|Conflict|InvalidInput|\RuntimeException $e) {
                     $this->ctx->flash = $e->getMessage();
                 }
 
@@ -616,7 +654,7 @@ final class PullsTab extends AbstractRepoTab
             $this->ctx->flash = sprintf('Updated PR #%d', $pr->number());
             $this->ctx->pullsCache = null;
             $this->prEditOpen = false;
-        } catch (AccessDenied | NotFound | Conflict | InvalidInput | \RuntimeException $e) {
+        } catch (AccessDenied|NotFound|Conflict|InvalidInput|\RuntimeException $e) {
             $this->ctx->flash = $e->getMessage();
         }
     }
@@ -685,7 +723,7 @@ final class PullsTab extends AbstractRepoTab
             $this->ctx->flash = 'Comment added.';
             $this->ctx->pullsCache = null;
             $this->prCommentOpen = false;
-        } catch (AccessDenied | NotFound | Conflict | InvalidInput | \RuntimeException $e) {
+        } catch (AccessDenied|NotFound|Conflict|InvalidInput|\RuntimeException $e) {
             $this->ctx->flash = $e->getMessage();
         }
     }
@@ -727,7 +765,7 @@ final class PullsTab extends AbstractRepoTab
             $this->prDetailOpen = false;
             $this->prDetailNumber = null;
         } catch (\Throwable $e) {
-            $this->ctx->flash = 'Merge failed: ' . $e->getMessage();
+            $this->ctx->flash = 'Merge failed: '.$e->getMessage();
             $this->prMergeConfirm = false;
         }
     }
@@ -768,7 +806,7 @@ final class PullsTab extends AbstractRepoTab
             $this->prDeleteConfirm = false;
             $this->prDetailOpen = false;
             $this->prDetailNumber = null;
-        } catch (AccessDenied | NotFound | Conflict | InvalidInput | \RuntimeException $e) {
+        } catch (AccessDenied|NotFound|Conflict|InvalidInput|\RuntimeException $e) {
             $this->ctx->flash = $e->getMessage();
             $this->prDeleteConfirm = false;
         }
@@ -780,9 +818,16 @@ final class PullsTab extends AbstractRepoTab
         $txt = Keys::text($seq);
 
         if (Keys::ESCAPE === $tok || 'q' === $txt) {
+            if (null !== $this->prDiffProcess && $this->prDiffProcess->isRunning()) {
+                $this->prDiffProcess->stop(0);
+            }
+            $this->prDiffProcess = null;
             $this->prDiffOpen = false;
 
             return true;
+        }
+        if (null !== $this->prDiffProcess) {
+            return false;
         }
 
         $total = \count($this->prDiffLines);
@@ -811,7 +856,7 @@ final class PullsTab extends AbstractRepoTab
             return $pulls;
         }
 
-        return array_values(array_filter($pulls, fn(PullRequest $pr): bool => $pr->status() === $this->filterStatus));
+        return array_values(array_filter($pulls, fn (PullRequest $pr): bool => $pr->status() === $this->filterStatus));
     }
 
     private function selectedPull(): ?PullRequest
@@ -864,7 +909,10 @@ final class PullsTab extends AbstractRepoTab
         }
 
         if ($this->prDiffOpen) {
-            $header = "\e[2m  Diff for PR #" . ($this->currentDetailPull()?->number() ?? 0) . "\e[0m";
+            $header = "\e[2m  Diff for PR #".($this->currentDetailPull()?->number() ?? 0)."\e[0m";
+            if (null !== $this->prDiffProcess) {
+                return array_merge([$header], Screen::spinnerBody($this->ctx->spinner, 'Loading diff...', $cols));
+            }
 
             return array_merge([$header], $this->docWindow($this->colourDiff($this->prDiffLines), $cols, max(1, $rows - 1)));
         }
@@ -912,6 +960,10 @@ final class PullsTab extends AbstractRepoTab
             return $this->paintPullDetail($pr, $cols, $rows);
         }
 
+        if ($this->ctx->isPullsLoading()) {
+            return Screen::spinnerBody($this->ctx->spinner, 'Loading pull requests...', $cols);
+        }
+
         $pulls = $this->currentPulls();
         if ([] === $pulls) {
             return $this->messageBody('No items.', $cols);
@@ -944,10 +996,10 @@ final class PullsTab extends AbstractRepoTab
 
         $lines = [
             '',
-            ($headActive ? ' > ' : '   ') . 'Head branch : ' . $this->prFormHead . ($headActive ? '  (←/→/Space: cycle)' : ''),
-            ($baseActive ? ' > ' : '   ') . 'Base branch : ' . $this->prFormBase . ($baseActive ? '  (←/→/Space: cycle)' : ''),
-            ($titleActive ? ' > ' : '   ') . 'Title       : ' . $this->prFormTitle . ($titleActive ? '▌' : ''),
-            ($descActive ? ' > ' : '   ') . 'Description : ' . ('' !== $this->prFormDesc ? str_replace("\n", ' ↵ ', $this->prFormDesc) : '(empty)') . ($descActive ? '▌' : ''),
+            ($headActive ? ' > ' : '   ').'Head branch : '.$this->prFormHead.($headActive ? '  (←/→/Space: cycle)' : ''),
+            ($baseActive ? ' > ' : '   ').'Base branch : '.$this->prFormBase.($baseActive ? '  (←/→/Space: cycle)' : ''),
+            ($titleActive ? ' > ' : '   ').'Title       : '.$this->prFormTitle.($titleActive ? '▌' : ''),
+            ($descActive ? ' > ' : '   ').'Description : '.('' !== $this->prFormDesc ? str_replace("\n", ' ↵ ', $this->prFormDesc) : '(empty)').($descActive ? '▌' : ''),
             '',
             '  Tab/↑/↓: next · Space/←/→: cycle · Ctrl+S: create · Esc: cancel',
         ];
@@ -967,8 +1019,8 @@ final class PullsTab extends AbstractRepoTab
 
         $lines = [
             '',
-            ($titleActive ? ' > ' : '   ') . 'Title       : ' . $this->prEditTitle . ($titleActive ? '▌' : ''),
-            ($descActive ? ' > ' : '   ') . 'Description : ' . ('' !== $this->prEditDesc ? str_replace("\n", ' ↵ ', $this->prEditDesc) : '(empty)') . ($descActive ? '▌' : ''),
+            ($titleActive ? ' > ' : '   ').'Title       : '.$this->prEditTitle.($titleActive ? '▌' : ''),
+            ($descActive ? ' > ' : '   ').'Description : '.('' !== $this->prEditDesc ? str_replace("\n", ' ↵ ', $this->prEditDesc) : '(empty)').($descActive ? '▌' : ''),
             '',
             '  Tab/↑/↓: next · Ctrl+S: save · Esc: cancel',
         ];
@@ -991,7 +1043,7 @@ final class PullsTab extends AbstractRepoTab
         $bodyLines = explode("\n", $this->prCommentBody);
         foreach ($bodyLines as $i => $bl) {
             $cursor = ($i === \count($bodyLines) - 1) ? '▌' : '';
-            $lines[] = '    ' . $bl . $cursor;
+            $lines[] = '    '.$bl.$cursor;
         }
         $lines[] = '';
         $lines[] = '  Ctrl+S: post comment · Enter: newline · Esc: cancel';
@@ -1014,7 +1066,7 @@ final class PullsTab extends AbstractRepoTab
             sprintf('  #%d: %s [%s]', $pr->number(), $pr->title(), $statusStr),
             sprintf('  Author: %s · Base: %s · Head: %s', $pr->author()->username(), $pr->baseRef(), $pr->headRef()),
             '',
-            '  ' . ('' !== $pr->description() ? $pr->description() : 'No description.'),
+            '  '.('' !== $pr->description() ? $pr->description() : 'No description.'),
             '',
         ];
 
@@ -1029,7 +1081,7 @@ final class PullsTab extends AbstractRepoTab
 
         $statusAction = $pr->isOpen() ? 's: close' : 's: reopen';
         $mergeAction = $pr->isOpen() ? 'm: merge · ' : '';
-        $lines[] = '  ' . $mergeAction . $statusAction . ' · e: edit · c: comment · d: diff · x: delete · Esc: back';
+        $lines[] = '  '.$mergeAction.$statusAction.' · e: edit · c: comment · d: diff · x: delete · Esc: back';
 
         return $this->docWindow($lines, $cols, $rows);
     }

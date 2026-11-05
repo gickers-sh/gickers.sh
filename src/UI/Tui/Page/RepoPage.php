@@ -6,16 +6,16 @@ namespace App\UI\Tui\Page;
 
 use App\CodeIntel\Application\Query\CodeIntelQuery;
 use App\Identity\Domain\Model\User;
-use App\PullRequest\Application\MergePullRequest;
 use App\PullRequest\Application\ClosePullRequest;
 use App\PullRequest\Application\CommentPullRequest;
 use App\PullRequest\Application\DeletePullRequest;
+use App\PullRequest\Application\MergePullRequest;
 use App\PullRequest\Application\OpenPullRequest;
+use App\PullRequest\Application\Query\PullRequestQuery;
 use App\PullRequest\Application\ReopenPullRequest;
 use App\PullRequest\Application\UpdatePullRequest;
-use App\PullRequest\Application\Query\PullRequestQuery;
-use App\Repo\Application\UpdateRepoSettings;
 use App\Repo\Application\DeleteFile;
+use App\Repo\Application\UpdateRepoSettings;
 use App\Repo\Application\WriteFile;
 use App\Repo\Domain\Git\GitRepository;
 use App\Repo\Domain\Model\Repo;
@@ -183,15 +183,23 @@ final class RepoPage extends AbstractPage
         $this->tab = $tab;
         $this->tabs[$tab]->onActivate();
     }
+
     public function activeTab(): RepoTab
     {
         return $this->tabs[$this->tab];
     }
 
+    public function tick(?float $deltaTime = null): bool
+    {
+        $ctxBusy = $this->ctx->tick($deltaTime);
+        $tabBusy = $this->tabs[$this->tab]->tick($deltaTime);
+
+        return $ctxBusy || $tabBusy;
+    }
 
     protected function headerLines(int $cols): array
     {
-        $name = $this->ctx->name . ($this->ctx->db?->isPrivate() ? ' 🔒' : '');
+        $name = $this->ctx->name.($this->ctx->db?->isPrivate() ? ' 🔒' : '');
         $desc = $this->ctx->db?->description() ?? '';
 
         return Screen::repoHeader($name, $desc, $this->ctx->cloneCommand(), $cols);
@@ -205,9 +213,9 @@ final class RepoPage extends AbstractPage
     protected function footerLines(int $cols): array
     {
         $active = $this->tabs[$this->tab];
-        $branch = '* ' . $this->ctx->ref;
+        $branch = '* '.$this->ctx->ref;
         if (null !== $this->ctx->flash) {
-            $status = "\e[7m" . Screen::fit(' ' . $this->ctx->flash, $cols) . "\e[0m";
+            $status = "\e[7m".Screen::fit(' '.$this->ctx->flash, $cols)."\e[0m";
         } else {
             $status = Screen::statusBar($cols, $this->ctx->name, $active->statusValue(), $active->statusInfo(), $branch);
         }

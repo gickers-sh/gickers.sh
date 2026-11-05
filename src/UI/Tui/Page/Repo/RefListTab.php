@@ -21,6 +21,9 @@ final class RefListTab extends AbstractRepoTab
 
     public function handleKey(string $seq): bool
     {
+        if ($this->ctx->isRefsLoading()) {
+            return false;
+        }
         $tok = Keys::normalize($seq);
         $txt = Keys::text($seq);
         $list = $this->list();
@@ -36,11 +39,14 @@ final class RefListTab extends AbstractRepoTab
         return $this->handleListMove($tok, $txt, \count($list));
     }
 
-    /** @var array<string, array{hash: string, time: int}|null> */
-    private array $refMeta = [];
-
     public function paintBody(int $cols, int $rows): array
     {
+        if ($this->ctx->isRefsLoading()) {
+            $label = $this->branch ? 'Loading branches...' : 'Loading tags...';
+
+            return Screen::spinnerBody($this->ctx->spinner, $label, $cols);
+        }
+
         $list = $this->list();
         $empty = $this->branch ? 'No branches.' : 'No tags.';
         if ([] === $list) {
@@ -74,6 +80,9 @@ final class RefListTab extends AbstractRepoTab
 
     public function statusValue(): string
     {
+        if ($this->ctx->isRefsLoading()) {
+            return '';
+        }
         $list = $this->list();
         if ([] === $list) {
             return '';
@@ -85,6 +94,9 @@ final class RefListTab extends AbstractRepoTab
 
     public function statusInfo(): string
     {
+        if ($this->ctx->isRefsLoading()) {
+            return '…';
+        }
         $count = \count($this->list());
         if (0 === $count) {
             return '';
@@ -98,18 +110,7 @@ final class RefListTab extends AbstractRepoTab
      */
     private function metaFor(string $ref): ?array
     {
-        if (!\array_key_exists($ref, $this->refMeta)) {
-            try {
-                $commits = $this->ctx->reader->getCommits($this->ctx->git, $ref, 1, 0);
-            } catch (\Throwable) {
-                $commits = [];
-            }
-            $this->refMeta[$ref] = [] !== $commits
-                ? ['hash' => $commits[0]->hash, 'time' => $commits[0]->timestamp]
-                : null;
-        }
-
-        return $this->refMeta[$ref];
+        return $this->ctx->refMeta($ref);
     }
 
     /**

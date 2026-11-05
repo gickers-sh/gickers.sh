@@ -7,6 +7,7 @@ namespace App\UI\Tui\Page\Repo;
 use App\UI\Tui\Input\Keys;
 use App\UI\Tui\Render\CommitForm;
 use App\UI\Tui\Render\InlineEditor;
+use App\UI\Tui\Render\Screen;
 
 /**
  * Readme tab: scrollable rendered README (Termstrap ANSI when available),
@@ -52,18 +53,18 @@ final class ReadmeTab extends AbstractRepoTab
         }
         if ($this->editing) {
             $hint = $this->editor->previewSupported()
-                ? ('Ctrl+P: ' . $this->editor->previewMode())
+                ? ('Ctrl+P: '.$this->editor->previewMode())
                 : null;
 
             return sprintf(
                 ' Ln %d, Col %d · %sCtrl+S: save · Esc: discard',
                 $this->editor->line() + 1,
                 $this->editor->col() + 1,
-                null !== $hint ? $hint . ' · ' : '',
+                null !== $hint ? $hint.' · ' : '',
             );
         }
 
-        return ' e: edit · ' . ltrim(self::BASE_FOOTER);
+        return ' e: edit · '.ltrim(self::BASE_FOOTER);
     }
 
     public function statusValue(): string
@@ -86,6 +87,9 @@ final class ReadmeTab extends AbstractRepoTab
         if ($this->commitPrompt) {
             return '';
         }
+        if ($this->ctx->isReadmeLoading()) {
+            return '…';
+        }
 
         $lineCount = $this->lineCount > 0 ? $this->lineCount : $this->ctx->readmeLineCount();
         if (0 === $lineCount) {
@@ -105,6 +109,9 @@ final class ReadmeTab extends AbstractRepoTab
 
         if ($this->editing) {
             return $this->handleEditorKey($seq);
+        }
+        if ($this->ctx->isReadmeLoading()) {
+            return false;
         }
 
         $tok = Keys::normalize($seq);
@@ -219,13 +226,13 @@ final class ReadmeTab extends AbstractRepoTab
                 $this->commitForm->message(),
             );
         } catch (\Throwable $e) {
-            $this->ctx->flash = 'Commit failed: ' . $e->getMessage();
+            $this->ctx->flash = 'Commit failed: '.$e->getMessage();
 
             return;
         }
 
         $this->ctx->invalidateGitCaches();
-        $this->ctx->flash = 'Committed ' . substr($sha, 0, 7);
+        $this->ctx->flash = 'Committed '.substr($sha, 0, 7);
 
         $this->commitPrompt = false;
         $this->editing = false;
@@ -236,15 +243,19 @@ final class ReadmeTab extends AbstractRepoTab
     {
         if ($this->commitPrompt) {
             $authorName = $this->ctx->actor?->username() ?? 'anonymous';
-            $authorEmail = $authorName . '@noreply.codes.sh';
+            $authorEmail = $authorName.'@noreply.codes.sh';
 
-            return $this->commitForm->paint($cols, $rows, $authorName . ' <' . $authorEmail . '>', $this->readmePath);
+            return $this->commitForm->paint($cols, $rows, $authorName.' <'.$authorEmail.'>', $this->readmePath);
         }
 
         if ($this->editing) {
             $tag = $this->isNew ? '[NEW]' : '[EDIT]';
 
-            return $this->editor->paint($tag . ' ' . $this->readmePath, $cols, $rows);
+            return $this->editor->paint($tag.' '.$this->readmePath, $cols, $rows);
+        }
+
+        if ($this->ctx->isReadmeLoading($cols)) {
+            return Screen::spinnerBody($this->ctx->spinner, 'Loading README...', $cols);
         }
 
         $lines = $this->ctx->readmeLines($cols);
