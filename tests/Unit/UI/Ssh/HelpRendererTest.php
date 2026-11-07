@@ -23,7 +23,7 @@ final class HelpRendererTest extends TestCase
      */
     public static function helpProvider(): iterable
     {
-        $raw = (string) file_get_contents(__DIR__ . '/fixtures/cobra-help.txt');
+        $raw = (string) file_get_contents(__DIR__.'/fixtures/cobra-help.txt');
 
         /** @var array<string, string> $blocks */
         $blocks = [];
@@ -38,7 +38,7 @@ final class HelpRendererTest extends TestCase
                 $path = 'ROOT help' === $header ? '' : trim((string) preg_replace('/^help ?/', '', $header));
                 $buffer = '';
             } else {
-                $buffer .= $line . "\n";
+                $buffer .= $line."\n";
             }
         }
         if (null !== $path) {

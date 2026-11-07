@@ -144,7 +144,7 @@ stan:
 
 ## deptrac: Check module/layer dependency rules
 deptrac:
-	./vendor/bin/deptrac analyse --no-progress
+	./vendor/bin/deptrac analyse --no-progress --no-cache
 
 ## test-render: Test Termstrap FFI rendering bridge (Markdown, CSV, ANSI TokyoNight)
 test-render: build
