@@ -215,6 +215,7 @@ final class GitRepositoryReaderTest extends TestCase
         yield 'diff' => [static fn (GitRepositoryReader $r, GitRepository $repo, string $rev) => $r->getDiff($repo, $rev)];
         yield 'tree' => [static fn (GitRepositoryReader $r, GitRepository $repo, string $rev) => $r->getTree($repo, $rev)];
         yield 'blame' => [static fn (GitRepositoryReader $r, GitRepository $repo, string $rev) => $r->getBlame($repo, $rev, 'a.txt')];
+        yield 'recursive-tree' => [static fn (GitRepositoryReader $r, GitRepository $repo, string $rev) => $r->getRecursiveTree($repo, $rev)];
     }
 
     #[DataProvider('optionLikeRevisionCalls')]
@@ -249,5 +250,25 @@ final class GitRepositoryReaderTest extends TestCase
         $blame = $this->reader->getBlame($repo, 'main', '-dash.txt');
         $this->assertCount(1, $blame);
         $this->assertStringContainsString('dash line', $blame[0]);
+    }
+
+    public function testGetRecursiveTreeReturnsNestedFilesAcrossDirectories(): void
+    {
+        $dir = $this->createTempDir('reader_recursive_tree_');
+        (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
+        $repo = $this->reader->openRepository($dir);
+        $writer = new GitRepositoryWriter();
+        $writer->writeFile($repo, 'main', 'README.md', "# Root\n", 'add readme', 'Tester', 'test@codes.sh');
+        $writer->writeFile($repo, 'main', 'src/Service/Calculator.php', "<?php\n", 'add calc', 'Tester', 'test@codes.sh');
+        $writer->writeFile($repo, 'main', 'tests/Unit/CalculatorTest.php', "<?php\n", 'add test', 'Tester', 'test@codes.sh');
+
+        $entries = $this->reader->getRecursiveTree($repo, 'main');
+        $paths = array_map(static fn ($e): string => $e->path, $entries);
+
+        $this->assertSame([
+            'README.md',
+            'src/Service/Calculator.php',
+            'tests/Unit/CalculatorTest.php',
+        ], $paths);
     }
 }

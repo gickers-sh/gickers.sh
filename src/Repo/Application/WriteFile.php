@@ -34,7 +34,8 @@ final readonly class WriteFile
         private GitRepositoryWriter $writer,
         private RecordPush $recordPush,
         private ServerSettings $settings,
-    ) {}
+    ) {
+    }
 
     /**
      * @return string the newly created commit SHA
@@ -68,7 +69,7 @@ final readonly class WriteFile
             $this->authorEmail($actor->username()),
         );
 
-        ($this->recordPush)($name, [new PushChange('refs/heads/' . $branch, $oldSha, $newSha)], $actor);
+        ($this->recordPush)($name, [new PushChange('refs/heads/'.$branch, $oldSha, $newSha)], $actor);
 
         return $newSha;
     }

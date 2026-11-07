@@ -168,6 +168,30 @@ final class GitRepositoryReader
     }
 
     /**
+     * Get all recursive file entries using `git ls-tree -r -l -z {$ref}`.
+     *
+     * @return list<TreeEntry>
+     */
+    public function getRecursiveTree(GitRepository $repo, string $ref = 'HEAD'): array
+    {
+        $process = GitCommand::run($repo->path, ['ls-tree', '-r', '-l', '-z', new Revision($ref)]);
+
+        if (!$process->isSuccessful()) {
+            throw new \RuntimeException(sprintf('Failed to get recursive tree for ref "%s": %s', $ref, $process->getErrorOutput()));
+        }
+
+        return $this->parseTreeOutput($process->getOutput());
+    }
+
+    /**
+     * Starts a non-blocking `git ls-tree -r -l -z` process for recursive file listing.
+     */
+    public function startRecursiveTreeProcess(GitRepository $repo, string $ref = 'HEAD'): Process
+    {
+        return GitCommand::start($repo->path, ['ls-tree', '-r', '-l', '-z', new Revision($ref)]);
+    }
+
+    /**
      * @return list<TreeEntry>
      */
     public function parseTreeOutput(string $output): array
