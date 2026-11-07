@@ -89,4 +89,10 @@ class Comment
     {
         return $this->updatedAt;
     }
+
+    public function editBody(string $body, \DateTimeImmutable $now): void
+    {
+        $this->body = $body;
+        $this->updatedAt = $now;
+    }
 }

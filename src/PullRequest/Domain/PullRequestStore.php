@@ -37,4 +37,8 @@ interface PullRequestStore
      * @return list<Comment>
      */
     public function commentsFor(PullRequest $pullRequest): array;
+
+    public function commentById(int $id): ?Comment;
+
+    public function removeComment(Comment $comment): void;
 }

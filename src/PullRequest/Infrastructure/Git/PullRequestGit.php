@@ -6,6 +6,8 @@ namespace App\PullRequest\Infrastructure\Git;
 
 use App\PullRequest\Domain\MergeStrategy;
 use App\PullRequest\Domain\Model\PullRequest;
+use App\Repo\Domain\Git\Commit;
+use App\Repo\Domain\Git\Diff;
 use App\Repo\Domain\Model\Repo;
 use App\Repo\Domain\RepoDirectory;
 use App\Repo\Infrastructure\Git\GitCommand;
@@ -127,6 +129,70 @@ final class PullRequestGit
             : \sprintf('%s...%s', $pr->baseCommit(), $pr->headCommit());
 
         return GitCommand::start($path, ['diff', new Revision($spec)]);
+    }
+
+    /**
+     * Structured diff for a pull request.
+     */
+    public function parsedDiff(Repo $target, PullRequest $pr): Diff
+    {
+        return $this->reader->parseDiffOutput($this->diff($target, $pr));
+    }
+
+    /**
+     * Lists all commits in the pull request (base..head).
+     *
+     * @return list<Commit>
+     */
+    public function commits(Repo $target, PullRequest $pr): array
+    {
+        $path = $this->repoDirectory->pathFor($target->name());
+        $pullRef = \sprintf('refs/pull/%d/head', $pr->number());
+        $baseRef = 'refs/heads/'.$pr->baseRef();
+
+        $baseSha = $this->revParse($path, $baseRef) ?? $pr->baseCommit();
+        $headSha = $this->revParse($path, $pullRef) ?? $pr->headCommit();
+        if ('' === $baseSha || '' === $headSha) {
+            return [];
+        }
+
+        $format = '%H%x00%h%x00%an%x00%ae%x00%at%x00%s%x00%b';
+        $process = GitCommand::run($path, [
+            'log',
+            '-z',
+            '--format=format:'.$format,
+            new Revision(\sprintf('%s..%s', $baseSha, $headSha)),
+        ]);
+        if (!$process->isSuccessful()) {
+            return [];
+        }
+
+        return $this->reader->parseCommitsOutput($process->getOutput());
+    }
+
+    /**
+     * Starts a non-blocking `git log` process for the commits in the pull request.
+     */
+    public function startCommitsProcess(Repo $target, PullRequest $pr): ?Process
+    {
+        $path = $this->repoDirectory->pathFor($target->name());
+        $pullRef = \sprintf('refs/pull/%d/head', $pr->number());
+        $baseRef = 'refs/heads/'.$pr->baseRef();
+
+        $baseSha = $this->revParse($path, $baseRef) ?? $pr->baseCommit();
+        $headSha = $this->revParse($path, $pullRef) ?? $pr->headCommit();
+        if ('' === $baseSha || '' === $headSha) {
+            return null;
+        }
+
+        $format = '%H%x00%h%x00%an%x00%ae%x00%at%x00%s%x00%b';
+
+        return GitCommand::start($path, [
+            'log',
+            '-z',
+            '--format=format:'.$format,
+            new Revision(\sprintf('%s..%s', $baseSha, $headSha)),
+        ]);
     }
 
     /**

@@ -77,4 +77,15 @@ final class DoctrinePullRequestStore extends ServiceEntityRepository implements 
 
         return $comments;
     }
+
+    public function commentById(int $id): ?Comment
+    {
+        return $this->getEntityManager()->getRepository(Comment::class)->find($id);
+    }
+
+    public function removeComment(Comment $comment): void
+    {
+        $this->getEntityManager()->remove($comment);
+        $this->getEntityManager()->flush();
+    }
 }

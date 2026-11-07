@@ -52,4 +52,86 @@ final readonly class CommentPullRequest
 
         return $comment;
     }
+
+    public function update(?User $actor, RepoName|string $repo, int $number, int $commentId, string $body): Comment
+    {
+        if (null === $actor) {
+            throw new AccessDenied('unauthorized');
+        }
+
+        $name = $repo instanceof RepoName ? $repo : RepoName::fromInput($repo);
+        $target = $this->accessGuard->assertRepo($actor, $name, AccessLevel::ReadOnlyAccess);
+        \assert($target instanceof Repo);
+
+        $body = trim($body);
+        if ('' === $body) {
+            throw new InvalidInput('comment body cannot be empty');
+        }
+
+        $pullRequest = $this->pullRequestStore->byNumber($target, $number)
+            ?? throw new NotFound('pull request not found');
+
+        $comment = $this->pullRequestStore->commentById($commentId)
+            ?? throw new NotFound('comment not found');
+
+        if ($comment->pullRequest()->id() !== $pullRequest->id()) {
+            throw new InvalidInput('comment does not belong to this pull request');
+        }
+
+        $isAuthor = $comment->author()->id() === $actor->id();
+        $isAdmin = $actor->isAdmin();
+        if (!$isAuthor && !$isAdmin) {
+            try {
+                $this->accessGuard->assertRepo($actor, $name, AccessLevel::AdminAccess);
+                $isAdmin = true;
+            } catch (AccessDenied) {
+                $isAdmin = false;
+            }
+        }
+        if (!$isAuthor && !$isAdmin) {
+            throw new AccessDenied('unauthorized');
+        }
+
+        $comment->editBody($body, $this->clock->now());
+        $this->pullRequestStore->saveComment($comment);
+
+        return $comment;
+    }
+
+    public function delete(?User $actor, RepoName|string $repo, int $number, int $commentId): void
+    {
+        if (null === $actor) {
+            throw new AccessDenied('unauthorized');
+        }
+
+        $name = $repo instanceof RepoName ? $repo : RepoName::fromInput($repo);
+        $target = $this->accessGuard->assertRepo($actor, $name, AccessLevel::ReadOnlyAccess);
+        \assert($target instanceof Repo);
+
+        $pullRequest = $this->pullRequestStore->byNumber($target, $number)
+            ?? throw new NotFound('pull request not found');
+
+        $comment = $this->pullRequestStore->commentById($commentId)
+            ?? throw new NotFound('comment not found');
+
+        if ($comment->pullRequest()->id() !== $pullRequest->id()) {
+            throw new InvalidInput('comment does not belong to this pull request');
+        }
+
+        $isAuthor = $comment->author()->id() === $actor->id();
+        $isAdmin = $actor->isAdmin();
+        if (!$isAuthor && !$isAdmin) {
+            try {
+                $this->accessGuard->assertRepo($actor, $name, AccessLevel::AdminAccess);
+                $isAdmin = true;
+            } catch (AccessDenied) {
+                $isAdmin = false;
+            }
+        }
+        if (!$isAuthor && !$isAdmin) {
+            throw new AccessDenied('unauthorized');
+        }
+
+        $this->pullRequestStore->removeComment($comment);
+    }
 }

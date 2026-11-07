@@ -12,6 +12,8 @@ use App\PullRequest\Domain\Model\PullRequest;
 use App\PullRequest\Domain\PullRequestStatus;
 use App\PullRequest\Domain\PullRequestStore;
 use App\PullRequest\Infrastructure\Git\PullRequestGit;
+use App\Repo\Domain\Git\Commit;
+use App\Repo\Domain\Git\Diff;
 use App\Repo\Domain\Model\Repo;
 use App\Repo\Domain\RepoName;
 use App\Shared\Domain\Exception\NotFound;
@@ -71,6 +73,43 @@ final readonly class PullRequestQuery
             ?? throw new NotFound('pull request not found');
 
         return $this->git->startDiffProcess($target, $pullRequest);
+    }
+
+    public function parsedDiff(?User $actor, RepoName|string $repo, int $number): Diff
+    {
+        $target = $this->readableRepo($actor, $repo);
+        $pullRequest = $this->pullRequestStore->byNumber($target, $number)
+            ?? throw new NotFound('pull request not found');
+
+        return $this->git->parsedDiff($target, $pullRequest);
+    }
+
+    /** @return list<Commit> */
+    public function commits(?User $actor, RepoName|string $repo, int $number): array
+    {
+        $target = $this->readableRepo($actor, $repo);
+        $pullRequest = $this->pullRequestStore->byNumber($target, $number)
+            ?? throw new NotFound('pull request not found');
+
+        return $this->git->commits($target, $pullRequest);
+    }
+
+    public function startCommitsProcess(?User $actor, RepoName|string $repo, int $number): ?Process
+    {
+        $target = $this->readableRepo($actor, $repo);
+        $pullRequest = $this->pullRequestStore->byNumber($target, $number)
+            ?? throw new NotFound('pull request not found');
+
+        return $this->git->startCommitsProcess($target, $pullRequest);
+    }
+
+    public function canMerge(?User $actor, RepoName|string $repo, int $number): bool
+    {
+        $target = $this->readableRepo($actor, $repo);
+        $pullRequest = $this->pullRequestStore->byNumber($target, $number)
+            ?? throw new NotFound('pull request not found');
+
+        return $this->git->canMerge($pullRequest);
     }
 
     private function readableRepo(?User $actor, RepoName|string $repo): Repo
