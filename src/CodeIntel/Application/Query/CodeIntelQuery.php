@@ -22,9 +22,7 @@ use App\CodeIntel\Domain\SymbolLocation;
  */
 final readonly class CodeIntelQuery
 {
-    public function __construct(private IndexStore $store)
-    {
-    }
+    public function __construct(private IndexStore $store) {}
 
     public function has(string $repo, string $sha): bool
     {
@@ -59,16 +57,50 @@ final readonly class CodeIntelQuery
     }
 
     /**
+     * Finds the symbol at (line, col) or the nearest symbol at or below anchor line.
+     * Mirrors Go `symbolKeyNavCmd`: targets symbol on cursor line, or first symbol at or below cursor.
+     */
+    public function symbolAnchorAt(string $repo, string $sha, string $path, int $line, int $col): ?string
+    {
+        $occs = $this->occurrences($repo, $sha, $path);
+        if ([] === $occs) {
+            return null;
+        }
+
+        // 1. Direct hit at exact (line, col)
+        foreach ($occs as $occ) {
+            if ($occ->contains($line, $col)) {
+                return $occ->symbol;
+            }
+        }
+
+        // 2. Nearest symbol at or below cursor line
+        $best = null;
+        foreach ($occs as $occ) {
+            if ($occ->startLine < $line) {
+                continue;
+            }
+            if (null === $best || $occ->startLine < $best->startLine || ($occ->startLine === $best->startLine && $occ->startCol < $best->startCol)) {
+                $best = $occ;
+            }
+        }
+
+        return $best?->symbol;
+    }
+
+    /**
      * Finds the definition location of the symbol under (line, col) in $path.
      */
-    public function findDefinition(string $repo, string $sha, string $path, int $line, int $col): ?SymbolLocation
+    public function findDefinition(string $repo, string $sha, string $path, int $line, int $col, bool $fallbackAnchor = false): ?SymbolLocation
     {
         $idx = $this->store->get($repo, $sha);
         if (null === $idx) {
             return null;
         }
 
-        $symbol = $this->symbolAt($repo, $sha, $path, $line, $col);
+        $symbol = $fallbackAnchor
+            ? $this->symbolAnchorAt($repo, $sha, $path, $line, $col)
+            : $this->symbolAt($repo, $sha, $path, $line, $col);
         if (null === $symbol) {
             return null;
         }
@@ -81,19 +113,77 @@ final readonly class CodeIntelQuery
      *
      * @return list<SymbolLocation>
      */
-    public function findReferences(string $repo, string $sha, string $path, int $line, int $col): array
+    public function findReferences(string $repo, string $sha, string $path, int $line, int $col, bool $fallbackAnchor = false): array
     {
         $idx = $this->store->get($repo, $sha);
         if (null === $idx) {
             return [];
         }
 
-        $symbol = $this->symbolAt($repo, $sha, $path, $line, $col);
+        $symbol = $fallbackAnchor
+            ? $this->symbolAnchorAt($repo, $sha, $path, $line, $col)
+            : $this->symbolAt($repo, $sha, $path, $line, $col);
         if (null === $symbol) {
             return [];
         }
 
         return array_values($idx['references'][$symbol] ?? []);
+    }
+
+    /**
+     * Fallback when exact references are empty: proposes references by matching the symbol's
+     * local name (method, property or class short name) across every indexed symbol. This
+     * surfaces call sites a typed indexer attributes to a sibling symbol (e.g. an interface or
+     * another implementation) rather than the one under the cursor. Results are deduplicated and
+     * ordered by path/line/col.
+     *
+     * @return list<SymbolLocation>
+     */
+    public function findReferencesByName(string $repo, string $sha, string $symbol): array
+    {
+        $idx = $this->store->get($repo, $sha);
+        if (null === $idx) {
+            return [];
+        }
+        $name = $this->symbolLocalName($symbol);
+        if ('' === $name) {
+            return [];
+        }
+
+        $seen = [];
+        $out = [];
+        foreach ($idx['references'] as $candidate => $locations) {
+            if ($this->symbolLocalName($candidate) !== $name) {
+                continue;
+            }
+            foreach ($locations as $loc) {
+                $k = $loc->path . ':' . $loc->line . ':' . $loc->col;
+                if (isset($seen[$k])) {
+                    continue;
+                }
+                $seen[$k] = true;
+                $out[] = $loc;
+            }
+        }
+        usort($out, static fn(SymbolLocation $a, SymbolLocation $b): int => [$a->path, $a->line, $a->col] <=> [$b->path, $b->line, $b->col]);
+
+        return $out;
+    }
+
+    /**
+     * Extracts the local name of a SCIP symbol: the method/property name (`#name().`, `#$name.`)
+     * or the class-like short name (trailing `Name#`). Returns '' when none can be parsed.
+     */
+    private function symbolLocalName(string $symbol): string
+    {
+        if (1 === preg_match('/#\$?([A-Za-z_][A-Za-z0-9_]*)(?:\(\))?\.$/', $symbol, $m)) {
+            return $m[1];
+        }
+        if (1 === preg_match('/([A-Za-z_][A-Za-z0-9_]*)#$/', $symbol, $m)) {
+            return $m[1];
+        }
+
+        return '';
     }
 
     /**

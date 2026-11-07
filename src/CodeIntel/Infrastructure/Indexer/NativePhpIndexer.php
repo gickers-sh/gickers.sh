@@ -46,7 +46,7 @@ final class NativePhpIndexer implements Indexer
      */
     public static function isPhpProject(string $dir): bool
     {
-        if (file_exists($dir.'/composer.json') || file_exists($dir.'/symfony.lock') || file_exists($dir.'/bin/console')) {
+        if (file_exists($dir . '/composer.json') || file_exists($dir . '/symfony.lock') || file_exists($dir . '/bin/console')) {
             return true;
         }
 
@@ -85,11 +85,11 @@ final class NativePhpIndexer implements Indexer
      */
     public static function isSymfonyProject(string $dir): bool
     {
-        if (file_exists($dir.'/symfony.lock') || file_exists($dir.'/bin/console') || file_exists($dir.'/config/bundles.php')) {
+        if (file_exists($dir . '/symfony.lock') || file_exists($dir . '/bin/console') || file_exists($dir . '/config/bundles.php')) {
             return true;
         }
 
-        $composerPath = $dir.'/composer.json';
+        $composerPath = $dir . '/composer.json';
         if (file_exists($composerPath)) {
             $data = @file_get_contents($composerPath);
             if (false !== $data) {
@@ -118,7 +118,7 @@ final class NativePhpIndexer implements Indexer
         $pkgName = 'app';
         $version = 'dev';
 
-        $cpath = $projectRoot.'/composer.json';
+        $cpath = $projectRoot . '/composer.json';
         if (file_exists($cpath)) {
             $cdata = json_decode((string) @file_get_contents($cpath), true);
             if (\is_array($cdata)) {
@@ -153,13 +153,13 @@ final class NativePhpIndexer implements Indexer
                 }
             }
         } catch (\Throwable $e) {
-            $this->logger->warning('Error scanning directory for PHP files: '.$e->getMessage());
+            $this->logger->warning('Error scanning directory for PHP files: ' . $e->getMessage());
         }
 
         /** @var array<int, array{relPath: string, tokens: array<int, array{id: ?int, text: string, line: int, startCol: int, endLine: int, endCol: int}>}> $allFiles */
         $allFiles = [];
         foreach ($phpFiles as $rel) {
-            $content = (string) @file_get_contents($projectRoot.'/'.$rel);
+            $content = (string) @file_get_contents($projectRoot . '/' . $rel);
             $rawTokens = token_get_all($content);
             $tokenList = [];
             $line = 0;
@@ -191,6 +191,7 @@ final class NativePhpIndexer implements Indexer
         // Pass 1: Collect definitions.
         $definitions = []; // fqn -> def
         $shortNameToFQNs = []; // short -> fqn[]
+        $methodNameToSymbols = []; // methodName -> symbol[] (every class defining it)
 
         $makeClassSymbol = static function (string $fqn) use ($pkgName, $version): string {
             $norm = str_replace('\\', '/', ltrim($fqn, '\\'));
@@ -255,7 +256,7 @@ final class NativePhpIndexer implements Indexer
                     }
                     if ($j < $n && \T_STRING === $tokens[$j]['id']) {
                         $className = $tokens[$j]['text'];
-                        $fqn = '' !== $curNamespace ? $curNamespace.'\\'.$className : $className;
+                        $fqn = '' !== $curNamespace ? $curNamespace . '\\' . $className : $className;
                         $definitions[$fqn] = [
                             'symbol' => $makeClassSymbol($fqn),
                             'fqn' => $fqn,
@@ -281,7 +282,7 @@ final class NativePhpIndexer implements Indexer
                     if ($j < $n && \T_STRING === $tokens[$j]['id']) {
                         $methName = $tokens[$j]['text'];
                         if ('' !== $curClass) {
-                            $methKey = $curClass.'#'.$methName;
+                            $methKey = $curClass . '#' . $methName;
                             $definitions[$methKey] = [
                                 'symbol' => $makeMethodSymbol($curClass, $methName),
                                 'fqn' => $methKey,
@@ -291,6 +292,7 @@ final class NativePhpIndexer implements Indexer
                                 'endLine' => $tokens[$j]['endLine'],
                                 'endCol' => $tokens[$j]['endCol'],
                             ];
+                            $methodNameToSymbols[$methName][] = $makeMethodSymbol($curClass, $methName);
                         }
                         $i = $j;
                     }
@@ -358,7 +360,7 @@ final class NativePhpIndexer implements Indexer
                     return $imports[$clean];
                 }
                 if ('' !== $curNamespace) {
-                    $same = $curNamespace.'\\'.$clean;
+                    $same = $curNamespace . '\\' . $clean;
                     if (isset($definitions[$same])) {
                         return $same;
                     }
@@ -376,7 +378,7 @@ final class NativePhpIndexer implements Indexer
             $occs = [];
             $seen = [];
             $addOcc = static function (string $sym, int $line, int $startCol, int $endCol, bool $isDef) use (&$occs, &$seen): void {
-                $k = "{$line}:{$startCol}:{$endCol}";
+                $k = "{$line}:{$startCol}:{$endCol}:{$sym}";
                 if (isset($seen[$k])) {
                     return;
                 }
@@ -419,7 +421,7 @@ final class NativePhpIndexer implements Indexer
                     }
                     if ($j < $n && \T_STRING === $tokens[$j]['id']) {
                         $className = $tokens[$j]['text'];
-                        $fqn = '' !== $curNamespace ? $curNamespace.'\\'.$className : $className;
+                        $fqn = '' !== $curNamespace ? $curNamespace . '\\' . $className : $className;
                         $addOcc($makeClassSymbol($fqn), $tokens[$j]['line'], $tokens[$j]['startCol'], $tokens[$j]['endCol'], true);
                         $curClass = $fqn;
                         $classBraceDepth = $braceDepth;
@@ -441,6 +443,30 @@ final class NativePhpIndexer implements Indexer
                         $i = $j;
                     }
                     continue;
+                }
+
+                // Reference to method call: ->meth(, ?->meth(, or ::meth(. The receiver type is
+                // unknown to this untyped indexer, so the call is attributed to every class that
+                // defines a method of that name (over-inclusive but surfaces all call sites).
+                if (\T_STRING === $t['id']) {
+                    $prev = $i - 1;
+                    while ($prev >= 0 && \T_WHITESPACE === $tokens[$prev]['id']) {
+                        --$prev;
+                    }
+                    if ($prev >= 0 && \in_array($tokens[$prev]['id'], [\T_OBJECT_OPERATOR, \T_NULLSAFE_OBJECT_OPERATOR, \T_DOUBLE_COLON], true)) {
+                        $next = $i + 1;
+                        while ($next < $n && \T_WHITESPACE === $tokens[$next]['id']) {
+                            ++$next;
+                        }
+                        if ($next < $n && '(' === $tokens[$next]['text']) {
+                            foreach ($methodNameToSymbols[$t['text']] ?? [] as $msym) {
+                                $addOcc($msym, $t['line'], $t['startCol'], $t['endCol'], false);
+                            }
+                        }
+
+                        // A member access is never a bare class reference; stop here.
+                        continue;
+                    }
                 }
 
                 // Reference to class.

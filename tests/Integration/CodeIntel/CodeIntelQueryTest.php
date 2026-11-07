@@ -141,4 +141,65 @@ final class CodeIntelQueryTest extends CodeIntelTestCase
         // 9. Unknown symbol yields null.
         self::assertNull($query->symbolInfo($repo, $sha, 'example.com/test#Missing().'));
     }
+
+    /**
+     * When exact references are empty (e.g. a typed indexer attributes call sites to a sibling
+     * symbol), findReferencesByName proposes references matching the symbol's local name across
+     * every indexed symbol, deduplicated and ordered by path/line/col.
+     */
+    public function testFindReferencesByNameFallback(): void
+    {
+        $codec = new ScipProtobufCodec();
+        $docs = [
+            [
+                'relative_path' => 'src/A.php',
+                'language' => 'php',
+                'occurrences' => [
+                    // Target method: defined, never referenced through its own symbol.
+                    [
+                        'range' => [3, 20, 26],
+                        'symbol' => 'scip-php composer acme/app dev App/A#handle().',
+                        'symbol_roles' => ScipProtobufCodec::SYMBOL_ROLE_DEFINITION,
+                    ],
+                ],
+            ],
+            [
+                'relative_path' => 'src/B.php',
+                'language' => 'php',
+                'occurrences' => [
+                    // Sibling symbol with the same local name, referenced twice.
+                    [
+                        'range' => [8, 12, 18],
+                        'symbol' => 'scip-php composer acme/app dev App/B#handle().',
+                        'symbol_roles' => 0,
+                    ],
+                    [
+                        'range' => [2, 4, 10],
+                        'symbol' => 'scip-php composer acme/app dev App/B#handle().',
+                        'symbol_roles' => 0,
+                    ],
+                ],
+            ],
+        ];
+
+        $store = $this->makeStore();
+        $query = new CodeIntelQuery($store);
+        $store->store('acme/app', 'sha1', $codec->encodeIndex($docs));
+
+        $target = 'scip-php composer acme/app dev App/A#handle().';
+
+        // Exact references for the target symbol are empty.
+        self::assertSame([], $query->findReferencesByName('acme/app', 'missing', $target));
+        $exact = $query->symbolInfo('acme/app', 'sha1', $target);
+        self::assertNotNull($exact);
+        self::assertSame(0, $exact->referenceCount());
+
+        // Name-based fallback surfaces the sibling's two references, ordered by path/line/col.
+        $byName = $query->findReferencesByName('acme/app', 'sha1', $target);
+        self::assertCount(2, $byName);
+        self::assertSame('src/B.php', $byName[0]->path);
+        self::assertSame(2, $byName[0]->line);
+        self::assertSame('src/B.php', $byName[1]->path);
+        self::assertSame(8, $byName[1]->line);
+    }
 }
