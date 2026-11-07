@@ -67,13 +67,7 @@ final readonly class AuthorizedKeysFileWriter
 
     public function formatLine(PublicKey $key): string
     {
-        $command = sprintf(
-            'APP_ENV=%s %s %s soft:ssh:dispatch --key-fingerprint=%s',
-            escapeshellarg($this->environment),
-            escapeshellarg(\PHP_BINARY),
-            escapeshellarg($this->projectDir.'/bin/console'),
-            escapeshellarg($key->fingerprint())
-        );
+        $command = $this->getCommand(isDebug: 'dev' === $this->environment, key: $key);
 
         $escapedCommand = str_replace(['\\', '"'], ['\\\\', '\\"'], $command);
 
@@ -81,6 +75,26 @@ final readonly class AuthorizedKeysFileWriter
             'command="%s",no-port-forwarding,no-X11-forwarding,no-agent-forwarding %s',
             $escapedCommand,
             $key->authorizedKey()
+        );
+    }
+
+    private function getCommand(bool $isDebug, PublicKey $key): string
+    {
+        if ($isDebug) {
+            return sprintf('APP_ENV=%s %s -d xdebug.mode=debug -d xdebug.start_with_request=yes -d xdebug.client_host=127.0.0.1 -d xdebug.client_port=9003 %s soft:ssh:dispatch --key-fingerprint=%s',
+                escapeshellarg($this->environment),
+                escapeshellarg(\PHP_BINARY),
+                escapeshellarg($this->projectDir.'/bin/console'),
+                escapeshellarg($key->fingerprint())
+            );
+        }
+
+        return sprintf(
+            'APP_ENV=%s %s %s soft:ssh:dispatch --key-fingerprint=%s',
+            escapeshellarg($this->environment),
+            escapeshellarg(\PHP_BINARY),
+            escapeshellarg($this->projectDir.'/bin/console'),
+            escapeshellarg($key->fingerprint())
         );
     }
 }
