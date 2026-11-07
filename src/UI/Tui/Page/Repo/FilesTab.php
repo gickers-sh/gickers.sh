@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace App\UI\Tui\Page\Repo;
 
 use App\CodeIntel\Domain\SymbolLocation;
+use App\Repo\Domain\Git\TreeEntry;
 use App\UI\Tui\Input\Keys;
 use App\UI\Tui\Render\CodeHighlighter;
 use App\UI\Tui\Render\CommitForm;
-use App\UI\Tui\Render\InlineEditor;
+use App\UI\Tui\Render\Editor;
 use App\UI\Tui\Render\Screen;
 use App\UI\Tui\Render\Theme;
 use Symfony\Component\Process\Process;
@@ -39,11 +40,24 @@ final class FilesTab extends AbstractRepoTab
     /** @var list<string>|null ANSI-highlighted lines parallel to; null = plain text */
     private ?array $highlighted = null;
     private ?CodeHighlighter $highlighter = null;
+    /** @var array{path: string, process: Process}|null */
+    private ?array $highlightJob = null;
+    /** @var array{path: string, process: Process}|null */
+    private ?array $editorHighlightJob = null;
 
     private bool $refsOpen = false;
     /** @var list<SymbolLocation> */
     private array $refs = [];
     private int $refSel = 0;
+    /** @var array<string, list<string>> path => raw file lines */
+    private array $refsPreviewCache = [];
+    /** @var array{path: string, process: Process}|null */
+    private ?array $refsPreviewJob = null;
+    private string $refsTitle = '';
+    /** First source line painted in the file viewer (for click hit-testing). */
+    private int $fileTop = 0;
+    /** Gutter width of the file viewer (digits before the code column). */
+    private int $fileGutter = 3;
 
     // --- Write flows: states and buffers ---
     private bool $editing = false;
@@ -62,13 +76,14 @@ final class FilesTab extends AbstractRepoTab
     private bool $commitPrompt = false;
     private string $commitAction = 'update'; // 'update' | 'create' | 'delete'
 
-    private InlineEditor $editor;
+    private Editor $editor;
     private CommitForm $commitForm;
 
     public function __construct(RepoContext $ctx)
     {
         parent::__construct($ctx);
-        $this->editor = new InlineEditor();
+        $this->editor = new Editor();
+        $this->editor->setSpinner($ctx->spinner);
         $this->commitForm = new CommitForm();
     }
 
@@ -79,7 +94,8 @@ final class FilesTab extends AbstractRepoTab
             || $this->editing
             || $this->newFilePrompt
             || $this->confirmDelete
-            || $this->commitPrompt;
+            || $this->commitPrompt
+            || $this->fuzzyOpen;
     }
 
     public function onActivate(): void
@@ -91,7 +107,14 @@ final class FilesTab extends AbstractRepoTab
         }
         $this->blobJob = null;
         $this->refsOpen = false;
+        if (null !== $this->refsPreviewJob && $this->refsPreviewJob['process']->isRunning()) {
+            $this->refsPreviewJob['process']->stop(0);
+        }
+        $this->refsPreviewJob = null;
+        $this->refsPreviewCache = [];
+        $this->refsTitle = '';
         $this->editing = false;
+        $this->editor->stopJobs();
         $this->newFilePrompt = false;
         $this->confirmDelete = false;
         $this->commitPrompt = false;
@@ -102,6 +125,14 @@ final class FilesTab extends AbstractRepoTab
             $this->filePreviewJob['process']->stop(0);
         }
         $this->filePreviewJob = null;
+        if (null !== $this->highlightJob && $this->highlightJob['process']->isRunning()) {
+            $this->highlightJob['process']->stop(0);
+        }
+        $this->highlightJob = null;
+        if (null !== $this->editorHighlightJob && $this->editorHighlightJob['process']->isRunning()) {
+            $this->editorHighlightJob['process']->stop(0);
+        }
+        $this->editorHighlightJob = null;
     }
 
     public function tick(?float $deltaTime = null): bool
@@ -113,9 +144,28 @@ final class FilesTab extends AbstractRepoTab
             $this->pollBlobJob();
         }
 
+        if (null !== $this->highlightJob) {
+            $busy = true;
+            $this->pollHighlightJob();
+        }
+
+        if (null !== $this->editorHighlightJob) {
+            $busy = true;
+            $this->pollEditorHighlightJob();
+        }
+
         if (null !== $this->filePreviewJob) {
             $busy = true;
             $this->pollFilePreviewJob();
+        }
+
+        if (null !== $this->refsPreviewJob) {
+            $busy = true;
+            $this->pollRefsPreviewJob();
+        }
+
+        if ($this->editing && $this->editor->tick($deltaTime)) {
+            $busy = true;
         }
 
         if ($busy) {
@@ -136,7 +186,7 @@ final class FilesTab extends AbstractRepoTab
         $proc = $job['process'];
         if (!$proc->isSuccessful()) {
             $this->fileOpen = false;
-            $this->ctx->flash = 'Cannot open '.$job['path'];
+            $this->ctx->flash = 'Cannot open ' . $job['path'];
 
             return;
         }
@@ -165,6 +215,67 @@ final class FilesTab extends AbstractRepoTab
         $this->filePreviewCache = ['key' => $job['key'], 'lines' => $lines];
     }
 
+    private function pollHighlightJob(): void
+    {
+        if (null === $this->highlightJob || $this->highlightJob['process']->isRunning()) {
+            return;
+        }
+
+        $job = $this->highlightJob;
+        $this->highlightJob = null;
+        $proc = $job['process'];
+        if ($proc->isSuccessful() && $job['path'] === $this->filePath) {
+            $decoded = json_decode($proc->getOutput(), true);
+            if (\is_array($decoded) && \count($decoded) === \count($this->fileRaw)) {
+                $lines = [];
+                foreach ($decoded as $val) {
+                    $lines[] = \is_string($val) ? $val : '';
+                }
+                $this->highlighted = $lines;
+            }
+        }
+    }
+
+    private function pollEditorHighlightJob(): void
+    {
+        if (null === $this->editorHighlightJob || $this->editorHighlightJob['process']->isRunning()) {
+            return;
+        }
+
+        $job = $this->editorHighlightJob;
+        $this->editorHighlightJob = null;
+        $proc = $job['process'];
+        if ($proc->isSuccessful() && $job['path'] === $this->editPath) {
+            $decoded = json_decode($proc->getOutput(), true);
+            if (\is_array($decoded)) {
+                $lines = [];
+                foreach ($decoded as $val) {
+                    $lines[] = \is_string($val) ? $val : '';
+                }
+                $count = \count($this->editor->lines());
+                while (\count($lines) < $count) {
+                    $lines[] = '';
+                }
+                $this->editorHighlighted = \count($lines) === $count ? $lines : null;
+            }
+        }
+    }
+
+    private function pollRefsPreviewJob(): void
+    {
+        if (null === $this->refsPreviewJob || $this->refsPreviewJob['process']->isRunning()) {
+            return;
+        }
+
+        $job = $this->refsPreviewJob;
+        $this->refsPreviewJob = null;
+        $proc = $job['process'];
+        if ($proc->isSuccessful()) {
+            $lines = preg_split('/\r\n|\r|\n/', rtrim($proc->getOutput(), "\n")) ?: [];
+            $this->refsPreviewCache[$job['path']] = $lines;
+        }
+    }
+
     public function footerText(): string
     {
         if ($this->commitPrompt) {
@@ -178,7 +289,7 @@ final class FilesTab extends AbstractRepoTab
         }
         if ($this->editing) {
             $hint = $this->editor->previewSupported()
-                ? ('Ctrl+P: '.$this->editor->previewMode().' · ')
+                ? ('Ctrl+P: ' . $this->editor->previewMode() . ' · ')
                 : '';
 
             return sprintf(' Ln %d, Col %d · %sCtrl+S: save · Esc: discard', $this->editor->line() + 1, $this->editor->col() + 1, $hint);
@@ -193,8 +304,11 @@ final class FilesTab extends AbstractRepoTab
 
             return sprintf(' Ln %d, Col %d · %se: edit · d: definition · r: references · Esc: back', $this->cursorLine + 1, $this->cursorCol + 1, $pHint);
         }
+        if ($this->fuzzyOpen) {
+            return ' type: filter · ↑/↓: move · Enter: open · Esc: close';
+        }
 
-        return ' n: new · D: delete · '.self::BASE_FOOTER;
+        return ' /: search · n: new · D: delete · ' . self::BASE_FOOTER;
     }
 
     public function statusValue(): string
@@ -209,10 +323,16 @@ final class FilesTab extends AbstractRepoTab
             return '[NEW FILE]';
         }
         if ($this->editing) {
-            return $this->editPath.($this->isNewFile ? ' [NEW]' : ' [EDIT]');
+            return $this->editPath . ($this->isNewFile ? ' [NEW]' : ' [EDIT]');
         }
         if ($this->fileOpen && $this->filePreview) {
             return '[PREVIEW]';
+        }
+        if ($this->fuzzyOpen) {
+            return '' !== $this->fuzzyQuery ? '/' . $this->fuzzyQuery : '[SEARCH]';
+        }
+        if ($this->refsOpen) {
+            return '' !== $this->refsTitle ? $this->refsTitle : '[REFERENCES]';
         }
 
         return parent::statusValue();
@@ -238,6 +358,9 @@ final class FilesTab extends AbstractRepoTab
         if ($this->fileOpen) {
             return $this->handleFileKey($seq);
         }
+        if ($this->fuzzyOpen) {
+            return $this->handleFuzzyKey($seq);
+        }
 
         return $this->handleTabKey(Keys::normalize($seq), Keys::text($seq));
     }
@@ -255,13 +378,18 @@ final class FilesTab extends AbstractRepoTab
             return false;
         }
 
+        if ('/' === $txt || Keys::CTRL_P === $tok) {
+            $this->openFuzzySearch();
+
+            return true;
+        }
         $entries = $this->ctx->tree();
         if ('n' === $txt) {
             if (!$this->checkCanWrite()) {
                 return true;
             }
             $this->newFilePrompt = true;
-            $this->newFilePathInput = '' !== $this->ctx->subpath ? rtrim($this->ctx->subpath, '/').'/' : '';
+            $this->newFilePathInput = '' !== $this->ctx->subpath ? rtrim($this->ctx->subpath, '/') . '/' : '';
 
             return true;
         }
@@ -320,6 +448,10 @@ final class FilesTab extends AbstractRepoTab
                 $this->filePreviewJob['process']->stop(0);
             }
             $this->filePreviewJob = null;
+            if (null !== $this->highlightJob && $this->highlightJob['process']->isRunning()) {
+                $this->highlightJob['process']->stop(0);
+            }
+            $this->highlightJob = null;
             $this->fileOpen = false;
             $this->filePreview = false;
             $this->filePreviewScroll = 0;
@@ -432,8 +564,10 @@ final class FilesTab extends AbstractRepoTab
             $this->refsOpen = false;
         } elseif (Keys::UP === $tok || 'k' === $txt) {
             $this->refSel = max(0, $this->refSel - 1);
+            $this->ensureRefPreview();
         } elseif (Keys::DOWN === $tok || 'j' === $txt) {
             $this->refSel = max(0, min($this->refSel + 1, \count($this->refs) - 1));
+            $this->ensureRefPreview();
         } elseif (Keys::ENTER === $tok && [] !== $this->refs) {
             $this->refsOpen = false;
             $this->openLocation($this->refs[min($this->refSel, \count($this->refs) - 1)]);
@@ -442,6 +576,328 @@ final class FilesTab extends AbstractRepoTab
         }
 
         return true;
+    }
+
+    private function handleFuzzyKey(string $seq): bool
+    {
+        if ($this->ctx->isRecursiveTreeLoading()) {
+            return $this->handleFuzzyInputKey($seq, 0, true);
+        }
+
+        $matches = $this->fuzzyMatches();
+
+        return $this->handleFuzzyInputKey($seq, \count($matches), false, function (int $idx) use ($matches): void {
+            $selected = $matches[$idx]['entry'];
+            $this->closeFuzzySearch();
+            $this->openFile($selected->path);
+        });
+    }
+
+    /**
+     * Computes fuzzy-matched file entries against {@see $fuzzyQuery}.
+     *
+     * @return list<array{entry: TreeEntry, score: int, positions: list<int>}>
+     */
+    private function fuzzyMatches(): array
+    {
+        $entries = $this->ctx->recursiveTree();
+        $query = trim($this->fuzzyQuery);
+        if ('' === $query) {
+            $out = [];
+            foreach ($entries as $entry) {
+                $out[] = ['entry' => $entry, 'score' => 0, 'positions' => []];
+            }
+
+            return $out;
+        }
+
+        $scored = [];
+        foreach ($entries as $idx => $entry) {
+            $match = self::fuzzyMatchPath($query, $entry->path);
+            if (null !== $match) {
+                $scored[] = [
+                    'entry' => $entry,
+                    'score' => $match['score'],
+                    'positions' => $match['positions'],
+                    'idx' => $idx,
+                ];
+            }
+        }
+
+        usort($scored, static function (array $a, array $b): int {
+            if ($a['score'] !== $b['score']) {
+                return $b['score'] <=> $a['score'];
+            }
+            $lenCmp = \strlen($a['entry']->path) <=> \strlen($b['entry']->path);
+            if (0 !== $lenCmp) {
+                return $lenCmp;
+            }
+
+            return $a['idx'] <=> $b['idx'];
+        });
+
+        $out = [];
+        foreach ($scored as $item) {
+            $out[] = [
+                'entry' => $item['entry'],
+                'score' => $item['score'],
+                'positions' => $item['positions'],
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Fuzzy-matches a query against a filepath, returning a score and matched character indices, or null.
+     * Space-separated tokens in the query must all match as fuzzy subsequences.
+     *
+     * @return array{score: int, positions: list<int>}|null
+     */
+    public static function fuzzyMatchPath(string $query, string $path): ?array
+    {
+        $tokens = preg_split('/\s+/', trim($query), -1, \PREG_SPLIT_NO_EMPTY);
+        if (false === $tokens || [] === $tokens) {
+            return ['score' => 0, 'positions' => []];
+        }
+
+        $pathChars = preg_split('//u', $path, -1, \PREG_SPLIT_NO_EMPTY);
+        if (false === $pathChars || [] === $pathChars) {
+            return null;
+        }
+        $lowerPathChars = array_map(static fn(string $c): string => mb_strtolower($c, 'UTF-8'), $pathChars);
+
+        $lastSlash = -1;
+        foreach ($pathChars as $i => $ch) {
+            if ('/' === $ch) {
+                $lastSlash = $i;
+            }
+        }
+
+        $totalScore = 0;
+        $allPositions = [];
+
+        foreach ($tokens as $token) {
+            $m = self::fuzzyMatchSingleToken($token, $pathChars, $lowerPathChars, $lastSlash);
+            if (null === $m) {
+                return null;
+            }
+            $totalScore += $m['score'];
+            foreach ($m['positions'] as $pos) {
+                $allPositions[$pos] = true;
+            }
+        }
+
+        // Slight penalty for longer paths so tighter matches rank first
+        $totalScore -= \count($pathChars);
+
+        $positions = array_keys($allPositions);
+        sort($positions);
+
+        return ['score' => $totalScore, 'positions' => $positions];
+    }
+
+    /**
+     * @param list<string> $pathChars
+     * @param list<string> $lowerPathChars
+     *
+     * @return array{score: int, positions: list<int>}|null
+     */
+    private static function fuzzyMatchSingleToken(string $token, array $pathChars, array $lowerPathChars, int $lastSlash): ?array
+    {
+        $qChars = preg_split('//u', mb_strtolower($token, 'UTF-8'), -1, \PREG_SPLIT_NO_EMPTY);
+        if (false === $qChars || [] === $qChars) {
+            return ['score' => 0, 'positions' => []];
+        }
+
+        $qLen = \count($qChars);
+        $pLen = \count($lowerPathChars);
+        if ($qLen > $pLen) {
+            return null;
+        }
+
+        // Forward check to ensure subsequence exists and find all candidate start positions for qChars[0]
+        $firstPositions = [];
+        for ($i = 0; $i <= $pLen - $qLen; ++$i) {
+            if ($lowerPathChars[$i] === $qChars[0]) {
+                $firstPositions[] = $i;
+            }
+        }
+        if ([] === $firstPositions) {
+            return null;
+        }
+
+        // Also consider suffix scan from the end (strongly favours basename matches)
+        $bestResult = null;
+
+        $backwardPositions = self::matchBackward($qChars, $lowerPathChars);
+        if (null !== $backwardPositions) {
+            $score = self::scorePositions($token, $pathChars, $backwardPositions, $lastSlash);
+            $bestResult = ['score' => $score, 'positions' => $backwardPositions];
+        }
+
+        foreach ($firstPositions as $start) {
+            $positions = self::matchFromStart($qChars, $pathChars, $lowerPathChars, $start, $lastSlash);
+            if (null === $positions) {
+                break;
+            }
+            $score = self::scorePositions($token, $pathChars, $positions, $lastSlash);
+            if (null === $bestResult || $score > $bestResult['score']) {
+                $bestResult = ['score' => $score, 'positions' => $positions];
+            }
+        }
+
+        return $bestResult;
+    }
+
+    /**
+     * @param list<string> $qChars
+     * @param list<string> $lowerPathChars
+     *
+     * @return list<int>|null
+     */
+    private static function matchBackward(array $qChars, array $lowerPathChars): ?array
+    {
+        $qIdx = \count($qChars) - 1;
+        $positions = [];
+        for ($pIdx = \count($lowerPathChars) - 1; $pIdx >= 0 && $qIdx >= 0; --$pIdx) {
+            if ($lowerPathChars[$pIdx] === $qChars[$qIdx]) {
+                $positions[] = $pIdx;
+                --$qIdx;
+            }
+        }
+        if ($qIdx >= 0) {
+            return null;
+        }
+
+        return array_reverse($positions);
+    }
+
+    /**
+     * Greedy match starting at $start that prefers consecutive or boundary characters when advancing.
+     *
+     * @param list<string> $qChars
+     * @param list<string> $pathChars
+     * @param list<string> $lowerPathChars
+     *
+     * @return list<int>|null
+     */
+    private static function matchFromStart(array $qChars, array $pathChars, array $lowerPathChars, int $start, int $lastSlash): ?array
+    {
+        $qLen = \count($qChars);
+        $pLen = \count($lowerPathChars);
+        $positions = [$start];
+        $cur = $start;
+
+        for ($qi = 1; $qi < $qLen; ++$qi) {
+            $target = $qChars[$qi];
+            $remaining = $qLen - $qi - 1;
+            $maxP = $pLen - 1 - $remaining;
+
+            $bestP = -1;
+            $bestLocalScore = \PHP_INT_MIN;
+            for ($pi = $cur + 1; $pi <= $maxP; ++$pi) {
+                if ($lowerPathChars[$pi] !== $target) {
+                    continue;
+                }
+                $localScore = 0;
+                if ($pi === $cur + 1) {
+                    $localScore += 30;
+                } else {
+                    $localScore -= ($pi - $cur - 1) * 2;
+                }
+                if (self::isBoundary($pathChars, $pi)) {
+                    $localScore += 20;
+                }
+                if ($pi > $lastSlash) {
+                    $localScore += 15;
+                }
+                if ($localScore > $bestLocalScore) {
+                    $bestLocalScore = $localScore;
+                    $bestP = $pi;
+                }
+            }
+
+            if (-1 === $bestP) {
+                return null;
+            }
+            $positions[] = $bestP;
+            $cur = $bestP;
+        }
+
+        return $positions;
+    }
+
+    /**
+     * @param list<string> $pathChars
+     * @param list<int>    $positions
+     */
+    private static function scorePositions(string $token, array $pathChars, array $positions, int $lastSlash): int
+    {
+        $rawTokenChars = preg_split('//u', $token, -1, \PREG_SPLIT_NO_EMPTY) ?: [];
+        $score = 0;
+        $prev = -2;
+
+        foreach ($positions as $k => $pos) {
+            $score += 10;
+
+            // Consecutive match bonus
+            if ($pos === $prev + 1) {
+                $score += 25;
+            } elseif ($prev >= 0) {
+                $score -= ($pos - $prev - 1) * 2;
+            }
+
+            // Boundary bonus (start of string, after '/', '_', '-', '.', or camelCase)
+            if (0 === $pos) {
+                $score += 20;
+            } elseif ('/' === ($pathChars[$pos - 1] ?? '')) {
+                $score += 25;
+            } elseif (self::isBoundary($pathChars, $pos)) {
+                $score += 18;
+            }
+
+            // Basename bonus (matching inside filename rather than directory prefix)
+            if ($pos > $lastSlash) {
+                $score += 15;
+                if ($pos === $lastSlash + 1) {
+                    $score += 15;
+                }
+            }
+
+            // Exact case bonus
+            if (isset($rawTokenChars[$k], $pathChars[$pos]) && $rawTokenChars[$k] === $pathChars[$pos]) {
+                $score += 2;
+            }
+
+            $prev = $pos;
+        }
+
+        // Exact basename match bonus
+        $basenameStart = $lastSlash + 1;
+        $basenameLen = \count($pathChars) - $basenameStart;
+        if (\count($positions) === $basenameLen && ($positions[0] ?? -1) === $basenameStart) {
+            $score += 50;
+        }
+
+        return $score;
+    }
+
+    /**
+     * @param list<string> $pathChars
+     */
+    private static function isBoundary(array $pathChars, int $pos): bool
+    {
+        if ($pos <= 0) {
+            return true;
+        }
+        $prev = $pathChars[$pos - 1] ?? '';
+        if ('/' === $prev || '_' === $prev || '-' === $prev || '.' === $prev || ' ' === $prev) {
+            return true;
+        }
+        $cur = $pathChars[$pos] ?? '';
+
+        return ctype_lower($prev) && ctype_upper($cur);
     }
 
     // --- actions -----------------------------------------------------------
@@ -473,7 +929,7 @@ final class FilesTab extends AbstractRepoTab
 
                 return;
             } catch (\Throwable) {
-                $this->ctx->flash = 'Cannot open '.$path;
+                $this->ctx->flash = 'Cannot open ' . $path;
 
                 return;
             }
@@ -482,7 +938,7 @@ final class FilesTab extends AbstractRepoTab
         try {
             $content = $this->ctx->reader->getBlob($this->ctx->git, $this->ctx->ref, $path);
         } catch (\Throwable) {
-            $this->ctx->flash = 'Cannot open '.$path;
+            $this->ctx->flash = 'Cannot open ' . $path;
 
             return;
         }
@@ -495,6 +951,60 @@ final class FilesTab extends AbstractRepoTab
         }
     }
 
+    /**
+     * Ctrl/Alt/Cmd+click (or middle/right click) on a symbol in the open file:
+     * clicking a usage jumps to its definition, clicking a definition lists its
+     * references. Mirrors Go `symbolNavCmds`. Returns false when the click is not
+     * a symbol-navigation gesture so the caller can fall through to selection.
+     */
+    private function navigateSymbolClick(int $line, int $col): bool
+    {
+        if (!$this->fileOpen || $this->filePreview || $this->editing || $this->refsOpen) {
+            return false;
+        }
+        if ($line < 1) {
+            return false; // crumb header row
+        }
+        $idx = $this->fileTop + ($line - 1);
+        if ($idx < 0 || $idx >= \count($this->fileRaw)) {
+            return false;
+        }
+        $srcCol = max(0, $col - ($this->fileGutter + 2));
+        $this->cursorLine = $idx;
+        $this->cursorCol = $srcCol;
+
+        return $this->navigateSymbolAt($idx, $srcCol);
+    }
+
+    private function navigateSymbolAt(int $line, int $col): bool
+    {
+        $sha = $this->ctx->sha();
+        if ('' === $sha || !$this->ctx->codeIntel->has($this->ctx->name, $sha)) {
+            $this->ctx->flash = 'No code intelligence index for this commit.';
+
+            return true;
+        }
+        $hit = null;
+        foreach ($this->ctx->codeIntel->occurrences($this->ctx->name, $sha, $this->filePath) as $occ) {
+            if ($occ->contains($line, $col)) {
+                $hit = $occ;
+                break;
+            }
+        }
+        if (null === $hit) {
+            $this->ctx->flash = 'No symbol under click.';
+
+            return true;
+        }
+        if ($hit->isDefinition) {
+            $this->findReferences();
+        } else {
+            $this->gotoDefinition();
+        }
+
+        return true;
+    }
+
     private function gotoDefinition(): void
     {
         $sha = $this->ctx->sha();
@@ -503,7 +1013,7 @@ final class FilesTab extends AbstractRepoTab
 
             return;
         }
-        $def = $this->ctx->codeIntel->findDefinition($this->ctx->name, $sha, $this->filePath, $this->cursorLine, $this->cursorCol);
+        $def = $this->ctx->codeIntel->findDefinition($this->ctx->name, $sha, $this->filePath, $this->cursorLine, $this->cursorCol, true);
         if (null === $def) {
             $this->ctx->flash = 'No definition found at cursor.';
 
@@ -520,20 +1030,29 @@ final class FilesTab extends AbstractRepoTab
 
             return;
         }
-        $refs = $this->ctx->codeIntel->findReferences($this->ctx->name, $sha, $this->filePath, $this->cursorLine, $this->cursorCol);
+        $sym = $this->ctx->codeIntel->symbolAnchorAt($this->ctx->name, $sha, $this->filePath, $this->cursorLine, $this->cursorCol);
+        $refs = $this->ctx->codeIntel->findReferences($this->ctx->name, $sha, $this->filePath, $this->cursorLine, $this->cursorCol, true);
+        $byName = false;
+        if ([] === $refs && null !== $sym) {
+            // No exact references: propose references found by matching the symbol name.
+            $refs = $this->ctx->codeIntel->findReferencesByName($this->ctx->name, $sha, $sym);
+            $byName = [] !== $refs;
+        }
         if ([] === $refs) {
             $this->ctx->flash = 'No references found at cursor.';
 
             return;
         }
+        $this->refsTitle = sprintf('References for %s (%d%s)', $sym ?? 'symbol', \count($refs), $byName ? ', by name' : '');
         $this->refs = $refs;
         $this->refSel = 0;
         $this->refsOpen = true;
+        $this->ensureRefPreview();
     }
 
     private function openLocation(SymbolLocation $loc): void
     {
-        $flash = '→ '.$loc->path.':'.($loc->line + 1);
+        $flash = '→ ' . $loc->path . ':' . ($loc->line + 1);
         if ($loc->path !== $this->filePath) {
             $this->openFile($loc->path, true, $loc->line, $loc->col, $flash);
 
@@ -544,11 +1063,61 @@ final class FilesTab extends AbstractRepoTab
         $this->ctx->flash = $flash;
     }
 
+    private function ensureRefPreview(): void
+    {
+        if ([] === $this->refs || !isset($this->refs[$this->refSel])) {
+            return;
+        }
+        $targetPath = $this->refs[$this->refSel]->path;
+        if (isset($this->refsPreviewCache[$targetPath])) {
+            return;
+        }
+        if ($targetPath === $this->filePath && [] !== $this->fileRaw) {
+            $this->refsPreviewCache[$targetPath] = $this->fileRaw;
+
+            return;
+        }
+        if (null !== $this->refsPreviewJob) {
+            if ($this->refsPreviewJob['path'] === $targetPath && $this->refsPreviewJob['process']->isRunning()) {
+                return;
+            }
+            if ($this->refsPreviewJob['process']->isRunning()) {
+                $this->refsPreviewJob['process']->stop(0);
+            }
+        }
+        try {
+            $proc = $this->ctx->reader->startBlobProcess($this->ctx->git, $this->ctx->ref, $targetPath);
+            $this->refsPreviewJob = [
+                'path' => $targetPath,
+                'process' => $proc,
+            ];
+        } catch (\Throwable) {
+            $this->refsPreviewCache[$targetPath] = [];
+        }
+    }
+
+    /**
+     * Splits the references view width between the list (left) and the file
+     * preview (right). A narrow terminal (< 60 cols) disables the preview pane.
+     *
+     * @return array{0: int, 1: int} [listWidth, previewWidth]
+     */
+    public function refsSplit(int $width): array
+    {
+        if ($width < 60) {
+            return [$width, 0];
+        }
+        $listW = intdiv($width * 2, 5);
+        if ($listW < 24) {
+            $listW = 24;
+        }
+
+        return [$listW, $width - $listW - 1];
+    }
+
     private function loadFile(string $path, string $content): void
     {
         $this->fileRaw = preg_split('/\r\n|\r|\n/', rtrim($content, "\n")) ?: [''];
-        $lines = ($this->highlighter ??= new CodeHighlighter())->highlightLines($path, $content);
-        $this->highlighted = null !== $lines && \count($lines) === \count($this->fileRaw) ? $lines : null;
         $this->filePath = $path;
         $this->filePreview = false;
         $this->filePreviewScroll = 0;
@@ -557,6 +1126,27 @@ final class FilesTab extends AbstractRepoTab
             $this->filePreviewJob['process']->stop(0);
         }
         $this->filePreviewJob = null;
+        if (null !== $this->highlightJob && $this->highlightJob['process']->isRunning()) {
+            $this->highlightJob['process']->stop(0);
+        }
+        $this->highlightJob = null;
+
+        $highlighter = $this->highlighter ??= new CodeHighlighter();
+        if (null !== CodeHighlighter::languageFor($path) && \count($this->fileRaw) > 150) {
+            $this->highlighted = null;
+            try {
+                $this->highlightJob = [
+                    'path' => $path,
+                    'process' => $highlighter->startHighlightProcess($path, $content),
+                ];
+            } catch (\Throwable) {
+                $lines = $highlighter->highlightLines($path, $content);
+                $this->highlighted = null !== $lines && \count($lines) === \count($this->fileRaw) ? $lines : null;
+            }
+        } else {
+            $lines = $highlighter->highlightLines($path, $content);
+            $this->highlighted = null !== $lines && \count($lines) === \count($this->fileRaw) ? $lines : null;
+        }
     }
 
     private function currentLineLength(): int
@@ -598,12 +1188,27 @@ final class FilesTab extends AbstractRepoTab
         $this->editor->enableMarkdownPreview($this->ctx->renderer, $this->editPath);
         $this->editor->moveTo($this->cursorLine, $this->cursorCol);
         $this->editorHighlighted = $this->highlighted;
-        $this->editorDirty = null === $this->highlighted;
+        $this->editorDirty = false;
+        if (null !== CodeHighlighter::languageFor($this->editPath)) {
+            if (null !== $this->editorHighlightJob && $this->editorHighlightJob['process']->isRunning()) {
+                $this->editorHighlightJob['process']->stop(0);
+            }
+            $this->editorHighlighted = null;
+            try {
+                $this->editorHighlightJob = [
+                    'path' => $this->editPath,
+                    'process' => ($this->highlighter ??= new CodeHighlighter())->startHighlightProcess($this->editPath, $this->editor->value()),
+                ];
+            } catch (\Throwable) {
+                $this->editorHighlighted = $this->highlighted;
+                $this->editorDirty = false;
+            }
+        }
     }
 
     private function isCtrlS(string $seq): bool
     {
-        return InlineEditor::isCtrlS($seq);
+        return Editor::isCtrlS($seq);
     }
 
     private function cleanPath(string $raw): string
@@ -631,7 +1236,7 @@ final class FilesTab extends AbstractRepoTab
         if ($this->isCtrlS($seq)) {
             $this->commitPrompt = true;
             $this->commitAction = $this->isNewFile ? 'create' : 'update';
-            $this->commitForm->reset(($this->isNewFile ? 'Create ' : 'Update ').$this->editPath);
+            $this->commitForm->reset(($this->isNewFile ? 'Create ' : 'Update ') . $this->editPath);
 
             return true;
         }
@@ -641,6 +1246,11 @@ final class FilesTab extends AbstractRepoTab
 
         if (Keys::ESCAPE === $tok) {
             $this->editing = false;
+            $this->editor->stopJobs();
+            if (null !== $this->editorHighlightJob && $this->editorHighlightJob['process']->isRunning()) {
+                $this->editorHighlightJob['process']->stop(0);
+            }
+            $this->editorHighlightJob = null;
             if ($this->isNewFile) {
                 $this->isNewFile = false;
             }
@@ -671,8 +1281,8 @@ final class FilesTab extends AbstractRepoTab
             if ('' === $raw) {
                 return true;
             }
-            if ('' !== $this->ctx->subpath && !str_starts_with($raw, '/') && !str_starts_with($raw, $this->ctx->subpath.'/')) {
-                $raw = $this->ctx->subpath.'/'.$raw;
+            if ('' !== $this->ctx->subpath && !str_starts_with($raw, '/') && !str_starts_with($raw, $this->ctx->subpath . '/')) {
+                $raw = $this->ctx->subpath . '/' . $raw;
             }
             $clean = $this->cleanPath($raw);
             if ('' === $clean) {
@@ -719,7 +1329,7 @@ final class FilesTab extends AbstractRepoTab
 
         if ('y' === $txt || 'Y' === $txt) {
             $path = $this->deleteTargetPath;
-            $message = 'Delete '.$path;
+            $message = 'Delete ' . $path;
             $this->executeCommit('delete', $path, $message);
 
             return true;
@@ -730,7 +1340,7 @@ final class FilesTab extends AbstractRepoTab
 
     private function handleCommitPromptKey(string $seq): bool
     {
-        if ($this->isCtrlS($seq) || Keys::ENTER === Keys::normalize($seq)) {
+        if ($this->isCtrlS($seq)) {
             $this->submitCommit();
 
             return true;
@@ -799,14 +1409,14 @@ final class FilesTab extends AbstractRepoTab
                 );
             }
         } catch (\Throwable $e) {
-            $this->ctx->flash = 'Commit failed: '.$e->getMessage();
+            $this->ctx->flash = 'Commit failed: ' . $e->getMessage();
 
             return false;
         }
 
         $this->ctx->invalidateGitCaches();
         $shortSha = substr($sha, 0, 7);
-        $this->ctx->flash = 'Committed '.$shortSha;
+        $this->ctx->flash = 'Committed ' . $shortSha;
 
         $this->commitPrompt = false;
         $this->confirmDelete = false;
@@ -823,12 +1433,58 @@ final class FilesTab extends AbstractRepoTab
 
         return true;
     }
+
+    public function onClick(int $line, int $col, bool $nav = false): bool
+    {
+        if ($nav) {
+            return $this->navigateSymbolClick($line, $col);
+        }
+        if (!isset($this->rowToIndex[$line])) {
+            return false;
+        }
+        $idx = $this->rowToIndex[$line];
+
+        if ($this->fuzzyOpen) {
+            $matches = $this->fuzzyMatches();
+            if (!isset($matches[$idx])) {
+                return false;
+            }
+            if ($idx === $this->fuzzySel) {
+                $entry = $matches[$idx]['entry'];
+                $this->closeFuzzySearch();
+                $this->openFile($entry->path);
+            } else {
+                $this->fuzzySel = $idx;
+            }
+
+            return true;
+        }
+
+        $entries = $this->ctx->tree();
+        if (!isset($entries[$idx])) {
+            return false;
+        }
+        if ($idx === $this->sel) {
+            $entry = $entries[$idx];
+            if ($entry->isDirectory()) {
+                $this->ctx->subpath = $entry->path;
+                $this->sel = 0;
+            } else {
+                $this->openFile($entry->path);
+            }
+        } else {
+            $this->sel = $idx;
+        }
+
+        return true;
+    }
     // --- rendering ---------------------------------------------------------
 
     public function paintBody(int $cols, int $rows): array
     {
         $this->cols = max(1, $cols);
         $this->rows = max(1, $rows);
+        $this->rowToIndex = [];
         if ($this->commitPrompt) {
             return $this->paintCommitPrompt($cols, $rows);
         }
@@ -847,6 +1503,9 @@ final class FilesTab extends AbstractRepoTab
         if ($this->fileOpen) {
             return $this->paintFile($cols, $rows);
         }
+        if ($this->fuzzyOpen) {
+            return $this->paintFuzzy($cols, $rows);
+        }
 
         return $this->paintFiles($cols, $rows);
     }
@@ -856,8 +1515,8 @@ final class FilesTab extends AbstractRepoTab
      */
     private function paintFiles(int $cols, int $rows): array
     {
-        $crumb = '  /'.$this->ctx->subpath;
-        $header = "\e[2m".Screen::fit($crumb, $cols)."\e[0m";
+        $crumb = '  /' . $this->ctx->subpath;
+        $header = "\e[2m" . Screen::fit($crumb, $cols) . "\e[0m";
         $bodyRows = max(1, $rows - 1);
 
         if ($this->ctx->isTreeLoading()) {
@@ -880,6 +1539,7 @@ final class FilesTab extends AbstractRepoTab
                 $out[] = Screen::blank($cols);
                 continue;
             }
+            $this->rowToIndex[1 + $r] = $idx;
             $entry = $entries[$idx];
             $size = $entry->isFile() && null !== $entry->size ? $this->humanSize($entry->size) : '';
             $out = array_merge($out, Screen::fileRow(
@@ -895,8 +1555,101 @@ final class FilesTab extends AbstractRepoTab
         return $out;
     }
 
+    /**
+     * @return list<string>
+     */
+    private function paintFuzzy(int $cols, int $rows): array
+    {
+        $header = Screen::fuzzySearchBar($this->fuzzyQuery, $cols);
+        $bodyRows = max(1, $rows - 1);
+
+        if ($this->ctx->isRecursiveTreeLoading()) {
+            return array_merge([$header], Screen::spinnerBody($this->ctx->spinner, 'Loading files...', $cols));
+        }
+
+        $matches = $this->fuzzyMatches();
+        if ([] === $matches) {
+            return array_merge([$header], $this->messageBody('No matching files.', $cols));
+        }
+
+        $count = \count($matches);
+        $sel = min($this->fuzzySel, $count - 1);
+        $top = $count > $bodyRows ? max(0, min($sel - intdiv($bodyRows, 2), $count - $bodyRows)) : 0;
+
+        $out = [$header];
+        for ($r = 0; $r < $bodyRows; ++$r) {
+            $idx = $top + $r;
+            if ($idx >= $count) {
+                $out[] = Screen::blank($cols);
+                continue;
+            }
+            $this->rowToIndex[1 + $r] = $idx;
+            $match = $matches[$idx];
+            $entry = $match['entry'];
+            $selected = $idx === $sel;
+            $size = $entry->isFile() && null !== $entry->size ? $this->humanSize($entry->size) : '';
+            $renderedPath = $this->highlightFuzzyPath($entry->path, $match['positions'], $selected);
+            $out = array_merge($out, Screen::fileRow(
+                $this->modeString($entry),
+                $size,
+                $entry->path,
+                false,
+                $selected,
+                $cols,
+                $renderedPath,
+            ));
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param list<int> $positions
+     */
+    private function highlightFuzzyPath(string $path, array $positions, bool $selected): string
+    {
+        if ([] === $positions) {
+            return $selected
+                ? Theme::style($path, Theme::SELECTOR, bold: true)
+                : Theme::style($path, Theme::FG);
+        }
+
+        $chars = preg_split('//u', $path, -1, \PREG_SPLIT_NO_EMPTY);
+        if (false === $chars || [] === $chars) {
+            return $path;
+        }
+
+        $posSet = array_fill_keys($positions, true);
+        $out = '';
+        $baseColor = $selected ? Theme::SELECTOR : Theme::FG;
+        $matchColor = $selected ? Theme::CYAN : Theme::HIGHLIGHT;
+
+        foreach ($chars as $i => $ch) {
+            if (isset($posSet[$i])) {
+                $out .= Theme::style($ch, $matchColor, bold: true, underline: true);
+            } else {
+                $out .= Theme::style($ch, $baseColor, bold: $selected);
+            }
+        }
+
+        return $out;
+    }
+
     public function statusInfo(): string
     {
+        if ($this->fuzzyOpen) {
+            if ($this->ctx->isRecursiveTreeLoading()) {
+                return '…';
+            }
+            $total = \count($this->ctx->recursiveTree());
+            $matches = $this->fuzzyMatches();
+            $count = \count($matches);
+            if (0 === $count) {
+                return '0/' . $total;
+            }
+
+            return '# ' . (min($this->fuzzySel, $count - 1) + 1) . '/' . $count;
+        }
         if ($this->ctx->isTreeLoading()) {
             return '…';
         }
@@ -905,10 +1658,10 @@ final class FilesTab extends AbstractRepoTab
             return '';
         }
 
-        return '# '.(min($this->sel, $count - 1) + 1).'/'.$count;
+        return '# ' . (min($this->sel, $count - 1) + 1) . '/' . $count;
     }
 
-    private function modeString(\App\Repo\Domain\Git\TreeEntry $entry): string
+    private function modeString(TreeEntry $entry): string
     {
         $oct = (int) octdec($entry->mode);
         $perm = $oct & 0o777;
@@ -923,10 +1676,10 @@ final class FilesTab extends AbstractRepoTab
         $rwx = '';
         foreach ([6, 3, 0] as $shift) {
             $p = ($perm >> $shift) & 7;
-            $rwx .= (0 !== ($p & 4) ? 'r' : '-').(0 !== ($p & 2) ? 'w' : '-').(0 !== ($p & 1) ? 'x' : '-');
+            $rwx .= (0 !== ($p & 4) ? 'r' : '-') . (0 !== ($p & 2) ? 'w' : '-') . (0 !== ($p & 1) ? 'x' : '-');
         }
 
-        return $type.$rwx;
+        return $type . $rwx;
     }
 
     /**
@@ -935,20 +1688,27 @@ final class FilesTab extends AbstractRepoTab
     private function paintFile(int $cols, int $rows): array
     {
         if (null !== $this->blobJob) {
-            $crumb = "\e[2m".Screen::fit('  '.$this->filePath, $cols)."\e[0m";
+            $crumb = "\e[2m" . Screen::fit('  ' . $this->filePath, $cols) . "\e[0m";
 
-            return array_merge([$crumb], Screen::spinnerBody($this->ctx->spinner, 'Loading '.$this->filePath.'...', $cols));
+            return array_merge([$crumb], Screen::spinnerBody($this->ctx->spinner, 'Loading ' . $this->filePath . '...', $cols));
+        }
+        if (null !== $this->highlightJob) {
+            $crumb = "\e[2m" . Screen::fit('  ' . $this->filePath, $cols) . "\e[0m";
+
+            return array_merge([$crumb], Screen::spinnerBody($this->ctx->spinner, 'Highlighting ' . $this->filePath . '...', $cols));
         }
 
         if ($this->filePreview) {
             return $this->paintFilePreview($cols, $rows);
         }
-        $crumb = "\e[2m".Screen::fit('  '.$this->filePath, $cols)."\e[0m";
+        $crumb = "\e[2m" . Screen::fit('  ' . $this->filePath, $cols) . "\e[0m";
         $rows = max(1, $rows - 1);
         $count = \count($this->fileRaw);
         $gutter = max(3, \strlen((string) $count));
         $codeWidth = max(1, $cols - $gutter - 2);
         $top = $count > $rows ? max(0, min($this->cursorLine - intdiv($rows, 2), $count - $rows)) : 0;
+        $this->fileTop = $top;
+        $this->fileGutter = $gutter;
 
         $rowsOut = [$crumb];
         for ($r = 0; $r < $rows; ++$r) {
@@ -961,11 +1721,11 @@ final class FilesTab extends AbstractRepoTab
             $code = $this->highlighted[$idx] ?? $this->fileRaw[$idx];
             $num = str_pad((string) ($idx + 1), $gutter, ' ', \STR_PAD_LEFT);
             if ($idx === $this->cursorLine) {
-                $g = "\e[7m".$num.'▶'."\e[0m".' ';
+                $g = "\e[7m" . $num . '▶' . "\e[0m" . ' ';
             } else {
-                $g = "\e[2m".$num.'│'."\e[0m".' ';
+                $g = "\e[2m" . $num . '│' . "\e[0m" . ' ';
             }
-            $rowsOut[] = Screen::fit($g.Screen::truncate($code, $codeWidth), $cols);
+            $rowsOut[] = Screen::fit($g . Screen::truncate($code, $codeWidth), $cols);
         }
 
         return $rowsOut;
@@ -976,7 +1736,7 @@ final class FilesTab extends AbstractRepoTab
      */
     private function paintFilePreview(int $cols, int $rows): array
     {
-        $crumb = "\e[2m".Screen::fit('  '.$this->filePath, $cols)."\e[0m";
+        $crumb = "\e[2m" . Screen::fit('  ' . $this->filePath, $cols) . "\e[0m";
         $bodyRows = max(1, $rows - 1);
         if ($this->isFilePreviewLoading($cols)) {
             return array_merge([$crumb], Screen::spinnerBody($this->ctx->spinner, 'Rendering preview...', $cols));
@@ -997,7 +1757,7 @@ final class FilesTab extends AbstractRepoTab
 
     private function isFilePreviewLoading(int $cols): bool
     {
-        $key = $this->filePath.':'.$cols;
+        $key = $this->filePath . ':' . $cols;
         if (null !== $this->filePreviewCache && $this->filePreviewCache['key'] === $key) {
             return false;
         }
@@ -1030,7 +1790,7 @@ final class FilesTab extends AbstractRepoTab
      */
     private function filePreviewLines(int $cols): array
     {
-        $key = $this->filePath.':'.$cols;
+        $key = $this->filePath . ':' . $cols;
         if (null === $this->filePreviewCache || $this->filePreviewCache['key'] !== $key) {
             $content = implode("\n", $this->fileRaw);
             if ($this->ctx->renderer->isAvailable()) {
@@ -1064,13 +1824,90 @@ final class FilesTab extends AbstractRepoTab
      */
     private function paintRefs(int $cols, int $rows): array
     {
+        [$listW, $previewW] = $this->refsSplit($cols);
+        $bodyRows = max(1, $rows - 1);
+
         $items = [];
         foreach ($this->refs as $loc) {
-            $items[] = ['label' => $loc->path, 'meta' => ($loc->line + 1).':'.($loc->col + 1)];
+            $items[] = ['label' => $loc->path, 'meta' => ($loc->line + 1) . ':' . ($loc->col + 1)];
         }
-        $header = "\e[2m".Screen::fit('  '.\count($this->refs).' reference(s)', $cols)."\e[0m";
+        $listHeader = "\e[2m" . Screen::fit('  ' . \count($this->refs) . ' reference(s)', $listW) . "\e[0m";
+        $listLines = array_merge([$listHeader], Screen::listView($items, $this->refSel, $bodyRows, $listW));
 
-        return array_merge([$header], Screen::listView($items, $this->refSel, max(1, $rows - 1), $cols));
+        if ($previewW <= 0) {
+            return $listLines;
+        }
+
+        $previewLines = $this->paintRefPreview($previewW, $bodyRows);
+
+        $joined = [];
+        $total = max(\count($listLines), \count($previewLines));
+        for ($i = 0; $i < $total; ++$i) {
+            $left = $listLines[$i] ?? Screen::blank($listW);
+            $right = $previewLines[$i] ?? Screen::blank($previewW);
+            $joined[] = Screen::fit($left, $listW) . "\e[2m│\e[0m" . $right;
+        }
+
+        return $joined;
+    }
+
+    /**
+     * Renders the file-content preview pane for the selected reference,
+     * centered on the referenced line. Returns $bodyRows + 1 lines (a header
+     * plus body) to align with the list pane.
+     *
+     * @return list<string>
+     */
+    private function paintRefPreview(int $previewW, int $bodyRows): array
+    {
+        $loc = $this->refs[$this->refSel] ?? null;
+        if (null === $loc) {
+            $out = [Screen::blank($previewW)];
+            for ($r = 0; $r < $bodyRows; ++$r) {
+                $out[] = Screen::blank($previewW);
+            }
+
+            return $out;
+        }
+
+        $header = "\e[2m" . Screen::fit('  ' . $loc->path . ':' . ($loc->line + 1), $previewW) . "\e[0m";
+        $rawLines = $this->refsPreviewCache[$loc->path] ?? null;
+        if (null === $rawLines && $loc->path === $this->filePath) {
+            $rawLines = $this->fileRaw;
+        }
+
+        $body = [];
+        if (null === $rawLines) {
+            $spin = Screen::spinnerBody($this->ctx->spinner, 'Loading preview...', $previewW);
+            for ($r = 0; $r < $bodyRows; ++$r) {
+                $body[] = $spin[$r] ?? Screen::blank($previewW);
+            }
+        } elseif ([] === $rawLines) {
+            for ($r = 0; $r < $bodyRows; ++$r) {
+                $body[] = 0 === $r ? Screen::fit('  (empty or unreadable)', $previewW) : Screen::blank($previewW);
+            }
+        } else {
+            $count = \count($rawLines);
+            $gutter = max(3, \strlen((string) $count));
+            $codeWidth = max(1, $previewW - $gutter - 2);
+            $top = $count > $bodyRows ? max(0, min($loc->line - intdiv($bodyRows, 2), $count - $bodyRows)) : 0;
+            for ($r = 0; $r < $bodyRows; ++$r) {
+                $idx = $top + $r;
+                if ($idx >= $count) {
+                    $body[] = Screen::blank($previewW);
+                    continue;
+                }
+                $num = str_pad((string) ($idx + 1), $gutter, ' ', \STR_PAD_LEFT);
+                if ($idx === $loc->line) {
+                    $g = "\e[7m" . $num . '▶' . "\e[0m" . ' ';
+                } else {
+                    $g = "\e[2m" . $num . '│' . "\e[0m" . ' ';
+                }
+                $body[] = Screen::fit($g . Screen::truncate($rawLines[$idx], $codeWidth), $previewW);
+            }
+        }
+
+        return array_merge([$header], $body);
     }
 
     /**
@@ -1079,7 +1916,13 @@ final class FilesTab extends AbstractRepoTab
     private function paintEditor(int $cols, int $rows): array
     {
         $tag = $this->isNewFile ? '[NEW]' : '[EDIT]';
-        $label = $tag.' '.$this->editPath;
+        $label = $tag . ' ' . $this->editPath;
+
+        if (null !== $this->editorHighlightJob) {
+            $crumb = "\e[2m" . Screen::fit('  ' . $label, $cols) . "\e[0m";
+
+            return array_merge([$crumb], Screen::spinnerBody($this->ctx->spinner, 'Preparing editor...', $cols));
+        }
 
         if ($this->editorDirty) {
             $this->refreshEditorHighlighting();
@@ -1111,16 +1954,16 @@ final class FilesTab extends AbstractRepoTab
     {
         $title = 'New File';
         $boxWidth = min(60, max(40, $cols - 4));
-        $dir = '' === $this->ctx->subpath ? '/' : '/'.$this->ctx->subpath;
+        $dir = '' === $this->ctx->subpath ? '/' : '/' . $this->ctx->subpath;
 
         $lines = [
             '',
-            '  '.Theme::style('Directory: ', Theme::MUTED).Theme::style($dir, Theme::FG),
+            '  ' . Theme::style('Directory: ', Theme::MUTED) . Theme::style($dir, Theme::FG),
             '',
-            '  '.Theme::style('File path:', Theme::BLUE, bold: true),
-            '  > '.$this->newFilePathInput.'▏',
+            '  ' . Theme::style('File path:', Theme::BLUE, bold: true),
+            '  > ' . $this->newFilePathInput . '▏',
             '',
-            '  '.Theme::style('Enter: open editor · Esc: cancel', Theme::MUTED, italic: true),
+            '  ' . Theme::style('Enter: open editor · Esc: cancel', Theme::MUTED, italic: true),
         ];
 
         $box = Screen::box($title, $lines, $boxWidth);
@@ -1138,9 +1981,9 @@ final class FilesTab extends AbstractRepoTab
 
         $lines = [
             '',
-            '  '.Theme::style('Delete '.$this->deleteTargetPath.'?', Theme::SELECTOR, bold: true),
+            '  ' . Theme::style('Delete ' . $this->deleteTargetPath . '?', Theme::SELECTOR, bold: true),
             '',
-            '  '.Theme::style('y: confirm delete · n/Esc: cancel', Theme::MUTED, italic: true),
+            '  ' . Theme::style('y: confirm delete · n/Esc: cancel', Theme::MUTED, italic: true),
         ];
 
         $box = Screen::box($title, $lines, $boxWidth);
@@ -1154,8 +1997,8 @@ final class FilesTab extends AbstractRepoTab
     private function paintCommitPrompt(int $cols, int $rows): array
     {
         $authorName = $this->ctx->actor?->username() ?? 'anonymous';
-        $authorEmail = $authorName.'@noreply.codes.sh';
+        $authorEmail = $authorName . '@noreply.codes.sh';
 
-        return $this->commitForm->paint($cols, $rows, $authorName.' <'.$authorEmail.'>', $this->editPath);
+        return $this->commitForm->paint($cols, $rows, $authorName . ' <' . $authorEmail . '>', $this->editPath);
     }
 }

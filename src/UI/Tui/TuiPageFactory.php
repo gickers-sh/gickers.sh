@@ -8,19 +8,19 @@ use App\Access\Application\ServerPolicy;
 use App\CodeIntel\Application\Query\CodeIntelQuery;
 use App\Identity\Domain\Model\User;
 use App\Identity\Domain\UserStore;
-use App\PullRequest\Application\MergePullRequest;
 use App\PullRequest\Application\ClosePullRequest;
 use App\PullRequest\Application\CommentPullRequest;
 use App\PullRequest\Application\DeletePullRequest;
+use App\PullRequest\Application\MergePullRequest;
 use App\PullRequest\Application\OpenPullRequest;
+use App\PullRequest\Application\Query\PullRequestQuery;
 use App\PullRequest\Application\ReopenPullRequest;
 use App\PullRequest\Application\UpdatePullRequest;
-use App\PullRequest\Application\Query\PullRequestQuery;
 use App\Repo\Application\CreateRepo;
 use App\Repo\Application\DeleteFile;
-use App\Repo\Application\WriteFile;
 use App\Repo\Application\Query\RepoQuery;
 use App\Repo\Application\UpdateRepoSettings;
+use App\Repo\Application\WriteFile;
 use App\Repo\Domain\Git\GitRepository;
 use App\Repo\Domain\RepoDirectory;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
@@ -29,6 +29,7 @@ use App\UI\Tui\Page\AdminPage;
 use App\UI\Tui\Page\RepoPage;
 use App\UI\Tui\Page\SelectionPage;
 use App\UI\Tui\Render\TermstrapRenderer;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Tui\Tui;
 
 /**
@@ -59,16 +60,18 @@ final class TuiPageFactory
         private readonly ?DeletePullRequest $deletePullRequest = null,
         private readonly ?CommentPullRequest $commentPullRequest = null,
         private readonly ?UpdatePullRequest $updatePullRequest = null,
-    ) {}
+        private readonly ?LoggerInterface $logger = null,
+    ) {
+    }
 
     public function createRoot(Tui $tui, ?User $actor): RootUI
     {
-        return new RootUI($tui, $this, $actor, selectionAvailable: true);
+        return new RootUI($tui, $this, $actor, selectionAvailable: true, logger: $this->logger);
     }
 
     public function createBrowseRoot(Tui $tui, ?User $actor): RootUI
     {
-        return new RootUI($tui, $this, $actor, selectionAvailable: false);
+        return new RootUI($tui, $this, $actor, selectionAvailable: false, logger: $this->logger);
     }
 
     public function selectionPage(?User $actor): SelectionPage

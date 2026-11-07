@@ -9,7 +9,7 @@ use App\Shared\Domain\Exception\Conflict;
 use App\Shared\Domain\Exception\InvalidInput;
 use App\Shared\Domain\Exception\NotFound;
 use App\UI\Tui\Input\Keys;
-use App\UI\Tui\Render\InlineEditor;
+use App\UI\Tui\Render\Editor;
 use App\UI\Tui\Render\Screen;
 use App\UI\Tui\Render\Theme;
 
@@ -110,7 +110,7 @@ final class SettingsTab extends AbstractRepoTab
             return true;
         }
 
-        if (InlineEditor::isCtrlS($seq)) {
+        if (Editor::isCtrlS($seq)) {
             $lines = explode("\n", $this->settingsForm['description']);
             if (\count($lines) > 5) {
                 $this->error = 'La description ne peut pas dépasser 5 lignes';
@@ -250,7 +250,7 @@ final class SettingsTab extends AbstractRepoTab
                 $this->settingsForm['private'],
                 $this->settingsForm['hidden'],
             );
-        } catch (AccessDenied | NotFound | Conflict | InvalidInput $e) {
+        } catch (AccessDenied|NotFound|Conflict|InvalidInput $e) {
             $this->error = $e->getMessage();
             $this->ctx->flash = $e->getMessage();
 
@@ -266,14 +266,15 @@ final class SettingsTab extends AbstractRepoTab
     {
         return null !== $this->ctx->db && null !== $this->ctx->actor;
     }
+
     public function paintBody(int $cols, int $rows): array
     {
         if (null === $this->ctx->db) {
-            return array_map(static fn(string $l): string => Screen::fit($l, $cols), [
+            return array_map(static fn (string $l): string => Screen::fit($l, $cols), [
                 '',
                 '  Local repository (not registered on this server).',
-                '  Name         ' . $this->ctx->name,
-                '  Default ref  ' . $this->ctx->git->defaultBranch,
+                '  Name         '.$this->ctx->name,
+                '  Default ref  '.$this->ctx->git->defaultBranch,
             ]);
         }
 
@@ -293,14 +294,14 @@ final class SettingsTab extends AbstractRepoTab
     private function paintEditingCard(int $cardWidth, int $innerWidth, int $cols): array
     {
         $badge = Screen::badge('EDITING', '#1a1b26', '#ff9e64', bold: true);
-        $header = '  ' . Theme::style('Repository settings', Theme::BLUE, bold: true) . '  ' . $badge;
+        $header = '  '.Theme::style('Repository settings', Theme::BLUE, bold: true).'  '.$badge;
 
         $fieldHeader = function (int $field, string $name): string {
             if ($this->settingsField === $field) {
-                return '  ' . Theme::style('› ' . $name, Theme::BLUE, bold: true);
+                return '  '.Theme::style('› '.$name, Theme::BLUE, bold: true);
             }
 
-            return '    ' . Theme::style($name, Theme::MUTED);
+            return '    '.Theme::style($name, Theme::MUTED);
         };
 
         $toggleRow = function (int $field, string $label, bool $checked, string $description) use ($innerWidth): string {
@@ -314,14 +315,14 @@ final class SettingsTab extends AbstractRepoTab
             if ('' !== $description) {
                 $avail = $innerWidth - Screen::width($prefix) - 2;
                 if ($avail > 10) {
-                    $prefix .= '  ' . Theme::style(Screen::truncate($description, $avail), Theme::MUTED, italic: true);
+                    $prefix .= '  '.Theme::style(Screen::truncate($description, $avail), Theme::MUTED, italic: true);
                 }
             }
 
             return $prefix;
         };
 
-        $descHint = $this->settingsField === self::FIELD_DESCRIPTION
+        $descHint = self::FIELD_DESCRIPTION === $this->settingsField
             ? Theme::style(' (shift+enter/ctrl+j: new line, max 5 lines)', Theme::MUTED, italic: true)
             : '';
 
@@ -338,28 +339,27 @@ final class SettingsTab extends AbstractRepoTab
             $header,
             '',
             $fieldHeader(self::FIELD_PROJECT_NAME, 'Project name'),
-            '    > ' . $this->settingsForm['projectName'] . (self::FIELD_PROJECT_NAME === $this->settingsField ? '▌' : ''),
+            '    > '.Screen::truncate($this->settingsForm['projectName'], max(10, $innerWidth - 8)).(self::FIELD_PROJECT_NAME === $this->settingsField ? '▌' : ''),
             '',
-            $fieldHeader(self::FIELD_DESCRIPTION, 'Description') . $descHint,
+            $fieldHeader(self::FIELD_DESCRIPTION, 'Description').$descHint,
         ];
 
         $descLines = explode("\n", $this->settingsForm['description']);
         foreach ($descLines as $i => $dl) {
             $isLast = $i === \count($descLines) - 1;
             $cursor = (self::FIELD_DESCRIPTION === $this->settingsField && $isLast) ? '▌' : '';
-            $lines[] = '    > ' . $dl . $cursor;
+            $lines[] = '    > '.Screen::truncate($dl, max(10, $innerWidth - 8)).$cursor;
         }
-
         if (null !== $this->error && '' !== $this->error) {
-            $lines[] = '    ' . "\e[31;1m" . $this->error . "\e[0m";
+            $lines[] = '    '."\e[31;1m".$this->error."\e[0m";
         }
 
         $lines[] = '';
-        $lines[] = '  ' . Theme::style('Visibility & Access', Theme::BLUE, bold: true);
+        $lines[] = '  '.Theme::style('Visibility & Access', Theme::BLUE, bold: true);
         $lines[] = $toggleRow(self::FIELD_PRIVATE, 'Private', $this->settingsForm['private'], '(restricted to authorized collaborators)');
         $lines[] = $toggleRow(self::FIELD_HIDDEN, 'Hidden', $this->settingsForm['hidden'], '(hidden from public repository lists)');
         $lines[] = '';
-        $lines[] = '  ' . Theme::style($hint, Theme::MUTED, italic: true);
+        $lines[] = '  '.Theme::style($hint, Theme::MUTED, italic: true);
 
         return Screen::box('', $lines, $cardWidth);
     }
@@ -375,10 +375,10 @@ final class SettingsTab extends AbstractRepoTab
         $badge = $admin
             ? Screen::badge('ADMIN', Theme::FG, Theme::HIGHLIGHT)
             : Screen::badge('READ-ONLY', Theme::MUTED2, Theme::BORDER);
-        $header = '  ' . Theme::style('Repository settings', Theme::BLUE, bold: true) . '  ' . $badge;
+        $header = '  '.Theme::style('Repository settings', Theme::BLUE, bold: true).'  '.$badge;
 
         $keyWidth = 14;
-        $renderKV = function (string $key, string $val, bool $isSpecial = false) use ($keyWidth, $innerWidth): string {
+        $renderKV = static function (string $key, string $val, bool $isSpecial = false) use ($keyWidth, $innerWidth): string {
             $keyPadded = Theme::style(Screen::fit($key, $keyWidth), Theme::MUTED);
             if ($isSpecial) {
                 return sprintf('  %s %s', $keyPadded, $val);
@@ -394,7 +394,7 @@ final class SettingsTab extends AbstractRepoTab
                 }
                 $indent = str_repeat(' ', $keyWidth + 1);
 
-                return sprintf('  %s %s', $keyPadded, Theme::style(implode("\n  " . $indent, $lines), Theme::FG));
+                return sprintf('  %s %s', $keyPadded, Theme::style(implode("\n  ".$indent, $lines), Theme::FG));
             }
 
             if ($avail > 6 && Screen::width($val) > $avail) {
@@ -428,17 +428,17 @@ final class SettingsTab extends AbstractRepoTab
             '',
             $header,
             '',
-            '  ' . Theme::style('General Information', Theme::BLUE, bold: true),
+            '  '.Theme::style('General Information', Theme::BLUE, bold: true),
             $renderKV('Name', $this->ctx->name, false),
             $renderKV('Project name', $projectName, !str_contains($projectName, '(none)')),
             $renderKV('Description', $description, !str_contains($description, '(none)')),
             '',
-            '  ' . Theme::style('Visibility & Type', Theme::BLUE, bold: true),
+            '  '.Theme::style('Visibility & Type', Theme::BLUE, bold: true),
             $renderKV('Access', $accessBadge, true),
             $renderKV('Listing', $visibilityBadge, true),
             $renderKV('Type', $mirrorBadge, true),
             '',
-            '  ' . Theme::style($admin ? 'press e to edit settings' : 'read-only (write access required)', Theme::MUTED, italic: true),
+            '  '.Theme::style($admin ? 'press e to edit settings' : 'read-only (write access required)', Theme::MUTED, italic: true),
         ];
 
         return Screen::box('', $lines, $cardWidth);

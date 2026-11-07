@@ -39,6 +39,7 @@ final class Keys
     public const CTRL_F = 'ctrl-f';
     public const CTRL_B = 'ctrl-b';
     public const CTRL_P = 'ctrl-p';
+    public const CTRL_N = 'ctrl-n';
     private static ?KeyParser $parser = null;
 
     /**
@@ -72,6 +73,7 @@ final class Keys
             "\x06" => self::CTRL_F,
             "\x02" => self::CTRL_B,
             "\x10" => self::CTRL_P,
+            "\x0e" => self::CTRL_N,
             default => '',
         };
         if ('' !== $legacy) {
@@ -111,9 +113,11 @@ final class Keys
             'ctrl+f' => self::CTRL_F,
             'ctrl+b' => self::CTRL_B,
             'ctrl+p' => self::CTRL_P,
+            'ctrl+n' => self::CTRL_N,
             default => '',
         };
     }
+
     /**
      * Whether the sequence is a Kitty key-release event, which must not act as a key press.
      */

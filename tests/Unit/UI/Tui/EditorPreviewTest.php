@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Unit\UI\Tui;
 
 use App\UI\Tui\Input\Keys;
-use App\UI\Tui\Render\InlineEditor;
+use App\UI\Tui\Render\Editor;
 use App\UI\Tui\Render\MarkdownRenderer;
 use PHPUnit\Framework\TestCase;
 
@@ -15,7 +15,7 @@ use PHPUnit\Framework\TestCase;
  * line stays raw source, fenced code is never Markdown-rendered, preview is
  * Markdown-only, and Ctrl+P cycles inline -> full -> off -> inline.
  */
-final class InlineEditorPreviewTest extends TestCase
+final class EditorPreviewTest extends TestCase
 {
     private function renderer(): FakeMarkdownRenderer
     {
@@ -25,7 +25,7 @@ final class InlineEditorPreviewTest extends TestCase
     /**
      * @return list<string>
      */
-    private function plainRows(InlineEditor $ed, int $cols = 60, int $rows = 10): array
+    private function plainRows(Editor $ed, int $cols = 60, int $rows = 10): array
     {
         $out = [];
         foreach ($ed->paint('README.md', $cols, $rows) as $row) {
@@ -38,7 +38,7 @@ final class InlineEditorPreviewTest extends TestCase
     public function testInlineModeRendersNonCursorLinesAndLeavesCursorLineRaw(): void
     {
         $renderer = $this->renderer();
-        $ed = new InlineEditor();
+        $ed = new Editor();
         $ed->setContent("# Title\nsome *text*\ntail");
         $ed->enableMarkdownPreview($renderer, 'README.md');
         $ed->moveTo(1, 2); // cursor on "some *text*"
@@ -58,7 +58,7 @@ final class InlineEditorPreviewTest extends TestCase
     public function testFencedCodeIsNotMarkdownRendered(): void
     {
         $renderer = $this->renderer();
-        $ed = new InlineEditor();
+        $ed = new Editor();
         $ed->setContent("intro\n```\ncode line\n```\nend");
         $ed->enableMarkdownPreview($renderer, 'README.md');
         $ed->moveTo(0, 0); // cursor on "intro" so the block is all inactive
@@ -74,7 +74,7 @@ final class InlineEditorPreviewTest extends TestCase
     public function testListLinesRenderedAndStayLineAligned(): void
     {
         $renderer = $this->renderer();
-        $ed = new InlineEditor();
+        $ed = new Editor();
         $ed->setContent("header\n\n- item 1\n- item 2\n\nfooter");
         $ed->enableMarkdownPreview($renderer, 'README.md');
         $ed->moveTo(0, 0); // cursor on header, so items 1 and 2 are inactive
@@ -99,7 +99,7 @@ final class InlineEditorPreviewTest extends TestCase
     public function testCyclePreviewAndFullModeReadOnly(): void
     {
         $renderer = $this->renderer();
-        $ed = new InlineEditor();
+        $ed = new Editor();
         $ed->setContent("# Title\nbody line");
         $ed->enableMarkdownPreview($renderer, 'README.md');
         $ed->moveTo(1, 0);
@@ -152,8 +152,8 @@ final class InlineEditorPreviewTest extends TestCase
     public function testPreviewUnsupportedForNonMarkdown(): void
     {
         $renderer = $this->renderer();
-        $ed = new InlineEditor();
-        $ed->setContent("package main");
+        $ed = new Editor();
+        $ed->setContent('package main');
         $ed->enableMarkdownPreview($renderer, 'main.go');
 
         self::assertFalse($ed->previewSupported());
@@ -189,13 +189,84 @@ final class InlineEditorPreviewTest extends TestCase
             }
         };
 
-        $ed = new InlineEditor();
+        $ed = new Editor();
         $ed->setContent("# Hello\nworld");
         $ed->enableMarkdownPreview($renderer, 'README.md');
 
         $rows = $this->plainRows($ed);
         self::assertStringContainsString('# Hello', $rows[1]);
         self::assertStringContainsString('world', $rows[2]);
+    }
+
+    public function testSoftWrapSplitsLongLineVisuallyWithoutAlteringUnderlyingData(): void
+    {
+        $ed = new Editor();
+        $longText = 'This is a long line of text that should wrap visually without breaking the underlying string';
+        $ed->setContent($longText);
+
+        // The underlying data must remain 1 single line
+        self::assertCount(1, $ed->lines());
+        self::assertSame($longText, $ed->lines()[0]);
+        self::assertSame($longText."\n", $ed->value());
+
+        // paintLines with cols=30 will wrap the text visually into multiple rows
+        $rows = $ed->paintLines(30, 6, true);
+        self::assertCount(6, $rows);
+        $plainRow0 = (string) preg_replace('/\e\[[0-9;]*m/', '', $rows[0]);
+        $plainRow1 = (string) preg_replace('/\e\[[0-9;]*m/', '', $rows[1]);
+        // First visual row has line number '1' and first chunk
+        self::assertStringContainsString('1', $plainRow0);
+        self::assertStringContainsString('This is a long line of', $plainRow0);
+        // Continuation visual rows do NOT repeat the line number '1'
+        self::assertStringContainsString('text that should wrap', $plainRow1);
+        self::assertStringNotContainsString('1', $plainRow1);
+        // Underlying content is still exactly 1 line
+        self::assertCount(1, $ed->lines());
+        self::assertSame($longText."\n", $ed->value());
+    }
+
+    public function testSoftWrapInPaintWrapsLongLinesWithoutRepeatingLineNumber(): void
+    {
+        $ed = new Editor();
+        $longLine = 'Image: Soft Serve screencast -> https://github.com/charmbracelet/soft-serve';
+        $ed->setContent("intro\n".$longLine."\nfooter");
+
+        // Paint with cols=50 so $longLine must wrap across 2 visual rows
+        $rows = $ed->paint('README.md', 50, 10);
+        $plain = array_map(static fn (string $r): string => (string) preg_replace('/\e\[[0-9;]*m/', '', $r), $rows);
+
+        // Line 1 is "intro"
+        self::assertStringContainsString('1', $plain[1]);
+        self::assertStringContainsString('intro', $plain[1]);
+
+        // Line 2 starts with line number '2' and first chunk
+        self::assertStringContainsString('2', $plain[2]);
+        self::assertStringContainsString('Image: Soft Serve screencast ->', $plain[2]);
+
+        // Continuation line displays the rest of the URL without line number '2' or '3'
+        self::assertStringContainsString('https://github.com/charmbracelet/soft-serve', $plain[3]);
+        $gutterPart = substr($plain[3], 0, 6);
+        self::assertStringNotContainsString('2', $gutterPart);
+        self::assertStringNotContainsString('3', $gutterPart);
+
+        // Next line has line number '3'
+        self::assertStringContainsString('3', $plain[4]);
+        self::assertStringContainsString('footer', $plain[4]);
+    }
+
+    public function testEnableMarkdownPreviewSupportsInitialModeOff(): void
+    {
+        $renderer = $this->renderer();
+        $ed = new Editor();
+        $ed->setContent("# Title\nsome *text*");
+        $ed->enableMarkdownPreview($renderer, 'description.md', 'off');
+
+        self::assertSame('off', $ed->previewMode());
+        self::assertFalse($ed->isLivePreview());
+
+        $rows = $this->plainRows($ed);
+        self::assertStringContainsString('# Title', $rows[1]);
+        self::assertStringNotContainsString('R<# Title>', $rows[1]);
     }
 }
 
@@ -214,7 +285,7 @@ final class FakeMarkdownRenderer implements MarkdownRenderer
         $lines = preg_split('/\r\n|\r|\n/', $content) ?: [];
         $out = [];
         foreach ($lines as $line) {
-            $out[] = 'R<' . $line . '>';
+            $out[] = 'R<'.$line.'>';
         }
 
         return implode("\n", $out);
@@ -224,6 +295,6 @@ final class FakeMarkdownRenderer implements MarkdownRenderer
     {
         $this->renderedBlocks[] = $snippet;
 
-        return 'R<' . $snippet . '>';
+        return 'R<'.$snippet.'>';
     }
 }

@@ -6,7 +6,10 @@ namespace App\UI\Tui;
 
 use App\Identity\Domain\Model\User;
 use App\UI\Tui\Input\Keys;
+use App\UI\Tui\Input\MouseEvent;
 use App\UI\Tui\Page\Page;
+use App\UI\Tui\Page\SelectionPage;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Tui\Event\InputEvent;
 use Symfony\Component\Tui\Event\TickEvent;
 use Symfony\Component\Tui\Tui;
@@ -30,9 +33,31 @@ final class RootUI implements TuiHost
         private readonly ?User $actor,
         /** When false (soft:browse of a local repo) there is no feed, so "back" quits. */
         private readonly bool $selectionAvailable = true,
+        private readonly ?LoggerInterface $logger = null,
     ) {
         $this->tui->addListener(function (InputEvent $event): void {
             if (null === $this->active) {
+                return;
+            }
+            $click = MouseEvent::tryParse($event->getData());
+            if (null !== $click) {
+                if ($click->press) {
+                    // Symbol navigation: Ctrl/Alt/Cmd+left-click, or a middle/right
+                    // click, mirror the Go ctrl+click go-to-definition gesture.
+                    $nav = (MouseEvent::BUTTON_LEFT === $click->button && ($click->ctrl || $click->alt || $click->shift))
+                        || MouseEvent::BUTTON_MIDDLE === $click->button
+                        || MouseEvent::BUTTON_RIGHT === $click->button;
+                    if (
+                        (MouseEvent::BUTTON_LEFT === $click->button || $nav)
+                        && $this->active->handleClick($click->x, $click->y, $nav)
+                    ) {
+                        $this->active->sync();
+                        $this->tui->requestRender();
+                        $this->ensureBusyInterval();
+                    }
+                }
+                $event->stopPropagation();
+
                 return;
             }
             if (Keys::isRelease($event->getData())) {
@@ -102,8 +127,20 @@ final class RootUI implements TuiHost
     {
         try {
             $this->activate($this->factory->repoPageForName($this->actor, $name));
-        } catch (\Throwable) {
-            // denyRead / NotFound: the repo is not selectable, stay on the current page.
+        } catch (\Throwable $e) {
+            $this->logger?->warning(sprintf('TUI: Failed to open repository "%s": %s', $name, $e->getMessage()), [
+                'repo' => $name,
+                'actor' => $this->actor?->username(),
+                'exception' => $e,
+            ]);
+
+            if ($this->active instanceof SelectionPage) {
+                $msg = $e instanceof \RuntimeException && str_contains($e->getMessage(), 'does not exist')
+                    ? sprintf('Repository "%s" directory does not exist on disk.', $name)
+                    : sprintf('Cannot open repository "%s": %s', $name, $e->getMessage());
+
+                $this->active->setFlash($msg);
+            }
         }
     }
 

@@ -16,6 +16,8 @@ use App\Shared\Domain\Exception\Conflict;
 use App\Shared\Domain\Exception\InvalidInput;
 use App\Shared\Infrastructure\Config\ServerSettings;
 use App\UI\Tui\Input\Keys;
+use App\UI\Tui\Page\Repo\AbstractRepoTab;
+use App\UI\Tui\Render\Editor;
 use App\UI\Tui\Render\Screen;
 use App\UI\Tui\Render\Spinner;
 use App\UI\Tui\Render\TermstrapRenderer;
@@ -61,11 +63,26 @@ final class SelectionPage extends AbstractPage
     private Spinner $spinner;
     private bool $newRepoOpen = false;
     private bool $helpOpen = false;
+    private bool $fuzzyOpen = false;
+    private string $fuzzyQuery = '';
+    private int $fuzzySel = 0;
     /** @var array{name: string, description: string, private: bool} */
     private array $form = ['name' => '', 'description' => '', 'private' => false];
     private int $field = 0;
     private ?string $error = null;
     private ?string $flash = null;
+
+    /** @var array<int,int> painted-body-line → index into the currently displayed repo list */
+    private array $listRowItem = [];
+    /** @var list<Repo> the repo list currently painted (fuzzy-filtered or raw) */
+    private array $listDisplayRepos = [];
+    /** @var array{0:int,1:int,2:int}|null painted-body-lines of the new-repo modal fields [name, description, private] */
+    private ?array $modalFieldRows = null;
+
+    public function setFlash(string $flash): void
+    {
+        $this->flash = $flash;
+    }
 
     /** @var list<Repo> */
     private array $feed = [];
@@ -252,6 +269,9 @@ final class SelectionPage extends AbstractPage
         if ($this->newRepoOpen) {
             return $this->handleModalKey($seq);
         }
+        if ($this->fuzzyOpen) {
+            return $this->handleFuzzyKey($seq);
+        }
 
         $tok = Keys::normalize($seq);
         $txt = Keys::text($seq);
@@ -263,10 +283,12 @@ final class SelectionPage extends AbstractPage
 
                 return true;
             case Keys::TAB:
+                $this->closeFuzzySearch();
                 $this->tab = ($this->tab + 1) % \count(self::TABS);
 
                 return true;
             case Keys::BACKTAB:
+                $this->closeFuzzySearch();
                 $this->tab = ($this->tab + \count(self::TABS) - 1) % \count(self::TABS);
 
                 return true;
@@ -327,8 +349,20 @@ final class SelectionPage extends AbstractPage
                 $this->openSelected();
 
                 return true;
-        }
+            case Keys::RIGHT:
+                if (self::TAB_FEED === $this->tab || self::TAB_REPOS === $this->tab) {
+                    $this->openSelected();
 
+                    return true;
+                }
+                break;
+            case Keys::CTRL_P:
+                if (self::TAB_FEED === $this->tab || self::TAB_REPOS === $this->tab) {
+                    $this->openFuzzySearch();
+
+                    return true;
+                }
+        }
         switch ($txt) {
             case 'q':
                 $this->host->quit();
@@ -408,9 +442,182 @@ final class SelectionPage extends AbstractPage
                 }
 
                 return true;
+            case '/':
+                if (self::TAB_FEED === $this->tab || self::TAB_REPOS === $this->tab) {
+                    $this->openFuzzySearch();
+
+                    return true;
+                }
+                break;
+            case 'l':
+                if (self::TAB_FEED === $this->tab || self::TAB_REPOS === $this->tab) {
+                    $this->openSelected();
+
+                    return true;
+                }
+                break;
         }
 
         return false;
+    }
+
+    private function openFuzzySearch(): void
+    {
+        $this->fuzzyOpen = true;
+        $this->fuzzyQuery = '';
+        $this->fuzzySel = 0;
+    }
+
+    private function closeFuzzySearch(): void
+    {
+        $this->fuzzyOpen = false;
+        $this->fuzzyQuery = '';
+        $this->fuzzySel = 0;
+    }
+
+    private function handleFuzzyKey(string $seq): bool
+    {
+        $tok = Keys::normalize($seq);
+        $txt = Keys::text($seq);
+
+        if (Keys::CTRL_C === $tok) {
+            $this->host->quit();
+
+            return true;
+        }
+
+        if (Keys::ESCAPE === $tok) {
+            $this->closeFuzzySearch();
+
+            return true;
+        }
+
+        if (Keys::TAB === $tok) {
+            $this->closeFuzzySearch();
+            $this->tab = ($this->tab + 1) % \count(self::TABS);
+
+            return true;
+        }
+
+        if (Keys::BACKTAB === $tok) {
+            $this->closeFuzzySearch();
+            $this->tab = ($this->tab + \count(self::TABS) - 1) % \count(self::TABS);
+
+            return true;
+        }
+
+        if (Keys::CTRL_U === $tok) {
+            $this->fuzzyQuery = '';
+            $this->fuzzySel = 0;
+
+            return true;
+        }
+
+        if (Keys::BACKSPACE === $tok) {
+            if ('' !== $this->fuzzyQuery) {
+                $this->fuzzyQuery = mb_substr($this->fuzzyQuery, 0, -1);
+                $this->fuzzySel = 0;
+            } else {
+                $this->closeFuzzySearch();
+            }
+
+            return true;
+        }
+
+        $repos = $this->fuzzyRepos($this->currentList());
+        $count = \count($repos);
+
+        if (Keys::UP === $tok || Keys::CTRL_P === $tok) {
+            $this->fuzzySel = max(0, $this->fuzzySel - 1);
+
+            return true;
+        }
+
+        if (Keys::DOWN === $tok || Keys::CTRL_N === $tok) {
+            $this->fuzzySel = max(0, min($this->fuzzySel + 1, max(0, $count - 1)));
+
+            return true;
+        }
+
+        if (Keys::PAGE_UP === $tok) {
+            $this->fuzzySel = max(0, $this->fuzzySel - 10);
+
+            return true;
+        }
+
+        if (Keys::PAGE_DOWN === $tok) {
+            $this->fuzzySel = max(0, min($this->fuzzySel + 10, max(0, $count - 1)));
+
+            return true;
+        }
+
+        if (Keys::HOME === $tok) {
+            $this->fuzzySel = 0;
+
+            return true;
+        }
+
+        if (Keys::END === $tok) {
+            $this->fuzzySel = max(0, $count - 1);
+
+            return true;
+        }
+
+        if (Keys::ENTER === $tok) {
+            if ($count > 0) {
+                $repo = $repos[min($this->fuzzySel, $count - 1)];
+                $this->closeFuzzySearch();
+                $this->host->navigateToRepo($repo->nameString());
+            }
+
+            return true;
+        }
+
+        if (null !== $txt && '' !== $txt) {
+            $this->fuzzyQuery .= $txt;
+            $this->fuzzySel = 0;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @param list<Repo> $list
+     *
+     * @return list<Repo>
+     */
+    private function fuzzyRepos(array $list): array
+    {
+        $query = trim($this->fuzzyQuery);
+        if ('' === $query) {
+            return $list;
+        }
+
+        $scored = [];
+        foreach ($list as $idx => $repo) {
+            $score = AbstractRepoTab::fuzzyScoreFields($query, [
+                ['text' => $repo->nameString(), 'weight' => 3],
+                ['text' => $repo->projectName(), 'weight' => 3],
+                ['text' => $repo->owner()->username(), 'weight' => 2],
+                ['text' => $repo->description(), 'weight' => 2],
+                ['text' => $this->cloneCommand($repo), 'weight' => 1],
+            ]);
+            if (null !== $score) {
+                $scored[] = ['repo' => $repo, 'score' => $score, 'idx' => $idx];
+            }
+        }
+
+        usort($scored, static function (array $a, array $b): int {
+            if ($a['score'] !== $b['score']) {
+                return $b['score'] <=> $a['score'];
+            }
+
+            return $a['idx'] <=> $b['idx'];
+        });
+
+        return array_map(static fn(array $item): Repo => $item['repo'], $scored);
     }
 
     private function handleModalKey(string $seq): bool
@@ -420,8 +627,14 @@ final class SelectionPage extends AbstractPage
 
         if (Keys::ESCAPE === $tok) {
             $this->newRepoOpen = false;
-        } elseif (Keys::ENTER === $tok) {
+        } elseif (Editor::isCtrlS($seq)) {
             $this->submitNewRepo();
+        } elseif (Keys::ENTER === $tok) {
+            if (2 === $this->field) {
+                $this->submitNewRepo();
+            } else {
+                $this->field = ($this->field + 1) % 3;
+            }
         } elseif (Keys::TAB === $tok || Keys::DOWN === $tok) {
             $this->field = ($this->field + 1) % 3;
         } elseif (Keys::BACKTAB === $tok || Keys::UP === $tok) {
@@ -457,7 +670,7 @@ final class SelectionPage extends AbstractPage
                 trim($this->form['description']),
                 '',
             );
-        } catch (InvalidInput|Conflict|AccessDenied $e) {
+        } catch (InvalidInput | Conflict | AccessDenied $e) {
             $this->error = $e->getMessage();
 
             return;
@@ -467,7 +680,7 @@ final class SelectionPage extends AbstractPage
         $this->form = ['name' => '', 'description' => '', 'private' => false];
         $this->field = 0;
         $this->error = null;
-        $this->flash = 'Created '.$repo->nameString();
+        $this->flash = 'Created ' . $repo->nameString();
         $this->tab = self::TAB_REPOS;
         $this->load();
         $this->selectByName(self::TAB_REPOS, $repo->nameString());
@@ -531,9 +744,82 @@ final class SelectionPage extends AbstractPage
         };
     }
 
+    protected function onTabBarClick(int $line, int $col): bool
+    {
+        if (0 !== $line) {
+            return false;
+        }
+        // tabBarDots renders "[• ]label" segments joined by three spaces; walk the
+        // visible widths to find the tab under the cursor.
+        $pos = 0;
+        foreach (self::TABS as $i => $label) {
+            $text = ($i === $this->tab ? '• ' : '') . $label;
+            $len = Screen::width($text);
+            if ($col >= $pos && $col < $pos + $len) {
+                if ($i !== $this->tab) {
+                    $this->closeFuzzySearch();
+                    $this->tab = $i;
+                }
+
+                return true;
+            }
+            $pos += $len + 3; // three-space separator
+        }
+
+        return false;
+    }
+
+    protected function onBodyClick(int $line, int $col, bool $nav = false): bool
+    {
+        if ($this->newRepoOpen) {
+            $field = null === $this->modalFieldRows ? false : array_search($line, $this->modalFieldRows, true);
+            if (false === $field) {
+                return false;
+            }
+            if (2 === $field) {
+                if (2 === $this->field) {
+                    $this->form['private'] = !$this->form['private'];
+                } else {
+                    $this->field = 2;
+                }
+            } else {
+                $this->field = $field;
+            }
+
+            return true;
+        }
+
+        if (!isset($this->listRowItem[$line])) {
+            return false;
+        }
+        $idx = $this->listRowItem[$line];
+
+        if ($this->fuzzyOpen) {
+            if ($nav || $idx === $this->fuzzySel) {
+                $repo = $this->listDisplayRepos[$idx] ?? null;
+                if (null !== $repo) {
+                    $this->closeFuzzySearch();
+                    $this->host->navigateToRepo($repo->nameString());
+                }
+            } else {
+                $this->fuzzySel = $idx;
+            }
+
+            return true;
+        }
+
+        $wasSelected = $idx === $this->selected[$this->tab];
+        $this->selected[$this->tab] = $idx;
+        if ($nav || $wasSelected) {
+            $this->openSelected();
+        }
+
+        return true;
+    }
+
     protected function headerLines(int $cols): array
     {
-        return [' '.Screen::serverBadge($this->settings->name ?: 'Soft Serve'), ''];
+        return [' ' . Screen::serverBadge($this->settings->name ?: 'Soft Serve'), ''];
     }
 
     protected function tabBarLines(int $cols): array
@@ -547,11 +833,19 @@ final class SelectionPage extends AbstractPage
             return [Screen::helpLine([[trim($this->flash), '']], $cols)];
         }
         if ($this->newRepoOpen) {
-            return [Screen::helpLine([['enter', 'create'], ['tab', 'next field'], ['esc', 'cancel']], $cols)];
+            return [Screen::helpLine([['tab/↑/↓', 'field'], ['space', 'toggle'], ['ctrl+s/enter', 'create'], ['esc', 'cancel']], $cols)];
+        }
+        if ($this->fuzzyOpen) {
+            return [Screen::helpLine([
+                ['type', 'filter'],
+                ['↑/↓', 'move'],
+                ['enter', 'open'],
+                ['esc', 'close'],
+            ], $cols)];
         }
         if ($this->helpOpen) {
             return Screen::helpGrid([
-                [['tab', 'section']],
+                [['tab', 'section'], ['/', 'search']],
                 [['→/l', 'select']],
                 [['↑/k', 'up'], ['↓/j', 'down']],
                 [['g/home', 'go to start'], ['G/end', 'go to end']],
@@ -561,6 +855,7 @@ final class SelectionPage extends AbstractPage
 
         if (self::TAB_FEED === $this->tab || self::TAB_REPOS === $this->tab) {
             return [Screen::helpLine([
+                ['/', 'search'],
                 ['↑↓', 'navigate'],
                 ['tab', 'section'],
                 ['→/l', 'select'],
@@ -582,10 +877,19 @@ final class SelectionPage extends AbstractPage
     protected function paintBody(int $cols, int $rows): array
     {
         if ($this->newRepoOpen) {
-            $box = Screen::box('New repository', $this->modalLines(), min(60, max(20, $cols - 4)));
+            $modalWidth = min(60, max(20, $cols - 4));
+            $modalLines = $this->modalLines($modalWidth);
+            $box = Screen::box('New repository', $modalLines, $modalWidth);
+            // centerBlock vertical offset; box prepends a top border row, so the
+            // field rows (name, description, private) sit at top + 1/2/3.
+            $top = max(0, intdiv($rows - \count($box), 2));
+            $this->modalFieldRows = [$top + 1, $top + 2, $top + 3];
 
             return Screen::centerBlock($box, $cols, $rows);
         }
+        $this->modalFieldRows = null;
+        $this->listRowItem = [];
+        $this->listDisplayRepos = [];
 
         return match ($this->tab) {
             self::TAB_FEED => $this->feedBody($this->feed, 'No recent activity.', $cols, $rows),
@@ -608,18 +912,25 @@ final class SelectionPage extends AbstractPage
      */
     private function feedBody(array $list, string $empty, int $cols, int $rows): array
     {
-        if ([] === $list) {
-            return $this->messageBody($empty, $cols);
+        $headerLines = $this->fuzzyOpen ? [Screen::fuzzySearchBar($this->fuzzyQuery, $cols)] : [];
+        $bodyRows = max(1, $rows - \count($headerLines));
+
+        $displayList = $this->fuzzyOpen ? $this->fuzzyRepos($list) : $list;
+        if ([] === $displayList) {
+            $msg = $this->fuzzyOpen ? 'No matching repositories.' : $empty;
+
+            return array_merge($headerLines, $this->messageBody($msg, $cols));
         }
 
-        $sel = min($this->selected[$this->tab], \count($list) - 1);
+        $rawSel = $this->fuzzyOpen ? $this->fuzzySel : $this->selected[$this->tab];
+        $sel = min($rawSel, \count($displayList) - 1);
         $blocks = [];
-        foreach ($list as $i => $repo) {
+        foreach ($displayList as $i => $repo) {
             $blocks[] = Screen::repoItem(
                 $repo->nameString(),
                 trim($repo->description()),
                 $this->cloneCommand($repo),
-                'Updated '.$this->relativeTime($repo->updatedAt()),
+                'Updated ' . $this->relativeTime($repo->updatedAt()),
                 $i === $sel,
                 $cols,
             );
@@ -627,26 +938,41 @@ final class SelectionPage extends AbstractPage
 
         $lines = [];
         $blockStart = [];
+        /** @var array<int,int> absolute line index in $lines → block (repo) index */
+        $lineBlock = [];
         foreach ($blocks as $bi => $block) {
             if ($bi > 0) {
                 $lines[] = '';
             }
             $blockStart[$bi] = \count($lines);
             foreach ($block as $l) {
+                $lineBlock[\count($lines)] = $bi;
                 $lines[] = $l;
             }
         }
 
         $offset = 0;
-        if (\count($lines) > $rows) {
-            $offset = max(0, min(($blockStart[$sel] ?? 0) - 1, \count($lines) - $rows));
+        if (\count($lines) > $bodyRows) {
+            $offset = max(0, min(($blockStart[$sel] ?? 0) - 1, \count($lines) - $bodyRows));
         }
-        $view = \array_slice($lines, $offset, $rows);
-        while (\count($view) < $rows) {
+        $view = \array_slice($lines, $offset, $bodyRows);
+        while (\count($view) < $bodyRows) {
             $view[] = Screen::blank($cols);
         }
 
-        return $view;
+        // Map each painted body line (header offset included) back to a repo index
+        // so clicks hit the right item regardless of scroll offset.
+        $this->listDisplayRepos = $displayList;
+        $this->listRowItem = [];
+        $headerCount = \count($headerLines);
+        foreach ($view as $r => $_) {
+            $abs = $offset + $r;
+            if (isset($lineBlock[$abs])) {
+                $this->listRowItem[$headerCount + $r] = $lineBlock[$abs];
+            }
+        }
+
+        return array_merge($headerLines, $view);
     }
 
     private function cloneCommand(Repo $repo): string
@@ -656,7 +982,7 @@ final class SelectionPage extends AbstractPage
             return '';
         }
 
-        return 'git clone '.rtrim($url, '/').'/'.$repo->nameString().'.git';
+        return 'git clone ' . rtrim($url, '/') . '/' . $repo->nameString() . '.git';
     }
 
     private function relativeTime(\DateTimeImmutable $when): string
@@ -669,7 +995,7 @@ final class SelectionPage extends AbstractPage
             if ($diff >= $secs) {
                 $n = intdiv($diff, $secs);
 
-                return $n.' '.$unit.(1 === $n ? '' : 's').' ago';
+                return $n . ' ' . $unit . (1 === $n ? '' : 's') . ' ago';
             }
         }
 
@@ -699,7 +1025,7 @@ final class SelectionPage extends AbstractPage
         if ($rows > 0) {
             $percent = $maxScroll > 0 ? (int) round($top / $maxScroll * 100) : 100;
             $ind = Theme::style(sprintf('☰ %d%%', $percent), Theme::MUTED);
-            $out[$rows - 1] = Screen::fit(str_repeat(' ', max(0, $cols - Screen::width($ind) - 1)).$ind, $cols);
+            $out[$rows - 1] = Screen::fit(str_repeat(' ', max(0, $cols - Screen::width($ind) - 1)) . $ind, $cols);
         }
 
         return array_values($out);
@@ -770,44 +1096,48 @@ final class SelectionPage extends AbstractPage
 
         $lines = [
             '',
-            '  Username  '.$this->actor->username(),
-            '  Role      '.($this->actor->isAdmin() ? 'administrator' : 'user'),
-            '  Keys      '.\count($this->actor->publicKeys()),
+            '  Username  ' . $this->actor->username(),
+            '  Role      ' . ($this->actor->isAdmin() ? 'administrator' : 'user'),
+            '  Keys      ' . \count($this->actor->publicKeys()),
         ];
 
-        return array_map(static fn (string $l): string => Screen::fit($l, $cols), $lines);
+        return array_map(static fn(string $l): string => Screen::fit($l, $cols), $lines);
     }
 
     /**
      * @return list<string>
      */
-    private function modalLines(): array
+    private function modalLines(int $width = 60): array
     {
+        $innerWidth = max(16, $width - 4);
         $lines = [
-            $this->fieldRow('Name', $this->form['name'], 0 === $this->field),
-            $this->fieldRow('Description', $this->form['description'], 1 === $this->field),
+            $this->fieldRow('Name', $this->form['name'], 0 === $this->field, $innerWidth),
+            $this->fieldRow('Description', $this->form['description'], 1 === $this->field, $innerWidth),
             $this->toggleRow('Private', $this->form['private'], 2 === $this->field),
             '',
         ];
         $lines[] = null !== $this->error
-            ? "\e[31m! ".$this->error."\e[0m"
-            : 'Enter: create · Tab: next · Esc: cancel';
+            ? "\e[31m! " . $this->error . "\e[0m"
+            : Theme::style('Tab/↑/↓: field · Space: toggle · Ctrl+S/Enter: create · Esc: cancel', Theme::MUTED, italic: true);
 
         return $lines;
     }
 
-    private function fieldRow(string $label, string $value, bool $active): string
+    private function fieldRow(string $label, string $value, bool $active, int $maxWidth = 0): string
     {
         $cursor = $active ? '▏' : '';
-        $text = sprintf('%-12s %s%s', $label, $value, $cursor);
+        $labelPrefix = sprintf('%-12s ', $label);
+        $valWidth = max(4, $maxWidth - Screen::width($labelPrefix));
+        $valTrunc = $maxWidth > 0 ? Screen::truncate($value, $valWidth) : $value;
+        $text = $labelPrefix . $valTrunc . $cursor;
 
-        return $active ? "\e[1m".$text."\e[0m" : $text;
+        return $active ? "\e[1m" . $text . "\e[0m" : $text;
     }
 
     private function toggleRow(string $label, bool $value, bool $active): string
     {
         $text = sprintf('%-12s %s', $label, $value ? '[x]' : '[ ]');
 
-        return $active ? "\e[1m".$text.'  (space to toggle)'."\e[0m" : $text;
+        return $active ? "\e[1m" . $text . '  (space to toggle)' . "\e[0m" : $text;
     }
 }

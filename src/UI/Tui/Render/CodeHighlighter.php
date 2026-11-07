@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\UI\Tui\Render;
 
+use Symfony\Component\Process\Process;
 use Tempest\Highlight\Highlighter;
 use Tempest\Highlight\TerminalTheme;
 use Tempest\Highlight\Themes\EscapesTerminalTheme;
@@ -149,16 +150,42 @@ final class CodeHighlighter implements TerminalTheme
                     $out .= $part;
                 } elseif (Theme::RESET === $part) {
                     array_pop($stack);
-                    $out .= Theme::RESET . (end($stack) ?: '');
+                    $out .= Theme::RESET.(end($stack) ?: '');
                 } else {
                     $stack[] = $part;
                     $out .= $part;
                 }
             }
-            $lines[] = $out . Theme::RESET;
+            $lines[] = $out.Theme::RESET;
         }
 
         return $lines;
+    }
+
+    /**
+     * Starts a non-blocking PHP subprocess that runs {@see highlightLines()} and outputs
+     * a JSON array of ANSI lines (or null), avoiding blocking the TUI event loop on large files.
+     */
+    public function startHighlightProcess(string $path, string $content): Process
+    {
+        $autoload = \dirname(__DIR__, 4).'/vendor/autoload.php';
+        $script = 'require $argv[1];'
+            .'$payload = json_decode(stream_get_contents(STDIN), true);'
+            .'if (!is_array($payload)) { exit(1); }'
+            .'$h = new \App\UI\Tui\Render\CodeHighlighter();'
+            .'$res = $h->highlightLines((string) $payload["path"], (string) $payload["content"]);'
+            .'fwrite(STDOUT, json_encode($res, JSON_THROW_ON_ERROR));';
+
+        $payload = json_encode([
+            'path' => $path,
+            'content' => $content,
+        ], \JSON_THROW_ON_ERROR);
+
+        $process = new Process([\PHP_BINARY, '-r', $script, $autoload]);
+        $process->setInput($payload);
+        $process->start();
+
+        return $process;
     }
 
     public function before(TokenType $tokenType): string

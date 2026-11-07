@@ -50,7 +50,7 @@ final class BrowseCommand extends Command
         try {
             $git = $this->gitReader->openRepository($path);
         } catch (\Throwable $e) {
-            $output->writeln('<error>Failed to open git repository: ' . $e->getMessage() . '</error>');
+            $output->writeln('<error>Failed to open git repository: '.$e->getMessage().'</error>');
 
             return Command::FAILURE;
         }

@@ -144,6 +144,40 @@ CSS;
     }
 
     /**
+     * Starts a non-blocking PHP subprocess that renders a batch of snippets via {@see renderSnippet()}
+     * and outputs a JSON object mapping each key to its rendered ANSI string.
+     *
+     * @param array<string, string> $snippets key => raw snippet text
+     */
+    public function startRenderSnippetsBatchProcess(string $filename, array $snippets, int $width, string $docDefs = ''): Process
+    {
+        $autoload = \dirname(__DIR__, 4).'/vendor/autoload.php';
+        $script = 'require $argv[1];'
+            .'$payload = json_decode(stream_get_contents(STDIN), true);'
+            .'if (!is_array($payload)) { exit(1); }'
+            .'$r = new \App\UI\Tui\Render\TermstrapRenderer($payload["libraryPath"] ?? null);'
+            .'$out = [];'
+            .'foreach (($payload["snippets"] ?? []) as $k => $line) {'
+            .'    $out[$k] = $r->renderSnippet((string) $payload["filename"], (string) $line, (int) $payload["width"], (string) ($payload["docDefs"] ?? ""));'
+            .'}'
+            .'fwrite(STDOUT, json_encode($out, JSON_THROW_ON_ERROR));';
+
+        $payload = json_encode([
+            'libraryPath' => $this->libraryPath,
+            'filename' => $filename,
+            'snippets' => $snippets,
+            'width' => $width,
+            'docDefs' => $docDefs,
+        ], \JSON_THROW_ON_ERROR);
+
+        $process = new Process([\PHP_BINARY, '-r', $script, $autoload]);
+        $process->setInput($payload);
+        $process->start();
+
+        return $process;
+    }
+
+    /**
      * Renders a single line / snippet for live preview in the editor, matching
      * Go Soft Serve `pkg/ui/render/renderer.go:RenderSnippet`.
      */
@@ -207,7 +241,7 @@ CSS;
             $lines = explode("\n", $out);
             $target = '';
             foreach ($lines as $line) {
-                $stripped = preg_replace('/\e\[[0-9;]*m/', '', $line);
+                $stripped = preg_replace('/\e\[[0-9;]*m/', '', $line) ?? $line;
                 if ('' !== trim($stripped)) {
                     $target = rtrim($line, ' ');
                     break;

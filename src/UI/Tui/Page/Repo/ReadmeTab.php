@@ -6,7 +6,7 @@ namespace App\UI\Tui\Page\Repo;
 
 use App\UI\Tui\Input\Keys;
 use App\UI\Tui\Render\CommitForm;
-use App\UI\Tui\Render\InlineEditor;
+use App\UI\Tui\Render\Editor;
 use App\UI\Tui\Render\Screen;
 
 /**
@@ -17,19 +17,22 @@ final class ReadmeTab extends AbstractRepoTab
 {
     /** Rendered line count from the last paint, at the real terminal width. */
     private int $lineCount = 0;
+    /** @var list<string> the exact rendered README lines currently on screen (for OSC8 link hit-testing) */
+    private array $visibleLines = [];
 
     private bool $editing = false;
     private bool $commitPrompt = false;
     private string $readmePath = 'README.md';
     private bool $isNew = false;
 
-    private InlineEditor $editor;
+    private Editor $editor;
     private CommitForm $commitForm;
 
     public function __construct(RepoContext $ctx)
     {
         parent::__construct($ctx);
-        $this->editor = new InlineEditor();
+        $this->editor = new Editor();
+        $this->editor->setSpinner($ctx->spinner);
         $this->commitForm = new CommitForm();
     }
 
@@ -44,6 +47,18 @@ final class ReadmeTab extends AbstractRepoTab
         $this->editing = false;
         $this->commitPrompt = false;
         $this->isNew = false;
+        $this->editor->stopJobs();
+    }
+
+    public function tick(?float $deltaTime = null): bool
+    {
+        if ($this->editing && $this->editor->tick($deltaTime)) {
+            $this->ctx->spinner->advance($deltaTime);
+
+            return true;
+        }
+
+        return false;
     }
 
     public function footerText(): string
@@ -53,18 +68,18 @@ final class ReadmeTab extends AbstractRepoTab
         }
         if ($this->editing) {
             $hint = $this->editor->previewSupported()
-                ? ('Ctrl+P: '.$this->editor->previewMode())
+                ? ('Ctrl+P: ' . $this->editor->previewMode())
                 : null;
 
             return sprintf(
                 ' Ln %d, Col %d · %sCtrl+S: save · Esc: discard',
                 $this->editor->line() + 1,
                 $this->editor->col() + 1,
-                null !== $hint ? $hint.' · ' : '',
+                null !== $hint ? $hint . ' · ' : '',
             );
         }
 
-        return ' e: edit · '.ltrim(self::BASE_FOOTER);
+        return ' e: edit · ' . ltrim(self::BASE_FOOTER);
     }
 
     public function statusValue(): string
@@ -140,7 +155,7 @@ final class ReadmeTab extends AbstractRepoTab
             return true;
         }
 
-        $readme = $this->ctx->reader->readme($this->ctx->git, $this->ctx->ref);
+        $readme = $this->ctx->readmeDoc();
         if (null !== $readme) {
             $this->readmePath = $readme['path'];
             $this->isNew = false;
@@ -159,7 +174,7 @@ final class ReadmeTab extends AbstractRepoTab
 
     private function handleEditorKey(string $seq): bool
     {
-        if (InlineEditor::isCtrlS($seq)) {
+        if (Editor::isCtrlS($seq)) {
             $this->commitPrompt = true;
             $this->commitForm->reset($this->isNew ? 'Create README' : 'Update README');
 
@@ -171,6 +186,7 @@ final class ReadmeTab extends AbstractRepoTab
         if (Keys::ESCAPE === $tok) {
             $this->editing = false;
             $this->isNew = false;
+            $this->editor->stopJobs();
 
             return true;
         }
@@ -180,7 +196,7 @@ final class ReadmeTab extends AbstractRepoTab
 
     private function handleCommitPromptKey(string $seq): bool
     {
-        if (InlineEditor::isCtrlS($seq) || Keys::ENTER === Keys::normalize($seq)) {
+        if (Editor::isCtrlS($seq)) {
             $this->submitCommit();
 
             return true;
@@ -226,13 +242,13 @@ final class ReadmeTab extends AbstractRepoTab
                 $this->commitForm->message(),
             );
         } catch (\Throwable $e) {
-            $this->ctx->flash = 'Commit failed: '.$e->getMessage();
+            $this->ctx->flash = 'Commit failed: ' . $e->getMessage();
 
             return;
         }
 
         $this->ctx->invalidateGitCaches();
-        $this->ctx->flash = 'Committed '.substr($sha, 0, 7);
+        $this->ctx->flash = 'Committed ' . substr($sha, 0, 7);
 
         $this->commitPrompt = false;
         $this->editing = false;
@@ -243,15 +259,15 @@ final class ReadmeTab extends AbstractRepoTab
     {
         if ($this->commitPrompt) {
             $authorName = $this->ctx->actor?->username() ?? 'anonymous';
-            $authorEmail = $authorName.'@noreply.codes.sh';
+            $authorEmail = $authorName . '@noreply.codes.sh';
 
-            return $this->commitForm->paint($cols, $rows, $authorName.' <'.$authorEmail.'>', $this->readmePath);
+            return $this->commitForm->paint($cols, $rows, $authorName . ' <' . $authorEmail . '>', $this->readmePath);
         }
 
         if ($this->editing) {
             $tag = $this->isNew ? '[NEW]' : '[EDIT]';
 
-            return $this->editor->paint($tag.' '.$this->readmePath, $cols, $rows);
+            return $this->editor->paint($tag . ' ' . $this->readmePath, $cols, $rows);
         }
 
         if ($this->ctx->isReadmeLoading($cols)) {
@@ -264,6 +280,98 @@ final class ReadmeTab extends AbstractRepoTab
             return $this->messageBody('This repository has no README.', $cols);
         }
 
-        return $this->docWindow($lines, $cols, $rows);
+        $window = $this->docWindow($lines, $cols, $rows);
+        $this->visibleLines = $window;
+
+        return $window;
+    }
+
+    public function onClick(int $line, int $col, bool $nav = false): bool
+    {
+        if ($this->editing || $this->commitPrompt || !isset($this->visibleLines[$line])) {
+            return false;
+        }
+        $url = self::linkAt($this->visibleLines[$line], $col);
+        if (null === $url) {
+            return false;
+        }
+        // No browser in a TUI session: surface the destination in the status bar.
+        $this->ctx->flash = '🔗 ' . $url;
+
+        return true;
+    }
+
+    /**
+     * Find the OSC 8 hyperlink target under visible column $targetCol in a
+     * rendered line, or null when no link covers it. Skips CSI/OSC escapes while
+     * counting visible columns so the mapping matches what the terminal shows.
+     */
+    private static function linkAt(string $line, int $targetCol): ?string
+    {
+        $len = \strlen($line);
+        $i = 0;
+        $col = 0;
+        $url = null;
+        $start = 0;
+        while ($i < $len) {
+            $c = $line[$i];
+            if ("\e" === $c && $i + 1 < $len) {
+                $n = $line[$i + 1];
+                if (']' === $n) {
+                    $j = $i + 2;
+                    $osc = '';
+                    $end = null;
+                    while ($j < $len) {
+                        if ("\x07" === $line[$j]) {
+                            $end = $j + 1;
+                            break;
+                        }
+                        if ("\e" === $line[$j] && $j + 1 < $len && '\\' === $line[$j + 1]) {
+                            $end = $j + 2;
+                            break;
+                        }
+                        $osc .= $line[$j];
+                        ++$j;
+                    }
+                    if (null === $end) {
+                        break;
+                    }
+                    if (str_starts_with($osc, '8;')) {
+                        $rest = substr($osc, 2);
+                        $semi = strpos($rest, ';');
+                        $uri = false === $semi ? '' : substr($rest, $semi + 1);
+                        if ('' === $uri) {
+                            if (null !== $url && $targetCol >= $start && $targetCol < $col) {
+                                return $url;
+                            }
+                            $url = null;
+                        } else {
+                            $url = $uri;
+                            $start = $col;
+                        }
+                    }
+                    $i = $end;
+                    continue;
+                }
+                if ('[' === $n) {
+                    $j = $i + 2;
+                    while ($j < $len && (\ord($line[$j]) < 0x40 || \ord($line[$j]) > 0x7e)) {
+                        ++$j;
+                    }
+                    $i = $j + 1;
+                    continue;
+                }
+                $i += 2;
+                continue;
+            }
+            $o = \ord($c);
+            $i += $o < 0x80 ? 1 : ($o < 0xE0 ? 2 : ($o < 0xF0 ? 3 : 4));
+            ++$col;
+        }
+        if (null !== $url && $targetCol >= $start && $targetCol < $col) {
+            return $url;
+        }
+
+        return null;
     }
 }

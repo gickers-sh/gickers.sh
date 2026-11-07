@@ -118,6 +118,17 @@ final class Screen
     }
 
     /**
+     * A single-line fuzzy search input bar (`"  / <query>▏"`).
+     */
+    public static function fuzzySearchBar(string $query, int $width): string
+    {
+        $prefix = '  '.Theme::style('/', Theme::HIGHLIGHT, bold: true).' ';
+        $text = Theme::style($query, Theme::FG, bold: true).'▏';
+
+        return self::fit($prefix.$text, $width);
+    }
+
+    /**
      * Render a horizontal tab bar (Soft Serve style): the active tab is
      * underlined cyan, the rest use the default foreground, separated by a dim
      * vertical bar.
@@ -291,17 +302,20 @@ final class Screen
      *
      * @return list<string>
      */
-    public static function box(string $title, array $lines, int $innerWidth): array
+    public static function box(string $title, array $lines, int $innerWidth, ?string $borderColor = null): array
     {
         $innerWidth = max($innerWidth, self::width($title) + 2, 4);
-        $top = '' === $title
+        $topRaw = '' === $title
             ? '╭'.str_repeat('─', $innerWidth).'╮'
             : '╭'.self::centerText(' '.$title.' ', $innerWidth, '─').'╮';
-        $out = [$top];
+        $botRaw = '╰'.str_repeat('─', $innerWidth).'╯';
+        $leftBar = null !== $borderColor ? Theme::style('│', $borderColor) : '│';
+        $rightBar = null !== $borderColor ? Theme::style('│', $borderColor) : '│';
+        $out = [null !== $borderColor ? Theme::style($topRaw, $borderColor) : $topRaw];
         foreach ($lines as $line) {
-            $out[] = '│'.self::fit($line, $innerWidth).'│';
+            $out[] = $leftBar.self::fit($line, $innerWidth).$rightBar;
         }
-        $out[] = '╰'.str_repeat('─', $innerWidth).'╯';
+        $out[] = null !== $borderColor ? Theme::style($botRaw, $borderColor) : $botRaw;
 
         return $out;
     }
@@ -420,12 +434,14 @@ final class Screen
      *
      * @return list<string>
      */
-    public static function fileRow(string $mode, string $size, string $name, bool $isDir, bool $selected, int $width): array
+    public static function fileRow(string $mode, string $size, string $name, bool $isDir, bool $selected, int $width, ?string $renderedName = null): array
     {
         $arrow = $selected ? Theme::style('> ', Theme::SELECTOR, bold: true) : '  ';
         $modeR = Theme::style(self::fit($mode, 10), $selected ? Theme::SELECTOR : Theme::MUTED, bold: $selected);
-        $sizeR = Theme::style(str_pad($size, 6, ' ', \STR_PAD_LEFT), Theme::MUTED);
-        if ($selected) {
+        $sizeR = Theme::style(str_pad($size, 8, ' ', \STR_PAD_LEFT), Theme::MUTED);
+        if (null !== $renderedName) {
+            $nameR = $renderedName;
+        } elseif ($selected) {
             $nameR = Theme::style($name, Theme::SELECTOR, bold: true);
         } elseif ($isDir) {
             $nameR = Theme::style($name, Theme::BLUE, bold: true);
@@ -457,6 +473,58 @@ final class Screen
         $line2 = self::fit($prefix.Theme::style(self::truncate($meta, $inner), Theme::MUTED), $width);
 
         return [$line1, $line2];
+    }
+
+    /**
+     * A pull request list entry matching Go `PRItemDelegate.Render`:
+     * Left accent bar (`┃` in selector pink when selected), top line
+     * `#num [STATUS] Title (base ← head)`, bottom line `opened/merged/closed <time>`.
+     *
+     * @return list<string>
+     */
+    public static function prItem(
+        int $number,
+        string $status,
+        string $title,
+        string $baseRef,
+        string $headRef,
+        string $bottomText,
+        bool $selected,
+        int $width,
+    ): array {
+        $bar = $selected ? Theme::style('┃', Theme::SELECTOR) : ' ';
+        $prefix = $bar.' ';
+        $inner = max(1, $width - 2);
+
+        $statusUpper = strtoupper($status);
+        $badgeColor = match ($statusUpper) {
+            'OPEN' => Theme::GREEN,
+            'MERGED' => Theme::HIGHLIGHT,
+            'CLOSED' => Theme::SELECTOR,
+            default => Theme::MUTED,
+        };
+        $statusText = Theme::style('['.$statusUpper.']', $badgeColor, bold: true);
+        $numberText = Theme::style('#'.$number, $selected ? Theme::HIGHLIGHT : Theme::HASH);
+        $descColor = $selected ? Theme::MUTED : Theme::FG_DIM;
+        $branchesText = Theme::style(sprintf('(%s ← %s)', $baseRef, $headRef), $descColor);
+
+        $leftPrefix = $numberText.' '.$statusText.' ';
+        $leftPrefixWidth = self::width($leftPrefix);
+        $branchesWidth = self::width($branchesText);
+        $titleAvail = max(10, $inner - $leftPrefixWidth - $branchesWidth - 2);
+
+        $truncTitle = self::truncate($title, $titleAvail);
+        $titleR = $selected
+            ? Theme::style($truncTitle, Theme::HIGHLIGHT, bold: true)
+            : Theme::style($truncTitle, Theme::BLUE);
+
+        $topLine = self::truncate($leftPrefix.$titleR.' '.$branchesText, $inner);
+        $bottomLine = Theme::style(self::truncate($bottomText, $inner), $descColor);
+
+        return [
+            self::fit($prefix.$topLine, $width),
+            self::fit($prefix.$bottomLine, $width),
+        ];
     }
 
     /**

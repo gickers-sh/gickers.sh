@@ -61,6 +61,10 @@ final class RepoContext
     private array $treeCache = [];
     /** @var array{key: string, process: Process}|null */
     private ?array $treeJob = null;
+    /** @var array<string, list<TreeEntry>> */
+    private array $recursiveTreeCache = [];
+    /** @var array{ref: string, process: Process}|null */
+    private ?array $recursiveTreeJob = null;
     /** @var list<Commit>|null */
     private ?array $commits = null;
     /** @var array{ref: string, process: Process}|null */
@@ -116,6 +120,14 @@ final class RepoContext
      */
     public function currentRefIsBranch(): bool
     {
+        if (null !== $this->refsData) {
+            return \in_array($this->ref, $this->refsData['branches'], true);
+        }
+        $gitDir = $this->git->isBare ? $this->git->path : $this->git->path.'/.git';
+        if (is_file($gitDir.'/refs/heads/'.$this->ref)) {
+            return true;
+        }
+
         return \in_array($this->ref, $this->branchList(), true);
     }
 
@@ -128,6 +140,7 @@ final class RepoContext
         $this->ref = $ref;
         $this->readmeCache = null;
         $this->treeCache = [];
+        $this->recursiveTreeCache = [];
         $this->commits = null;
         $this->subpath = '';
         $this->flash = 'Switched to '.$ref;
@@ -145,6 +158,7 @@ final class RepoContext
         $this->readmeDocCache = [];
         $this->readmeCache = null;
         $this->treeCache = [];
+        $this->recursiveTreeCache = [];
         $this->commits = null;
         $this->refsData = null;
         $this->refMetaCache = [];
@@ -166,6 +180,10 @@ final class RepoContext
         }
         $this->treeJob = null;
 
+        if (null !== $this->recursiveTreeJob && $this->recursiveTreeJob['process']->isRunning()) {
+            $this->recursiveTreeJob['process']->stop(0);
+        }
+        $this->recursiveTreeJob = null;
         if (null !== $this->commitsJob && $this->commitsJob['process']->isRunning()) {
             $this->commitsJob['process']->stop(0);
         }
@@ -199,6 +217,10 @@ final class RepoContext
             $this->pollTreeJob();
         }
 
+        if (null !== $this->recursiveTreeJob) {
+            $busy = true;
+            $this->pollRecursiveTreeJob();
+        }
         if (null !== $this->commitsJob) {
             $busy = true;
             $this->pollCommitsJob();
@@ -439,6 +461,43 @@ final class RepoContext
             : [];
     }
 
+    public function isRecursiveTreeLoading(): bool
+    {
+        if (isset($this->recursiveTreeCache[$this->ref])) {
+            return false;
+        }
+        if (null === $this->recursiveTreeJob || $this->recursiveTreeJob['ref'] !== $this->ref) {
+            if (null !== $this->recursiveTreeJob && $this->recursiveTreeJob['process']->isRunning()) {
+                $this->recursiveTreeJob['process']->stop(0);
+            }
+            try {
+                $this->recursiveTreeJob = [
+                    'ref' => $this->ref,
+                    'process' => $this->reader->startRecursiveTreeProcess($this->git, $this->ref),
+                ];
+            } catch (\Throwable) {
+                $this->recursiveTreeCache[$this->ref] = [];
+
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function pollRecursiveTreeJob(): void
+    {
+        if (null === $this->recursiveTreeJob || $this->recursiveTreeJob['process']->isRunning()) {
+            return;
+        }
+        $job = $this->recursiveTreeJob;
+        $this->recursiveTreeJob = null;
+        $proc = $job['process'];
+        $this->recursiveTreeCache[$job['ref']] = $proc->isSuccessful()
+            ? $this->reader->parseTreeOutput($proc->getOutput())
+            : [];
+    }
+
     public function isCommitsLoading(): bool
     {
         if (null !== $this->commits) {
@@ -573,6 +632,17 @@ final class RepoContext
 
     private function resolveSha(string $ref): string
     {
+        if (isset($this->refMetaCache[$ref]['hash']) && '' !== $this->refMetaCache[$ref]['hash']) {
+            return $this->refMetaCache[$ref]['hash'];
+        }
+        $gitDir = $this->git->isBare ? $this->git->path : $this->git->path.'/.git';
+        $refFile = $gitDir.'/refs/heads/'.$ref;
+        if (is_file($refFile)) {
+            $sha = trim((string) file_get_contents($refFile));
+            if (40 === \strlen($sha) && ctype_xdigit($sha)) {
+                return $sha;
+            }
+        }
         try {
             $commits = $this->reader->getCommits($this->git, $ref, 1, 0);
         } catch (\Throwable) {
@@ -597,6 +667,22 @@ final class RepoContext
         }
 
         return $this->treeCache[$key];
+    }
+
+    /**
+     * @return list<TreeEntry>
+     */
+    public function recursiveTree(): array
+    {
+        if (!isset($this->recursiveTreeCache[$this->ref])) {
+            try {
+                $this->recursiveTreeCache[$this->ref] = $this->reader->getRecursiveTree($this->git, $this->ref);
+            } catch (\Throwable) {
+                $this->recursiveTreeCache[$this->ref] = [];
+            }
+        }
+
+        return $this->recursiveTreeCache[$this->ref];
     }
 
     /**
@@ -646,6 +732,18 @@ final class RepoContext
     public function tagList(): array
     {
         return $this->refsData()['tags'];
+    }
+
+    /**
+     * @return array{path: string, content: string}|null
+     */
+    public function readmeDoc(): ?array
+    {
+        if (!\array_key_exists($this->ref, $this->readmeDocCache)) {
+            $this->readmeDocCache[$this->ref] = $this->reader->readme($this->git, $this->ref);
+        }
+
+        return $this->readmeDocCache[$this->ref];
     }
 
     /**

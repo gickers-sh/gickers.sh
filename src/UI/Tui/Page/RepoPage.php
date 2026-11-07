@@ -184,6 +184,39 @@ final class RepoPage extends AbstractPage
         $this->tabs[$tab]->onActivate();
     }
 
+    protected function onTabBarClick(int $line, int $col): bool
+    {
+        $active = $this->tabs[$this->tab];
+        if (0 !== $line || $active->isFullScreenModal()) {
+            return false;
+        }
+        $inner = max(0, $this->host->tui()->getTerminal()->getColumns() - 2 * Screen::MARGIN);
+        // Tabs rendering their own sub-tab bar (e.g. PR detail) stay keyboard-driven.
+        if (null !== $active->customTabBarLines($inner)) {
+            return false;
+        }
+        // Screen::tabBar joins labels with a 3-column " │ " separator.
+        $pos = 0;
+        foreach (self::TABS as $i => $label) {
+            $len = Screen::width($label);
+            if ($col >= $pos && $col < $pos + $len) {
+                if ($i !== $this->tab) {
+                    $this->switchTab($i);
+                }
+
+                return true;
+            }
+            $pos += $len + 3;
+        }
+
+        return false;
+    }
+
+    protected function onBodyClick(int $line, int $col, bool $nav = false): bool
+    {
+        return $this->tabs[$this->tab]->onClick($line, $col, $nav);
+    }
+
     public function activeTab(): RepoTab
     {
         return $this->tabs[$this->tab];
@@ -197,9 +230,18 @@ final class RepoPage extends AbstractPage
         return $ctxBusy || $tabBusy;
     }
 
+    protected function marginTopLines(int $cols): array
+    {
+        return $this->tabs[$this->tab]->isFullScreenModal() ? [] : [''];
+    }
+
     protected function headerLines(int $cols): array
     {
-        $name = $this->ctx->name.($this->ctx->db?->isPrivate() ? ' 🔒' : '');
+        $active = $this->tabs[$this->tab];
+        if ($active->isFullScreenModal()) {
+            return [];
+        }
+        $name = $this->ctx->name . ($this->ctx->db?->isPrivate() ? ' 🔒' : '');
         $desc = $this->ctx->db?->description() ?? '';
 
         return Screen::repoHeader($name, $desc, $this->ctx->cloneCommand(), $cols);
@@ -207,19 +249,27 @@ final class RepoPage extends AbstractPage
 
     protected function tabBarLines(int $cols): array
     {
+        $active = $this->tabs[$this->tab];
+        if ($active->isFullScreenModal()) {
+            return [];
+        }
+        $custom = $active->customTabBarLines($cols);
+        if (null !== $custom) {
+            return $custom;
+        }
+
         return [Screen::tabBar(self::TABS, $this->tab, $cols), ''];
     }
 
     protected function footerLines(int $cols): array
     {
         $active = $this->tabs[$this->tab];
-        $branch = '* '.$this->ctx->ref;
+        $branch = $active->statusBranch() ?? ('* ' . $this->ctx->ref);
         if (null !== $this->ctx->flash) {
-            $status = "\e[7m".Screen::fit(' '.$this->ctx->flash, $cols)."\e[0m";
+            $status = "\e[7m" . Screen::fit(' ' . $this->ctx->flash, $cols) . "\e[0m";
         } else {
             $status = Screen::statusBar($cols, $this->ctx->name, $active->statusValue(), $active->statusInfo(), $branch);
         }
-
         if (!$this->helpOpen) {
             return [$status];
         }
@@ -259,8 +309,9 @@ final class RepoPage extends AbstractPage
     {
         return match ($this->tab) {
             0 => [['e', 'edit readme'], ['^p', 'live preview']],
-            1 => [['e', 'edit file'], ['n', 'new file'], ['D', 'delete file'], ['p', 'render md'], ['^p', 'live preview']],
-            5 => [['n', 'new PR'], ['f', 'filter'], ['m', 'merge'], ['d', 'diff'], ['s', 'close / reopen'], ['e', 'edit'], ['c', 'comment'], ['x', 'delete']],
+            1 => [['/', 'fuzzy search'], ['e', 'edit file'], ['n', 'new file'], ['D', 'delete file'], ['p', 'render md'], ['^p', 'live preview']],
+            2, 3, 4 => [['/', 'fuzzy search']],
+            5 => [['/', 'fuzzy search'], ['n', 'new PR'], ['f', 'filter'], ['m', 'merge'], ['d', 'diff'], ['s', 'close / reopen'], ['e', 'edit'], ['c', 'comment'], ['x', 'delete']],
             7 => [['e', 'edit settings']],
             default => [],
         };

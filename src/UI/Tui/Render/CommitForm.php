@@ -12,7 +12,7 @@ use App\UI\Tui\Input\Keys;
 final class CommitForm
 {
     private string $summary = '';
-    private string $description = '';
+    private Editor $descEditor;
     private int $field = 0; // 0 = summary, 1 = description
     private ?string $author = null;
 
@@ -20,12 +20,13 @@ final class CommitForm
     {
         $this->summary = $summary;
         $this->author = $author;
+        $this->descEditor = new Editor();
     }
 
     public function reset(string $summary): void
     {
         $this->summary = $summary;
-        $this->description = '';
+        $this->descEditor = new Editor();
         $this->field = 0;
     }
 
@@ -41,7 +42,7 @@ final class CommitForm
 
     public function description(): string
     {
-        return $this->description;
+        return trim($this->descEditor->value());
     }
 
     public function setAuthor(?string $author): void
@@ -52,51 +53,64 @@ final class CommitForm
     public function message(): string
     {
         $summary = trim($this->summary);
-        $desc = trim($this->description);
+        $desc = trim($this->descEditor->value());
 
-        return '' !== $desc ? $summary . "\n\n" . $desc : $summary;
+        return '' !== $desc ? $summary."\n\n".$desc : $summary;
     }
 
     public function handleKey(string $seq): bool
     {
-        if (InlineEditor::isCtrlS($seq)) {
+        if (Editor::isCtrlS($seq)) {
             return false;
         }
 
         $tok = Keys::normalize($seq);
         $txt = Keys::text($seq);
 
-        if (Keys::ESCAPE === $tok || Keys::ENTER === $tok) {
+        if (Keys::ESCAPE === $tok) {
             return false;
         }
 
-        if (Keys::TAB === $tok || Keys::DOWN === $tok || Keys::BACKTAB === $tok || Keys::UP === $tok) {
+        if (0 === $this->field && Keys::ENTER === $tok) {
+            $this->field = 1;
+
+            return true;
+        }
+
+        if (Keys::TAB === $tok || Keys::BACKTAB === $tok) {
             $this->field = 0 === $this->field ? 1 : 0;
 
             return true;
         }
 
-        if (Keys::BACKSPACE === $tok) {
-            if (0 === $this->field) {
+        if (0 === $this->field) {
+            if (Keys::DOWN === $tok) {
+                $this->field = 1;
+
+                return true;
+            }
+            if (Keys::BACKSPACE === $tok) {
                 $this->summary = mb_substr($this->summary, 0, -1);
-            } else {
-                $this->description = mb_substr($this->description, 0, -1);
+
+                return true;
             }
-
-            return true;
-        }
-
-        if (null !== $txt) {
-            if (0 === $this->field) {
+            if (null !== $txt) {
                 $this->summary .= $txt;
-            } else {
-                $this->description .= $txt;
+
+                return true;
             }
 
             return true;
         }
 
-        return true;
+        // Field 1: Description Editor
+        if (Keys::UP === $tok && 0 === $this->descEditor->line()) {
+            $this->field = 0;
+
+            return true;
+        }
+
+        return $this->descEditor->handleKey($seq);
     }
 
     /**
@@ -106,7 +120,7 @@ final class CommitForm
     {
         $title = 'Commit changes';
         $boxWidth = min(60, max(40, $cols - 4));
-
+        $innerWidth = max(20, $boxWidth - 4);
         $sumActive = 0 === $this->field;
         $descActive = 1 === $this->field;
 
@@ -114,18 +128,23 @@ final class CommitForm
 
         $lines = [''];
         if (null !== $file && '' !== $file) {
-            $lines[] = '  ' . Theme::style('File: ', Theme::MUTED) . Theme::style($file, Theme::FG, bold: true);
+            $lines[] = '  '.Theme::style('File: ', Theme::MUTED).Theme::style($file, Theme::FG, bold: true);
             $lines[] = '';
         }
-        $lines[] = '  ' . ($sumActive ? Theme::style('Summary', Theme::BLUE, bold: true) : Theme::style('Summary', Theme::MUTED));
-        $lines[] = '  > ' . $this->summary . ($sumActive ? '▏' : '');
+        $lines[] = '  '.($sumActive ? Theme::style('Summary', Theme::BLUE, bold: true) : Theme::style('Summary', Theme::MUTED));
+        $prompt = '> ';
+        $availSumWidth = max(10, $innerWidth - 4);
+        $sumVal = Screen::truncate($this->summary, $availSumWidth);
+        $lines[] = '  '.$prompt.$sumVal.($sumActive ? '▏' : '');
         $lines[] = '';
-        $lines[] = '  ' . ($descActive ? Theme::style('Description (optional)', Theme::BLUE, bold: true) : Theme::style('Description (optional)', Theme::MUTED));
-        $lines[] = '  > ' . $this->description . ($descActive ? '▏' : '');
+        $lines[] = '  '.($descActive ? Theme::style('Description (optional)', Theme::BLUE, bold: true) : Theme::style('Description (optional)', Theme::MUTED));
+        $descEditorWidth = max(15, $innerWidth - 2);
+        foreach ($this->descEditor->paintLines($descEditorWidth, 4, $descActive) as $dl) {
+            $lines[] = '  '.$dl;
+        }
+        $lines[] = '  '.Theme::style('Author:    ', Theme::MUTED).Theme::style($authorDisplay, Theme::FG);
         $lines[] = '';
-        $lines[] = '  ' . Theme::style('Author:    ', Theme::MUTED) . Theme::style($authorDisplay, Theme::FG);
-        $lines[] = '';
-        $lines[] = '  ' . Theme::style('Tab: switch field · Enter/Ctrl+S: commit · Esc: cancel', Theme::MUTED, italic: true);
+        $lines[] = '  '.Theme::style('Tab/↑/↓: field · Ctrl+S: commit · Esc: cancel', Theme::MUTED, italic: true);
 
         $box = Screen::box($title, $lines, $boxWidth);
 

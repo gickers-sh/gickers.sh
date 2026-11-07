@@ -9,6 +9,8 @@ use App\CodeIntel\Domain\IndexStore;
 use App\CodeIntel\Infrastructure\Scip\ScipProtobufCodec;
 use App\Identity\Domain\Model\User;
 use App\Identity\Domain\UserStore;
+use App\PullRequest\Domain\Model\PullRequest;
+use App\PullRequest\Domain\PullRequestStore;
 use App\Repo\Application\CreateRepo;
 use App\Repo\Domain\RepoDirectory;
 use App\Repo\Domain\RepoName;
@@ -71,7 +73,7 @@ final class TuiFunctionalTest extends KernelTestCase
 
     private function createTempDir(string $prefix = 'tui_test_'): string
     {
-        $path = sys_get_temp_dir().'/'.$prefix.uniqid('', true);
+        $path = sys_get_temp_dir() . '/' . $prefix . uniqid('', true);
         mkdir($path, 0755, true);
         $this->tempDirs[] = $path;
 
@@ -90,10 +92,10 @@ final class TuiFunctionalTest extends KernelTestCase
         );
         exec($cmd);
 
-        file_put_contents($dir.'/README.md', "# Demo Repository\n\nWelcome to demo.");
-        mkdir($dir.'/src', 0755, true);
+        file_put_contents($dir . '/README.md', "# Demo Repository\n\nWelcome to demo.");
+        mkdir($dir . '/src', 0755, true);
         file_put_contents(
-            $dir.'/src/Calculator.php',
+            $dir . '/src/Calculator.php',
             "<?php\n\nnamespace App;\n\nclass Calculator\n{\n    public function add(int \$a, int \$b): int\n    {\n        return \$a + \$b;\n    }\n}\n"
         );
 
@@ -353,11 +355,29 @@ final class TuiFunctionalTest extends KernelTestCase
         $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringContainsString('1 reference(s)', $output);
         $this->assertStringContainsString('src/Calculator.php', $output);
+        // Split preview pane renders the referenced file content centered on the ref line (0-indexed 8).
+        $plainRefs = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('return $a + $b', $plainRefs);
+        $this->assertStringContainsString('src/Calculator.php:9', $plainRefs);
+        $this->assertStringContainsString('▶', $output);
 
         // Jump to selected reference with Enter
         $vt->simulateInput("\r");
         $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringNotContainsString('1 reference(s)', $output);
+
+        // Cmd/Ctrl+click navigation: a modified click on the definition symbol
+        // (source line 7 / body row 7) lists references, mirroring Go symbolNavCmds.
+        $filesTab = $page->activeTab();
+        $this->assertTrue($filesTab->onClick(7, 10, true));
+        $page->sync();
+        $tui->requestRender();
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('1 reference(s)', $output);
+        // A plain (non-nav) click on the same cell does not trigger navigation.
+        $this->assertFalse($filesTab->onClick(7, 10, false));
+        $vt->simulateInput("\x1b"); // close references
+        $tui->tick();
 
         // Exit file viewer with Esc
         $vt->simulateInput("\x1b");
@@ -521,10 +541,10 @@ final class TuiFunctionalTest extends KernelTestCase
     public function testRepoPagePullRequestsListAndMerge(): void
     {
         $container = static::getContainer();
-        $user = new User('prowner'.uniqid(), true, new \DateTimeImmutable());
+        $user = new User('prowner' . uniqid(), true, new \DateTimeImmutable());
         $this->userStore->save($user);
 
-        $repo = ($this->createRepo)($user, 'pulls-repo-'.uniqid(), false, false, 'PR testing repo');
+        $repo = ($this->createRepo)($user, 'pulls-repo-' . uniqid(), false, false, 'PR testing repo');
         $repoPath = $this->repoDirectory->pathFor($repo->name());
         $gitRepo = $this->gitReader->openRepository($repoPath);
 
@@ -553,24 +573,63 @@ final class TuiFunctionalTest extends KernelTestCase
         $output = $this->tickUntilSettled($tui, $vt);
         $this->assertStringContainsString('#1', $output);
         $this->assertStringContainsString('Add feature PR', $output);
-        $this->assertStringContainsString('open', $output);
-        $this->assertStringContainsString('feature-pr → main', $output);
+        $this->assertStringContainsString('[OPEN]', $output);
+        $this->assertStringContainsString('(main ← feature-pr)', $output);
 
         // Open detail view with Enter
         $vt->simulateInput("\r");
-        $tui->tick();
-        $output = $vt->consumeOutput();
-        $this->assertStringContainsString('#1: Add feature PR', $output);
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('#1 Add feature PR', $output);
         $this->assertStringContainsString('This is a description', $output);
-        $this->assertStringContainsString('m: merge', $output);
+        $this->assertStringContainsString('About', $output);
+        $this->assertStringContainsString('Commits', $output);
+        $this->assertStringContainsString('Changes', $output);
+        $this->assertStringContainsString('Comments', $output);
+
+        $this->assertStringContainsString('wants to merge into', $output);
+        $this->assertStringContainsString('✓ Able to merge cleanly', $output);
+
+        // Navigate sub-tabs: Tab -> Commits (2), Tab -> Changes (3), Tab -> Comments (4), 1 -> About
+        $vt->simulateInput("\t");
+        $tui->tick();
+        $commitsOut = $vt->consumeOutput();
+        $this->assertStringContainsString('Commits (1):', $commitsOut);
+        $this->assertStringContainsString('Feature commit', $commitsOut);
+
+        $vt->simulateInput("\t");
+        $tui->tick();
+        $changesOut = $vt->consumeOutput();
+        $this->assertStringContainsString('Files changed (1):', $changesOut);
+        $this->assertStringContainsString('feature.txt', $changesOut);
+
+        $vt->simulateInput("\t");
+        $tui->tick();
+        $commentsOut = $vt->consumeOutput();
+        $this->assertStringContainsString('Comments (0):', $commentsOut);
+        $this->assertStringContainsString('No comments yet.', $commentsOut);
+
+        $vt->simulateInput('1');
+        $tui->tick();
+        $vt->consumeOutput();
+
+        // Press 'e' to open Edit Pull Request #1 modal
+        $vt->simulateInput('e');
+        $tui->tick();
+        $editOut = $vt->consumeOutput();
+        $this->assertStringContainsString('Edit Pull Request #1', $editOut);
+        $this->assertStringContainsString('tab switch field', $editOut);
+
+        // Press Esc to close Edit modal
+        $vt->simulateInput("\e");
+        $tui->tick();
+        $vt->consumeOutput();
 
         // Press 'm' to merge
         $vt->simulateInput('m');
         $tui->tick();
         $output = $vt->consumeOutput();
-        $this->assertStringContainsString('Confirm merge', $output);
-        $this->assertStringContainsString('Merge pull request #1', $output);
-
+        $this->assertStringContainsString('Merge pull request', $output);
+        $this->assertStringContainsString('Merge PR #1', $output);
         // Press 'y' to confirm merge
         $vt->simulateInput('y');
         $tui->tick();
@@ -693,6 +752,356 @@ final class TuiFunctionalTest extends KernelTestCase
         usleep(85000);
         $settledOutput = $this->tickUntilSettled($tui, $vt);
         $this->assertStringContainsString('Demo Repository', $settledOutput);
+        $tui->stop();
+    }
+
+    public function testFilesTabFuzzySearchFiltersAndOpensNestedFile(): void
+    {
+        [$dir] = $this->createFixtureRepo();
+        mkdir($dir . '/src/Deep/Nested', 0755, true);
+        file_put_contents(
+            $dir . '/src/Deep/Nested/TargetService.php',
+            "<?php\n\nnamespace App\\Deep\\Nested;\n\nfinal class TargetService {}\n"
+        );
+        exec(sprintf('cd %s && git add . && git commit -m "add nested target"', escapeshellarg($dir)));
+
+        $git = $this->gitReader->openRepository($dir);
+        $user = new User('fuzzy-user', false, new \DateTimeImmutable());
+        $this->userStore->save($user);
+
+        $vt = new VirtualTerminal(80, 24);
+        $tui = new Tui(terminal: $vt);
+        $root = $this->factory->createBrowseRoot($tui, $user);
+        $page = $this->factory->repoPageForGit($user, $git);
+        $root->start($page);
+
+        $tui->start();
+        $this->tickUntilSettled($tui, $vt);
+
+        // Switch to Files tab (shortcut 2)
+        $vt->simulateInput('2');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('README.md', $output);
+
+        // Open fuzzy search with '/'
+        $vt->simulateInput('/');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('[SEARCH]', $plain);
+        $this->assertStringContainsString('src/Deep/Nested/TargetService.php', $plain);
+        $this->assertStringContainsString('src/Calculator.php', $plain);
+
+        // Type fuzzy query "trgsrv" to match src/Deep/Nested/TargetService.php
+        $vt->simulateInput('trgsrv');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('/trgsrv', $plain);
+        $this->assertStringContainsString('src/Deep/Nested/TargetService.php', $plain);
+        $this->assertStringNotContainsString('README.md', $plain);
+        $this->assertStringContainsString('# 1/1', $plain);
+
+        // Press Enter to open the matched file directly
+        $vt->simulateInput("\r");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plainCode = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('final class TargetService', $plainCode);
+
+        // Press Esc to exit file viewer back to directory view
+        $vt->simulateInput("\e");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plainAfterEsc = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('README.md', $plainAfterEsc);
+
+        $tui->stop();
+    }
+
+    public function testCommitsBranchesTagsAndPullsFuzzySearch(): void
+    {
+        $container = static::getContainer();
+        $user = new User('alice-dev', true, new \DateTimeImmutable());
+        $this->userStore->save($user);
+        $bob = new User('bob-reviewer', false, new \DateTimeImmutable());
+        $this->userStore->save($bob);
+
+        $repo = ($this->createRepo)($user, 'fuzzy-all-tabs-' . uniqid(), false, false, 'Fuzzy tabs repo');
+        $repoPath = $this->repoDirectory->pathFor($repo->name());
+        $gitRepo = $this->gitReader->openRepository($repoPath);
+
+        $this->gitWriter->writeFile(
+            $gitRepo,
+            'main',
+            'README.md',
+            "# Main\n",
+            "Initial commit\n\nBootstrap documentation body",
+            'Alice Author',
+            'alice@codes.sh',
+        );
+        $this->gitWriter->writeFile(
+            $gitRepo,
+            'main',
+            'src/Security.php',
+            "<?php\n// security\n",
+            "Harden OAuth2 token validation\n\nFixes CVE-2026-9999 in token verifier",
+            'Bob Security',
+            'bob@security.org',
+        );
+
+        (new Process(['git', 'branch', 'feature/oauth-refresh', 'main'], $repoPath))->mustRun();
+        $this->gitWriter->writeFile(
+            $gitRepo,
+            'feature/oauth-refresh',
+            'src/Refresh.php',
+            "<?php\n// refresh\n",
+            'Implement refresh rotation',
+            'Bob Security',
+            'bob@security.org',
+        );
+        (new Process(['git', 'tag', 'v1.0.0-alpha', 'main~1'], $repoPath))->mustRun();
+        (new Process(['git', 'tag', 'v2.4.0-release', 'main'], $repoPath))->mustRun();
+
+        $prStore = $container->get(PullRequestStore::class);
+        $now = new \DateTimeImmutable();
+        $prStore->save(new PullRequest($repo, 1, 'Add README docs', 'Documentation update only', 'main', str_repeat('a', 40), $repo, 'feature/oauth-refresh', str_repeat('b', 40), $user, $now));
+        $prStore->save(new PullRequest($repo, 2, 'Rotate OAuth refresh tokens', 'Prevents replay attacks on mobile clients', 'main', str_repeat('a', 40), $repo, 'feature/oauth-refresh', str_repeat('b', 40), $bob, $now));
+
+        $vt = new VirtualTerminal(100, 28);
+        $tui = new Tui(terminal: $vt);
+        $root = $this->factory->createRoot($tui, $user);
+        $page = $this->factory->repoPageForName($user, $repo->nameString());
+        $root->start($page);
+
+        $tui->start();
+        $this->tickUntilSettled($tui, $vt);
+
+        // 1. Commits tab (shortcut 3): search by commit body + author ("bob cve9999")
+        $vt->simulateInput('3');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('Initial commit', $output);
+        $this->assertStringContainsString('Harden OAuth2 token validation', $output);
+
+        $vt->simulateInput('/');
+        $this->tickUntilSettled($tui, $vt);
+        $vt->simulateInput('bob cve9999');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('/bob cve9999', $plain);
+        $this->assertStringContainsString('Harden OAuth2 token validation', $plain);
+        $this->assertStringNotContainsString('Initial commit', $plain);
+        $this->assertStringContainsString('p. 1/1', $plain);
+
+        // Enter opens commit diff
+        $vt->simulateInput("\r");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plainDiff = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('src/Security.php', $plainDiff);
+
+        // Close diff
+        $vt->simulateInput("\e");
+        $this->tickUntilSettled($tui, $vt);
+
+        // 2. Branches tab (shortcut 4): fuzzy filter branch and switch to it with Enter
+        $vt->simulateInput('4');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('feature/oauth-refresh', $output);
+
+        $vt->simulateInput('/');
+        $this->tickUntilSettled($tui, $vt);
+        $vt->simulateInput('ftrfrsh');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('feature/oauth-refresh', $plain);
+        $this->assertStringContainsString('p. 1/1', $plain);
+
+        $vt->simulateInput("\r");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('Switched to feature/oauth-refresh', $plain);
+
+        // 3. Tags tab (shortcut 5): fuzzy filter tags
+        $vt->simulateInput('5');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('v1.0.0-alpha', $output);
+        $this->assertStringContainsString('v2.4.0-release', $output);
+
+        $vt->simulateInput('/');
+        $this->tickUntilSettled($tui, $vt);
+        $vt->simulateInput('24rel');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('v2.4.0-release', $plain);
+        $this->assertStringNotContainsString('v1.0.0-alpha', $plain);
+        $this->assertStringContainsString('p. 1/1', $plain);
+
+        // Close tag search with Esc
+        $vt->simulateInput("\e");
+        $this->tickUntilSettled($tui, $vt);
+
+        // 4. Pull Requests tab (shortcut 6): fuzzy filter by author + description ("bob replay")
+        $vt->simulateInput('6');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('Add README docs', $output);
+        $this->assertStringContainsString('Rotate OAuth refresh tokens', $output);
+
+        $vt->simulateInput('/');
+        $this->tickUntilSettled($tui, $vt);
+        $vt->simulateInput('bob replay');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('Rotate OAuth refresh tokens', $plain);
+        $this->assertStringNotContainsString('Add README docs', $plain);
+        $this->assertStringContainsString('# 1/1', $plain);
+
+        // Press Enter to open PR detail view
+        $vt->simulateInput("\r");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plainDetail = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('#2 Rotate OAuth refresh tokens', $plainDetail);
+        $this->assertStringContainsString('Prevents replay attacks on mobile clients', $plainDetail);
+
+        $tui->stop();
+    }
+
+    public function testSelectionPageFeedAndMyRepositoriesFuzzySearch(): void
+    {
+        $alice = new User('alice-owner-' . uniqid(), false, new \DateTimeImmutable());
+        $this->userStore->save($alice);
+        $bob = new User('bob-owner-' . uniqid(), false, new \DateTimeImmutable());
+        $this->userStore->save($bob);
+
+        ($this->createRepo)($alice, 'alpha-engine', false, false, 'High performance physics engine', 'Alpha Engine');
+        ($this->createRepo)($alice, 'zeta-dashboard', false, false, 'Admin analytics UI', 'Zeta Dashboard');
+        ($this->createRepo)($bob, 'omega-payments', false, false, 'Stripe billing gateway', 'Omega Payments');
+
+        $vt = new VirtualTerminal(90, 24);
+        $tui = new Tui(terminal: $vt);
+        $root = $this->factory->createRoot($tui, $alice);
+        $page = $this->factory->selectionPage($alice);
+        $root->start($page);
+
+        $tui->start();
+        $this->tickUntilSettled($tui, $vt);
+
+        // Switch to Feed tab (Tab 1)
+        $vt->simulateInput("\t");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('alpha-engine', $output);
+        $this->assertStringContainsString('omega-payments', $output);
+
+        // Open fuzzy search on Feed with '/' and filter by description + name ("stripe omg")
+        $vt->simulateInput('/');
+        $this->tickUntilSettled($tui, $vt);
+        $vt->simulateInput('stripe omg');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('omega-payments', $plain);
+        $this->assertStringNotContainsString('alpha-engine', $plain);
+
+        // Switch to My Repositories tab (Tab 2) — automatically resets fuzzy search
+        $vt->simulateInput("\t");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('alpha-engine', $plain);
+        $this->assertStringContainsString('zeta-dashboard', $plain);
+        $this->assertStringNotContainsString('omega-payments', $plain);
+
+        // Open fuzzy search on My Repositories with '/' and filter for "zeta analytics"
+        $vt->simulateInput('/');
+        $this->tickUntilSettled($tui, $vt);
+        $vt->simulateInput('zeta analytics');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('zeta-dashboard', $plain);
+        $this->assertStringNotContainsString('alpha-engine', $plain);
+
+        // Press Enter to navigate directly to the matched repository page
+        $vt->simulateInput("\r");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plainRepo = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('zeta-dashboard', $plainRepo);
+        $this->assertStringContainsString('Readme', $plainRepo);
+        $this->assertStringContainsString('Files', $plainRepo);
+
+        $tui->stop();
+    }
+
+    public function testSelectionPageShowsFlashMessageWhenOpeningOrphanRepositoryWithoutDiskDirectory(): void
+    {
+        $user = new User('orphan-tester-' . uniqid(), true, new \DateTimeImmutable());
+        $this->userStore->save($user);
+
+        $repo = ($this->createRepo)($user, 'orphan-repo-' . uniqid(), false, false, 'An orphan test repo', 'Orphan Repo');
+        $repoDiskPath = $this->repoDirectory->pathFor($repo->name());
+        $this->assertTrue(is_dir($repoDiskPath));
+        // Simulate the orphan state by deleting the git repository directory on disk
+        (new Process(['rm', '-rf', $repoDiskPath]))->mustRun();
+        $this->assertFalse(is_dir($repoDiskPath));
+
+        $vt = new VirtualTerminal(90, 24);
+        $tui = new Tui(terminal: $vt);
+        $root = $this->factory->createRoot($tui, $user);
+        $page = $this->factory->selectionPage($user);
+        $root->start($page);
+
+        $tui->start();
+        $this->tickUntilSettled($tui, $vt);
+
+        // Switch to Feed tab (Tab 1) where all public repos are visible
+        $vt->simulateInput("\t");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString($repo->nameString(), $output);
+
+        // Press Enter on the orphan repo
+        $vt->simulateInput("\r");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('directory does not exist on disk', $plain);
+        $this->assertStringContainsString($repo->nameString(), $plain);
+
+        // Pressing down/up clears the flash
+        $vt->simulateInput('j');
+        $this->tickUntilSettled($tui, $vt);
+
+        // Pressing 'l' also triggers selection and shows the flash message again
+        $vt->simulateInput('l');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('directory does not exist on disk', $plain);
+        $tui->stop();
+    }
+
+    public function testSelectionPageMouseClickSwitchesTabAndOpensRepo(): void
+    {
+        [$dir] = $this->createFixtureRepo();
+        $user = new User('mia', false, new \DateTimeImmutable());
+        $this->userStore->save($user);
+        $repo = ($this->createRepo)($user, 'clickable', false, false, 'Clickable repo', 'clickable');
+        // Point the repo at the fixture working tree so it opens on disk.
+        $target = $this->repoDirectory->pathFor($repo->name());
+        (new Process(['rm', '-rf', $target]))->run();
+        (new Process(['cp', '-R', $dir . '/.git', $target]))->run();
+
+        $vt = new VirtualTerminal(80, 24);
+        $tui = new Tui(terminal: $vt);
+        $root = $this->factory->createRoot($tui, $user);
+        $page = $this->factory->selectionPage($user);
+        $root->start($page);
+        $tui->start();
+        $this->tickUntilSettled($tui, $vt);
+
+        // Click the "Feed" tab label (row y=4; "• About" is 7 cells, a 3-cell gap,
+        // then "Feed" begins at inner col 10 → terminal x=13).
+        $vt->simulateInput("\e[<0;13;4M");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('clickable', $output);
+
+        // The first feed row is already selected, so a single click on it (body
+        // starts at y=6) opens the repo.
+        $vt->simulateInput("\e[<0;6;6M");
+        $output = $this->tickUntilSettled($tui, $vt);
+        // RepoPage chrome (tab bar + status) is now visible — proves the click opened the repo.
+        $this->assertStringContainsString('Commits', $output);
+        $this->assertStringContainsString('? Help', $output);
+
         $tui->stop();
     }
 }

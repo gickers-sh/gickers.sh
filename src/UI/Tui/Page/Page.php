@@ -25,6 +25,12 @@ interface Page
     public function handleKey(string $seq): bool;
 
     /**
+     * Handle a left-button mouse press at the 1-based terminal cell ($x, $y).
+     * Returns true when consumed (the host then re-syncs and requests a render).
+     */
+    public function handleClick(int $x, int $y, bool $nav = false): bool;
+
+    /**
      * Recompute every dynamic widget (header/tab bar/footer text and body) from
      * the current page state.
      */

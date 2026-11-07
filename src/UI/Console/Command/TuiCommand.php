@@ -6,6 +6,7 @@ namespace App\UI\Console\Command;
 
 use App\UI\Ssh\SshSession;
 use App\UI\Tui\TuiPageFactory;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -26,6 +27,7 @@ final class TuiCommand extends Command
         private readonly TuiPageFactory $factory,
         private readonly ?SshSession $sshSession = null,
         private readonly ?TerminalInterface $terminal = null,
+        private readonly ?LoggerInterface $logger = null,
     ) {
         parent::__construct();
     }
@@ -51,8 +53,12 @@ final class TuiCommand extends Command
         if (null !== $initialRepo && is_string($initialRepo) && '' !== trim($initialRepo)) {
             try {
                 $initialPage = $this->factory->repoPageForName($actor, trim($initialRepo));
-            } catch (\Throwable) {
-                // If initial repo cannot be opened (unreadable/not found), fall back to selection page
+            } catch (\Throwable $e) {
+                $this->logger?->warning(sprintf('TUI: Failed to open initial repository "%s": %s', $initialRepo, $e->getMessage()), [
+                    'repo' => $initialRepo,
+                    'actor' => $actor?->username(),
+                    'exception' => $e,
+                ]);
             }
         }
 
@@ -63,6 +69,7 @@ final class TuiCommand extends Command
         } finally {
             $root->quit();
         }
+
         return Command::SUCCESS;
     }
 }

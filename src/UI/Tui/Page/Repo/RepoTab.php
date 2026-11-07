@@ -18,6 +18,14 @@ interface RepoTab
     public function handleKey(string $seq): bool;
 
     /**
+     * Handle a left-button mouse press inside this tab's body while it is active.
+     * $line is the 0-based row within the painted body (as returned by
+     * {@see paintBody()}, i.e. already windowed/scrolled); $col the 0-based inner
+     * column. Returns true when consumed.
+     */
+    public function onClick(int $line, int $col, bool $nav = false): bool;
+
+    /**
      * @return list<string>
      */
     public function paintBody(int $cols, int $rows): array;
@@ -53,4 +61,21 @@ interface RepoTab
      * Returns true while work is still in progress.
      */
     public function tick(?float $deltaTime = null): bool;
+
+    /**
+     * Optional replacement tab bar lines (e.g., PR detail sub-tabs: About | Commits | Changes | Comments).
+     *
+     * @return list<string>|null
+     */
+    public function customTabBarLines(int $cols): ?array;
+
+    /**
+     * True when the tab renders a full-screen modal that hides the repository header and tab bar.
+     */
+    public function isFullScreenModal(): bool;
+
+    /**
+     * Optional status bar branch segment override (e.g. `head → base` in PR detail views).
+     */
+    public function statusBranch(): ?string;
 }
