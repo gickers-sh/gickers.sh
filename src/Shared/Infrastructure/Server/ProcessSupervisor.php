@@ -8,11 +8,9 @@ use Psr\Log\LoggerInterface;
 use Symfony\Component\Process\Process;
 
 /**
- * Runs the long-lived server processes side by side (Go `cmd/soft/serve`
- * starts SSH, HTTP, git daemon and jobs in one binary): relays their output,
- * restarts a process that exits unexpectedly, and on SIGINT/SIGTERM sends
- * SIGTERM to all of them, then SIGKILL after a 5 s grace period (Go's
- * `shutdown` timeout).
+ * Supervises the long-lived SSH, HTTP and Messenger worker processes: relays
+ * their output, restarts an unexpectedly exited process and, on SIGINT/SIGTERM,
+ * sends SIGTERM to all of them before SIGKILL after a 5 s grace period.
  */
 final class ProcessSupervisor
 {
@@ -25,9 +23,7 @@ final class ProcessSupervisor
 
     private bool $stopRequested = false;
 
-    public function __construct(private readonly LoggerInterface $logger)
-    {
-    }
+    public function __construct(private readonly LoggerInterface $logger) {}
 
     /**
      * @param array<string, Process>                                     $processes keyed by display name
@@ -110,7 +106,7 @@ final class ProcessSupervisor
 
         $deadline = microtime(true) + self::GRACE_SECONDS;
         do {
-            $running = array_filter($processes, static fn (Process $p): bool => $p->isRunning());
+            $running = array_filter($processes, static fn(Process $p): bool => $p->isRunning());
             if ([] === $running) {
                 return;
             }

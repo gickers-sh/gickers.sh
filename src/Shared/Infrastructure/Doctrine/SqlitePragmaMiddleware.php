@@ -12,7 +12,7 @@ use Doctrine\DBAL\Driver\Middleware\AbstractDriverMiddleware;
 
 /**
  * Enables FK enforcement, a busy timeout and WAL on every SQLite connection:
- * the web worker, Messenger consumers, git hooks and the git daemon write concurrently.
+ * the web worker, git hooks and SSH sessions write concurrently.
  */
 #[AsMiddleware]
 final class SqlitePragmaMiddleware implements Middleware

@@ -19,8 +19,6 @@ final readonly class ServerSettings
         public string $sshPublicUrl,
         public string $httpListenAddr,
         public string $httpPublicUrl,
-        public string $gitListenAddr,
-        public int $gitMaxConnections,
         public bool $lfsEnabled,
         public string $anonAccess,
         public bool $allowKeyless,
@@ -56,11 +54,6 @@ final readonly class ServerSettings
         return $this->dataPath.'/ssh';
     }
 
-    public function codeIntelPath(): string
-    {
-        return $this->dataPath.'/codeintel';
-    }
-
     /**
      * The SOFT_SERVE_* variables this object was built from (config/packages/codes_sh.yaml),
      * for processes that do not inherit the environment (sshd sessions).
@@ -76,8 +69,6 @@ final readonly class ServerSettings
             'SOFT_SERVE_SSH_PUBLIC_URL' => $this->sshPublicUrl,
             'SOFT_SERVE_HTTP_LISTEN_ADDR' => $this->httpListenAddr,
             'SOFT_SERVE_HTTP_PUBLIC_URL' => $this->httpPublicUrl,
-            'SOFT_SERVE_GIT_LISTEN_ADDR' => $this->gitListenAddr,
-            'SOFT_SERVE_GIT_MAX_CONNECTIONS' => (string) $this->gitMaxConnections,
             'SOFT_SERVE_LFS_ENABLED' => $this->lfsEnabled ? 'true' : 'false',
             'SOFT_SERVE_ANON_ACCESS' => $this->anonAccess,
             'SOFT_SERVE_ALLOW_KEYLESS' => $this->allowKeyless ? 'true' : 'false',

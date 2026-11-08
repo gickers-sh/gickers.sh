@@ -19,8 +19,8 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
  * Updates repository metadata. Only the arguments passed as non-null are applied.
  *
  * {@see RepoVisibilityChanged} is emitted only when the private flag actually
- * flips; description, project name and hidden changes carry no domain event
- * (Go has no webhook for them either). Requires read-write access.
+ * flips; description, project name and hidden changes carry no domain event.
+ * Requires read-write access.
  */
 final readonly class UpdateRepoSettings
 {

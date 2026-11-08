@@ -19,9 +19,8 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
  * {@see BranchTagCreated} / {@see BranchTagDeleted} per created/deleted ref, and
  * exactly one {@see PushReceived} for the whole push.
  *
- * Deviation from Go: Go's update hook fires a push webhook per ref
- * (`pkg/backend/hooks.go:97-102`); this collapses the push into a single event
- * carrying every change. Called by the git hooks, so it performs no access check.
+ * Collapses the whole push into a single event carrying every change rather than one
+ * event per ref. Called by the git hooks, so it performs no access check.
  */
 final readonly class RecordPush
 {
