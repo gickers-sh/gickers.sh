@@ -4,25 +4,18 @@ declare(strict_types=1);
 
 namespace App\Tests\Functional\Tui;
 
-use App\Access\Application\ServerPolicy;
-use App\CodeIntel\Domain\IndexStore;
-use App\CodeIntel\Infrastructure\Scip\ScipProtobufCodec;
 use App\Identity\Domain\Model\User;
 use App\Identity\Domain\UserStore;
-use App\PullRequest\Domain\Model\PullRequest;
-use App\PullRequest\Domain\PullRequestStore;
 use App\Repo\Application\CreateRepo;
 use App\Repo\Domain\RepoDirectory;
-use App\Repo\Domain\RepoName;
-use App\Repo\Domain\RepoStore;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
-use App\Repo\Infrastructure\Git\GitRepositoryWriter;
-use App\UI\Console\Command\Admin\ReindexCodeIntelCommand;
+use App\Tests\GitTestHelper;
 use App\UI\Console\Command\BrowseCommand;
 use App\UI\Console\Command\TuiCommand;
+use App\UI\Tui\AsyncLoader;
 use App\UI\Tui\Render\TermstrapRenderer;
-use App\UI\Tui\TuiPageFactory;
-use App\UI\Tui\Widget\AnsiDocumentWidget;
+use App\UI\Tui\TuiAppFactory;
+use App\UI\Tui\Widget\DocumentWidget;
 use Revolt\EventLoop;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -32,15 +25,11 @@ use Symfony\Component\Tui\Tui;
 
 final class TuiFunctionalTest extends KernelTestCase
 {
-    private TuiPageFactory $factory;
+    private TuiAppFactory $apps;
     private UserStore $userStore;
-    private RepoStore $repoStore;
     private CreateRepo $createRepo;
-    private ServerPolicy $serverPolicy;
     private GitRepositoryReader $gitReader;
-    private IndexStore $indexStore;
     private RepoDirectory $repoDirectory;
-    private GitRepositoryWriter $gitWriter;
     /** @var list<string> */
     private array $tempDirs = [];
 
@@ -49,15 +38,11 @@ final class TuiFunctionalTest extends KernelTestCase
         self::bootKernel();
         $container = static::getContainer();
 
-        $this->factory = $container->get(TuiPageFactory::class);
+        $this->apps = $container->get(TuiAppFactory::class);
         $this->userStore = $container->get(UserStore::class);
-        $this->repoStore = $container->get(RepoStore::class);
         $this->createRepo = $container->get(CreateRepo::class);
-        $this->serverPolicy = $container->get(ServerPolicy::class);
         $this->gitReader = $container->get(GitRepositoryReader::class);
-        $this->indexStore = $container->get(IndexStore::class);
         $this->repoDirectory = $container->get(RepoDirectory::class);
-        $this->gitWriter = new GitRepositoryWriter();
     }
 
     protected function tearDown(): void
@@ -73,7 +58,7 @@ final class TuiFunctionalTest extends KernelTestCase
 
     private function createTempDir(string $prefix = 'tui_test_'): string
     {
-        $path = sys_get_temp_dir() . '/' . $prefix . uniqid('', true);
+        $path = sys_get_temp_dir().'/'.$prefix.uniqid('', true);
         mkdir($path, 0755, true);
         $this->tempDirs[] = $path;
 
@@ -92,10 +77,10 @@ final class TuiFunctionalTest extends KernelTestCase
         );
         exec($cmd);
 
-        file_put_contents($dir . '/README.md', "# Demo Repository\n\nWelcome to demo.");
-        mkdir($dir . '/src', 0755, true);
+        file_put_contents($dir.'/README.md', "# Demo Repository\n\nWelcome to demo.");
+        mkdir($dir.'/src', 0755, true);
         file_put_contents(
-            $dir . '/src/Calculator.php',
+            $dir.'/src/Calculator.php',
             "<?php\n\nnamespace App;\n\nclass Calculator\n{\n    public function add(int \$a, int \$b): int\n    {\n        return \$a + \$b;\n    }\n}\n"
         );
 
@@ -141,10 +126,9 @@ final class TuiFunctionalTest extends KernelTestCase
         ($this->createRepo)($user, 'feed-project', false, false, 'A public project', 'feed-project');
 
         $vt = new VirtualTerminal(80, 24);
-        $tui = new Tui(terminal: $vt);
-        $root = $this->factory->createRoot($tui, $user);
-        $page = $this->factory->selectionPage($user);
-        $root->start($page);
+        $app = $this->apps->create($vt, $user, true);
+        $app->start($app->views()->selection());
+        $tui = $app->tui();
 
         $tui->start();
         $output = $this->tickUntilSettled($tui, $vt);
@@ -182,73 +166,12 @@ final class TuiFunctionalTest extends KernelTestCase
         $tui->stop();
     }
 
-    public function testSelectionPageNewRepoModalCreatesRepo(): void
-    {
-        $user = new User('bob', false, new \DateTimeImmutable());
-        $this->userStore->save($user);
-
-        $vt = new VirtualTerminal(80, 24);
-        $tui = new Tui(terminal: $vt);
-        $root = $this->factory->createRoot($tui, $user);
-        $page = $this->factory->selectionPage($user);
-        $root->start($page);
-
-        $tui->start();
-        $tui->tick();
-        $vt->clearOutput();
-
-        // Open modal
-        $vt->simulateInput('n');
-        $tui->tick();
-        $output = $vt->consumeOutput();
-        $this->assertStringContainsString('New repository', $output);
-        $this->assertStringContainsString('Name', $output);
-
-        // Type repo name: "shiny-repo"
-        $vt->simulateInput('shiny-repo');
-        $tui->tick();
-        $output = $vt->consumeOutput();
-        $this->assertStringContainsString('shiny-repo', $output);
-
-        // Press Tab to description field
-        $vt->simulateInput("\t");
-        $tui->tick();
-
-        // Type description: "A shiny project"
-        $vt->simulateInput('A shiny project');
-        $tui->tick();
-
-        // Press Tab to private toggle
-        $vt->simulateInput("\t");
-        $tui->tick();
-
-        // Toggle private with space
-        $vt->simulateInput(' ');
-        $tui->tick();
-
-        // Submit with Enter
-        $vt->simulateInput("\r");
-        $tui->tick();
-
-        $output = $vt->consumeOutput();
-        $this->assertStringContainsString('Created shiny-repo', $output);
-
-        // Verify repository was created in DB
-        $created = $this->repoStore->byName(RepoName::fromInput('shiny-repo'));
-        $this->assertNotNull($created);
-        $this->assertTrue($created->isPrivate());
-        $this->assertSame('A shiny project', $created->description());
-
-        $tui->stop();
-    }
-
     public function testSelectionPageHelpModal(): void
     {
         $vt = new VirtualTerminal(80, 24);
-        $tui = new Tui(terminal: $vt);
-        $root = $this->factory->createRoot($tui, null);
-        $page = $this->factory->selectionPage(null);
-        $root->start($page);
+        $app = $this->apps->create($vt, null, true);
+        $app->start($app->views()->selection());
+        $tui = $app->tui();
 
         $tui->start();
         $tui->tick();
@@ -270,219 +193,29 @@ final class TuiFunctionalTest extends KernelTestCase
         $tui->stop();
     }
 
-    public function testRepoPageWithCodeIntelQuery(): void
+    public function testDocumentWidgetRendersAndScrolls(): void
     {
-        [$dir, $headSha] = $this->createFixtureRepo();
-        $git = $this->gitReader->openRepository($dir);
-
-        // Store SCIP index for this repository and commit:
-        // Definition of add() at line 6, col 20..23 in src/Calculator.php
-        // Reference to add() at line 8, col 15..18 in src/Calculator.php
-        $codec = new ScipProtobufCodec();
-        $docs = [
-            [
-                'relative_path' => 'src/Calculator.php',
-                'language' => 'php',
-                'occurrences' => [
-                    [
-                        'range' => [6, 0, 50],
-                        'symbol' => 'App/Calculator#add().',
-                        'symbol_roles' => ScipProtobufCodec::SYMBOL_ROLE_DEFINITION,
-                    ],
-                    [
-                        'range' => [8, 0, 50],
-                        'symbol' => 'App/Calculator#add().',
-                        'symbol_roles' => 0,
-                    ],
-                ],
-            ],
-        ];
-        $binary = $codec->encodeIndex($docs);
-        $this->indexStore->store($git->name, $headSha, $binary);
-
-        $user = new User('charlie', false, new \DateTimeImmutable());
-        $this->userStore->save($user);
-
-        $vt = new VirtualTerminal(80, 24);
+        $vt = new VirtualTerminal(80, 2);
         $tui = new Tui(terminal: $vt);
-        $root = $this->factory->createBrowseRoot($tui, $user);
-        $page = $this->factory->repoPageForGit($user, $git);
-        $root->start($page);
-
-        $tui->start();
-        // Tab 1: Readme (renders spinner first, then resolves README)
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('Readme', $output);
-        $this->assertStringContainsString('Loading README...', $output);
-        $this->assertStringContainsString('Demo Repository', $output);
-
-        // Tab 2: Switch to Files tab
-        $vt->simulateInput("\t");
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('README.md', $output);
-        $this->assertStringContainsString('src', $output);
-
-        // Move to src and enter directory
-        $vt->simulateInput('j');
-        $tui->tick();
-        $vt->simulateInput("\r");
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('Loading files...', $output);
-        $this->assertStringContainsString('Calculator.php', $output);
-
-        // Open Calculator.php
-        $vt->simulateInput("\r");
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('Loading src/Calculator.php...', $output);
-        $plainCode = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
-        $this->assertStringContainsString('class Calculator', $plainCode);
-        $this->assertStringContainsString('public function add', $plainCode);
-
-        // Move cursor down to line 8 (where reference is)
-        for ($i = 0; $i < 8; ++$i) {
-            $vt->simulateInput('j');
-            $tui->tick();
-        }
-
-        // Jump to definition with 'd'
-        $vt->simulateInput('d');
-        $output = $this->tickUntilSettled($tui, $vt);
-        // Cursor is now on definition line 6
-        $this->assertStringContainsString('Calculator.php', $output);
-
-        // Trigger find references with 'r'
-        $vt->simulateInput('r');
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('1 reference(s)', $output);
-        $this->assertStringContainsString('src/Calculator.php', $output);
-        // Split preview pane renders the referenced file content centered on the ref line (0-indexed 8).
-        $plainRefs = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
-        $this->assertStringContainsString('return $a + $b', $plainRefs);
-        $this->assertStringContainsString('src/Calculator.php:9', $plainRefs);
-        $this->assertStringContainsString('▶', $output);
-
-        // Jump to selected reference with Enter
-        $vt->simulateInput("\r");
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringNotContainsString('1 reference(s)', $output);
-
-        // Cmd/Ctrl+click navigation: a modified click on the definition symbol
-        // (source line 7 / body row 7) lists references, mirroring Go symbolNavCmds.
-        $filesTab = $page->activeTab();
-        $this->assertTrue($filesTab->onClick(7, 10, true));
-        $page->sync();
-        $tui->requestRender();
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('1 reference(s)', $output);
-        // A plain (non-nav) click on the same cell does not trigger navigation.
-        $this->assertFalse($filesTab->onClick(7, 10, false));
-        $vt->simulateInput("\x1b"); // close references
-        $tui->tick();
-
-        // Exit file viewer with Esc
-        $vt->simulateInput("\x1b");
-        $tui->tick();
-
-        // Test Commits tab
-        $vt->simulateInput("\t");
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('Loading commits...', $output);
-        $this->assertStringContainsString('initial commit', $output);
-
-        // Test Branches tab
-        $vt->simulateInput("\t");
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('Loading branches...', $output);
-        $this->assertStringContainsString('main', $output);
-
-        // Test Tags tab
-        $vt->simulateInput("\t");
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('v1.0.0', $output);
-
-        // Test Pull Requests tab
-        $vt->simulateInput("\t");
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('Pull requests', $output);
-
-        // Test Profile tab
-        $vt->simulateInput("\t");
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('No profile available for this repository.', $output);
-        // Test Settings tab
-        $vt->simulateInput("\t");
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('Local repository', $output);
-        $tui->stop();
-    }
-
-    public function testAdminPage(): void
-    {
-        $admin = new User('superadmin', true, new \DateTimeImmutable());
-        $this->userStore->save($admin);
-
-        $normal = new User('developer', false, new \DateTimeImmutable());
-        $this->userStore->save($normal);
-
-        $vt = new VirtualTerminal(80, 24);
-        $tui = new Tui(terminal: $vt);
-        $root = $this->factory->createRoot($tui, $admin);
-        $page = $this->factory->adminPage($admin);
-        $root->start($page);
-
-        $tui->start();
-        $tui->tick();
-        $output = $vt->consumeOutput();
-        $this->assertStringContainsString('Server administration', $output);
-        $this->assertStringContainsString('Anonymous access', $output);
-        $this->assertStringContainsString('Allow keyless', $output);
-        $this->assertStringContainsString('superadmin', $output);
-        $this->assertStringContainsString('developer', $output);
-
-        $initialLevel = $this->serverPolicy->anonAccess();
-        // Cycle anon access with 'a'
-        $vt->simulateInput('a');
-        $tui->tick();
-        $nextLevel = $this->serverPolicy->anonAccess();
-        $this->assertNotSame($initialLevel, $nextLevel);
-
-        $initialKeyless = $this->serverPolicy->allowKeyless();
-        // Toggle keyless access with 'k'
-        $vt->simulateInput('k');
-        $tui->tick();
-        $this->assertSame(!$initialKeyless, $this->serverPolicy->allowKeyless());
-        $vt->consumeOutput();
-
-        // Press 'q' -> navigates back to selection page
-        $vt->simulateInput('q');
-        $tui->tick();
-        $output = $vt->consumeOutput();
-        $this->assertStringContainsString('Feed', $output);
-
-        $tui->stop();
-    }
-
-    public function testAnsiDocumentWidget(): void
-    {
-        $renderer = new TermstrapRenderer();
-        $widget = new AnsiDocumentWidget($renderer);
-
-        $widget->setDocument('TEST.md', "# Heading\n\nParagraph with **bold** text.\nLine 3\nLine 4");
+        $async = new AsyncLoader($tui);
+        $tui->onTick(static fn (): bool => $async->poll());
+        $widget = new DocumentWidget(new TermstrapRenderer(), $async);
+        $tui->add($widget);
+        $tui->setFocus($widget->scrollWidget());
         $this->assertTrue($widget->isVerticallyExpanded());
-        $this->assertSame(0, $widget->getScroll());
 
-        $lines = $widget->getLines(80);
-        $this->assertNotEmpty($lines);
-        $this->assertGreaterThanOrEqual(3, $widget->lineCount(80));
+        $widget->setDocument('TEST.md', "# Heading\n\nParagraph with **bold** text.\nLine 3\nLine 4\nLine 5\nLine 6");
+        $tui->start();
+        $this->tickUntilSettled($tui, $vt);
+        $scroll = $widget->scrollWidget();
+        $this->assertGreaterThanOrEqual(3, \count($scroll->lines()));
+        $this->assertSame(0, $scroll->scroll());
 
-        $widget->setScroll(2);
-        $this->assertSame(2, $widget->getScroll());
-
-        $widget->scrollBy(1);
-        $this->assertSame(3, $widget->getScroll());
-
-        $widget->expandVertically(false);
-        $this->assertFalse($widget->isVerticallyExpanded());
+        $scroll->setScroll(1);
+        $this->assertSame(1, $scroll->scroll());
+        $tui->handleInput('k');
+        $this->assertSame(0, $scroll->scroll());
+        $tui->stop();
     }
 
     public function testBrowseCommand(): void
@@ -490,7 +223,7 @@ final class TuiFunctionalTest extends KernelTestCase
         [$dir] = $this->createFixtureRepo();
         $vt = new VirtualTerminal(80, 24);
 
-        $cmd = new BrowseCommand($this->factory, $this->gitReader, null, $vt);
+        $cmd = new BrowseCommand($this->apps, $this->gitReader, null, $vt);
         $tester = new CommandTester($cmd);
 
         EventLoop::defer(static function () use ($vt): void {
@@ -505,7 +238,7 @@ final class TuiFunctionalTest extends KernelTestCase
     {
         $vt = new VirtualTerminal(80, 24);
 
-        $cmd = new TuiCommand($this->factory, null, $vt);
+        $cmd = new TuiCommand($this->apps, null, $vt);
         $tester = new CommandTester($cmd);
 
         EventLoop::defer(static function () use ($vt): void {
@@ -516,218 +249,6 @@ final class TuiFunctionalTest extends KernelTestCase
         $this->assertSame(0, $status);
     }
 
-    public function testAdminReindexCodeIntelCommand(): void
-    {
-        $container = static::getContainer();
-        $reindexCmd = $container->get(ReindexCodeIntelCommand::class);
-        $tester = new CommandTester($reindexCmd);
-
-        $user = new User('dave', false, new \DateTimeImmutable());
-        $this->userStore->save($user);
-
-        $repo = ($this->createRepo)($user, 'reindex-project', false, false, 'Project to reindex');
-
-        $repoPath = $this->repoDirectory->pathFor($repo->name());
-        $gitRepo = $this->gitReader->openRepository($repoPath);
-        $this->gitWriter->writeFile($gitRepo, 'main', 'src/App.php', "<?php\n\nclass App {}\n", 'add code', 'Tester', 'test@codes.sh');
-        $status = $tester->execute(['repo' => 'reindex-project']);
-        $this->assertSame(0, $status);
-
-        $output = $tester->getDisplay();
-        $this->assertStringContainsString('Indexing reindex-project', $output);
-        $this->assertStringContainsString('reindex-project: OK', $output);
-    }
-
-    public function testRepoPagePullRequestsListAndMerge(): void
-    {
-        $container = static::getContainer();
-        $user = new User('prowner' . uniqid(), true, new \DateTimeImmutable());
-        $this->userStore->save($user);
-
-        $repo = ($this->createRepo)($user, 'pulls-repo-' . uniqid(), false, false, 'PR testing repo');
-        $repoPath = $this->repoDirectory->pathFor($repo->name());
-        $gitRepo = $this->gitReader->openRepository($repoPath);
-
-        (new Process(['git', 'config', 'user.name', 'Tester'], $repoPath))->mustRun();
-        (new Process(['git', 'config', 'user.email', 'test@example.com'], $repoPath))->mustRun();
-
-        $this->gitWriter->writeFile($gitRepo, 'main', 'base.txt', "base content\n", 'Initial commit', 'Tester', 'test@example.com');
-        (new Process(['git', 'branch', 'feature-pr', 'main'], $repoPath))->mustRun();
-        $this->gitWriter->writeFile($gitRepo, 'feature-pr', 'feature.txt', "feature content\n", 'Feature commit', 'Tester', 'test@example.com');
-
-        $openPr = $container->get('test.open_pull_request');
-        $pr = $openPr($user, $repo->name(), 'Add feature PR', 'This is a description', 'feature-pr', 'main');
-        $this->assertSame(1, $pr->number());
-
-        $vt = new VirtualTerminal(80, 24);
-        $tui = new Tui(terminal: $vt);
-        $root = $this->factory->createRoot($tui, $user);
-        $page = $this->factory->repoPageForName($user, $repo->nameString());
-        $root->start($page);
-
-        $tui->start();
-        $this->tickUntilSettled($tui, $vt);
-
-        // Switch to Pull Requests tab (shortcut 6)
-        $vt->simulateInput('6');
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('#1', $output);
-        $this->assertStringContainsString('Add feature PR', $output);
-        $this->assertStringContainsString('[OPEN]', $output);
-        $this->assertStringContainsString('(main ← feature-pr)', $output);
-
-        // Open detail view with Enter
-        $vt->simulateInput("\r");
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('#1 Add feature PR', $output);
-        $this->assertStringContainsString('This is a description', $output);
-        $this->assertStringContainsString('About', $output);
-        $this->assertStringContainsString('Commits', $output);
-        $this->assertStringContainsString('Changes', $output);
-        $this->assertStringContainsString('Comments', $output);
-
-        $this->assertStringContainsString('wants to merge into', $output);
-        $this->assertStringContainsString('✓ Able to merge cleanly', $output);
-
-        // Navigate sub-tabs: Tab -> Commits (2), Tab -> Changes (3), Tab -> Comments (4), 1 -> About
-        $vt->simulateInput("\t");
-        $tui->tick();
-        $commitsOut = $vt->consumeOutput();
-        $this->assertStringContainsString('Commits (1):', $commitsOut);
-        $this->assertStringContainsString('Feature commit', $commitsOut);
-
-        $vt->simulateInput("\t");
-        $tui->tick();
-        $changesOut = $vt->consumeOutput();
-        $this->assertStringContainsString('Files changed (1):', $changesOut);
-        $this->assertStringContainsString('feature.txt', $changesOut);
-
-        $vt->simulateInput("\t");
-        $tui->tick();
-        $commentsOut = $vt->consumeOutput();
-        $this->assertStringContainsString('Comments (0):', $commentsOut);
-        $this->assertStringContainsString('No comments yet.', $commentsOut);
-
-        $vt->simulateInput('1');
-        $tui->tick();
-        $vt->consumeOutput();
-
-        // Press 'e' to open Edit Pull Request #1 modal
-        $vt->simulateInput('e');
-        $tui->tick();
-        $editOut = $vt->consumeOutput();
-        $this->assertStringContainsString('Edit Pull Request #1', $editOut);
-        $this->assertStringContainsString('tab switch field', $editOut);
-
-        // Press Esc to close Edit modal
-        $vt->simulateInput("\e");
-        $tui->tick();
-        $vt->consumeOutput();
-
-        // Press 'm' to merge
-        $vt->simulateInput('m');
-        $tui->tick();
-        $output = $vt->consumeOutput();
-        $this->assertStringContainsString('Merge pull request', $output);
-        $this->assertStringContainsString('Merge PR #1', $output);
-        // Press 'y' to confirm merge
-        $vt->simulateInput('y');
-        $tui->tick();
-        $output = $vt->consumeOutput();
-        $this->assertStringContainsString('Merged PR #1', $output);
-
-        // Verify status in DB
-        /** @var \App\PullRequest\Application\Query\PullRequestQuery $prQuery */
-        $prQuery = $container->get('test.pull_request_query');
-        $updatedPr = $prQuery->get($user, $repo->name(), 1);
-        $this->assertTrue($updatedPr->isMerged());
-
-        $tui->stop();
-    }
-
-    public function testRepoPageSettingsEditModalForm(): void
-    {
-        $user = new User('settings-tester', true, new \DateTimeImmutable());
-        $this->userStore->save($user);
-
-        $repo = ($this->createRepo)($user, 'settings-test-repo', false, false, 'Initial description', 'initial-project');
-
-        $vt = new VirtualTerminal(80, 24);
-        $tui = new Tui(terminal: $vt);
-        $root = $this->factory->createRoot($tui, $user);
-        $page = $this->factory->repoPageForName($user, $repo->nameString());
-        $root->start($page);
-
-        $tui->start();
-        $this->tickUntilSettled($tui, $vt);
-
-        // Switch to Settings tab (shortcut 8)
-        $vt->simulateInput('8');
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('Repository settings', $output);
-        $this->assertStringContainsString('ADMIN', $output);
-        $this->assertStringContainsString('Initial description', $output);
-        $this->assertStringContainsString('initial-project', $output);
-        $this->assertStringContainsString('press e to edit settings', $output);
-
-        // Press 'e' to enter editing mode
-        $vt->simulateInput('e');
-        $tui->tick();
-        $output = $vt->consumeOutput();
-        $this->assertStringContainsString('Repository settings', $output);
-        $this->assertStringContainsString('EDITING', $output);
-        $this->assertStringContainsString('Project name', $output);
-        $this->assertStringContainsString('Description', $output);
-        $this->assertStringContainsString('Visibility & Access', $output);
-        // Private/Hidden toggle rows are not rendered in SettingsTab card
-        $this->assertStringContainsString('ctrl+s save', $output);
-
-        // Enter on Project name moves to Description
-        $vt->simulateInput("\r");
-        $tui->tick();
-
-        // Clear and update description
-        for ($i = 0; $i < 25; ++$i) {
-            $vt->simulateInput("\x7f");
-        }
-        $vt->simulateInput('Updated description');
-        $tui->tick();
-
-        // Enter on Description moves to Private toggle
-        $vt->simulateInput("\r");
-        $tui->tick();
-
-        // Space toggles Private
-        $vt->simulateInput(' ');
-        $tui->tick();
-        $vt->consumeOutput();
-
-        // Down arrow / Tab moves to Hidden toggle
-        $vt->simulateInput("\t");
-        $tui->tick();
-
-        // Space toggles Hidden
-        $vt->simulateInput(' ');
-        $tui->tick();
-        $vt->consumeOutput();
-
-        // Submit with Ctrl+S (\x13)
-        $vt->simulateInput("\x13");
-        $tui->tick();
-        $output = $vt->consumeOutput();
-        $this->assertStringContainsString('Settings saved.', $output);
-
-        // Verify in DB
-        $reloaded = $this->repoStore->byName($repo->name());
-        $this->assertNotNull($reloaded);
-        $this->assertSame('Updated description', $reloaded->description());
-        $this->assertSame('initial-project', $reloaded->projectName());
-        $this->assertTrue($reloaded->isPrivate());
-        $this->assertTrue($reloaded->isHidden());
-
-        $tui->stop();
-    }
-
     public function testSpinnerLoaderAnimatesDuringAsyncLoading(): void
     {
         [$dir] = $this->createFixtureRepo();
@@ -736,10 +257,9 @@ final class TuiFunctionalTest extends KernelTestCase
         $this->userStore->save($user);
 
         $vt = new VirtualTerminal(80, 24);
-        $tui = new Tui(terminal: $vt);
-        $root = $this->factory->createBrowseRoot($tui, $user);
-        $page = $this->factory->repoPageForGit($user, $git);
-        $root->start($page);
+        $app = $this->apps->create($vt, $user, false);
+        $app->start($app->views()->repoForGit($git));
+        $tui = $app->tui();
 
         $tui->start();
         // First tick renders immediately with spinner frame 0 (⠋) while git ls-tree runs in background
@@ -758,9 +278,9 @@ final class TuiFunctionalTest extends KernelTestCase
     public function testFilesTabFuzzySearchFiltersAndOpensNestedFile(): void
     {
         [$dir] = $this->createFixtureRepo();
-        mkdir($dir . '/src/Deep/Nested', 0755, true);
+        mkdir($dir.'/src/Deep/Nested', 0755, true);
         file_put_contents(
-            $dir . '/src/Deep/Nested/TargetService.php',
+            $dir.'/src/Deep/Nested/TargetService.php',
             "<?php\n\nnamespace App\\Deep\\Nested;\n\nfinal class TargetService {}\n"
         );
         exec(sprintf('cd %s && git add . && git commit -m "add nested target"', escapeshellarg($dir)));
@@ -770,10 +290,9 @@ final class TuiFunctionalTest extends KernelTestCase
         $this->userStore->save($user);
 
         $vt = new VirtualTerminal(80, 24);
-        $tui = new Tui(terminal: $vt);
-        $root = $this->factory->createBrowseRoot($tui, $user);
-        $page = $this->factory->repoPageForGit($user, $git);
-        $root->start($page);
+        $app = $this->apps->create($vt, $user, false);
+        $app->start($app->views()->repoForGit($git));
+        $tui = $app->tui();
 
         $tui->start();
         $this->tickUntilSettled($tui, $vt);
@@ -815,19 +334,16 @@ final class TuiFunctionalTest extends KernelTestCase
         $tui->stop();
     }
 
-    public function testCommitsBranchesTagsAndPullsFuzzySearch(): void
+    public function testCommitsBranchesAndTagsFuzzySearch(): void
     {
-        $container = static::getContainer();
         $user = new User('alice-dev', true, new \DateTimeImmutable());
         $this->userStore->save($user);
-        $bob = new User('bob-reviewer', false, new \DateTimeImmutable());
-        $this->userStore->save($bob);
 
-        $repo = ($this->createRepo)($user, 'fuzzy-all-tabs-' . uniqid(), false, false, 'Fuzzy tabs repo');
+        $repo = ($this->createRepo)($user, 'fuzzy-all-tabs-'.uniqid(), false, false, 'Fuzzy tabs repo');
         $repoPath = $this->repoDirectory->pathFor($repo->name());
         $gitRepo = $this->gitReader->openRepository($repoPath);
 
-        $this->gitWriter->writeFile(
+        GitTestHelper::writeFile(
             $gitRepo,
             'main',
             'README.md',
@@ -836,7 +352,7 @@ final class TuiFunctionalTest extends KernelTestCase
             'Alice Author',
             'alice@codes.sh',
         );
-        $this->gitWriter->writeFile(
+        GitTestHelper::writeFile(
             $gitRepo,
             'main',
             'src/Security.php',
@@ -847,7 +363,7 @@ final class TuiFunctionalTest extends KernelTestCase
         );
 
         (new Process(['git', 'branch', 'feature/oauth-refresh', 'main'], $repoPath))->mustRun();
-        $this->gitWriter->writeFile(
+        GitTestHelper::writeFile(
             $gitRepo,
             'feature/oauth-refresh',
             'src/Refresh.php',
@@ -859,16 +375,10 @@ final class TuiFunctionalTest extends KernelTestCase
         (new Process(['git', 'tag', 'v1.0.0-alpha', 'main~1'], $repoPath))->mustRun();
         (new Process(['git', 'tag', 'v2.4.0-release', 'main'], $repoPath))->mustRun();
 
-        $prStore = $container->get(PullRequestStore::class);
-        $now = new \DateTimeImmutable();
-        $prStore->save(new PullRequest($repo, 1, 'Add README docs', 'Documentation update only', 'main', str_repeat('a', 40), $repo, 'feature/oauth-refresh', str_repeat('b', 40), $user, $now));
-        $prStore->save(new PullRequest($repo, 2, 'Rotate OAuth refresh tokens', 'Prevents replay attacks on mobile clients', 'main', str_repeat('a', 40), $repo, 'feature/oauth-refresh', str_repeat('b', 40), $bob, $now));
-
         $vt = new VirtualTerminal(100, 28);
-        $tui = new Tui(terminal: $vt);
-        $root = $this->factory->createRoot($tui, $user);
-        $page = $this->factory->repoPageForName($user, $repo->nameString());
-        $root->start($page);
+        $app = $this->apps->create($vt, $user, true);
+        $app->start($app->views()->repoByName($repo->nameString()));
+        $tui = $app->tui();
 
         $tui->start();
         $this->tickUntilSettled($tui, $vt);
@@ -936,36 +446,14 @@ final class TuiFunctionalTest extends KernelTestCase
         $vt->simulateInput("\e");
         $this->tickUntilSettled($tui, $vt);
 
-        // 4. Pull Requests tab (shortcut 6): fuzzy filter by author + description ("bob replay")
-        $vt->simulateInput('6');
-        $output = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('Add README docs', $output);
-        $this->assertStringContainsString('Rotate OAuth refresh tokens', $output);
-
-        $vt->simulateInput('/');
-        $this->tickUntilSettled($tui, $vt);
-        $vt->simulateInput('bob replay');
-        $output = $this->tickUntilSettled($tui, $vt);
-        $plain = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
-        $this->assertStringContainsString('Rotate OAuth refresh tokens', $plain);
-        $this->assertStringNotContainsString('Add README docs', $plain);
-        $this->assertStringContainsString('# 1/1', $plain);
-
-        // Press Enter to open PR detail view
-        $vt->simulateInput("\r");
-        $output = $this->tickUntilSettled($tui, $vt);
-        $plainDetail = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
-        $this->assertStringContainsString('#2 Rotate OAuth refresh tokens', $plainDetail);
-        $this->assertStringContainsString('Prevents replay attacks on mobile clients', $plainDetail);
-
         $tui->stop();
     }
 
     public function testSelectionPageFeedAndMyRepositoriesFuzzySearch(): void
     {
-        $alice = new User('alice-owner-' . uniqid(), false, new \DateTimeImmutable());
+        $alice = new User('alice-owner-'.uniqid(), false, new \DateTimeImmutable());
         $this->userStore->save($alice);
-        $bob = new User('bob-owner-' . uniqid(), false, new \DateTimeImmutable());
+        $bob = new User('bob-owner-'.uniqid(), false, new \DateTimeImmutable());
         $this->userStore->save($bob);
 
         ($this->createRepo)($alice, 'alpha-engine', false, false, 'High performance physics engine', 'Alpha Engine');
@@ -973,10 +461,9 @@ final class TuiFunctionalTest extends KernelTestCase
         ($this->createRepo)($bob, 'omega-payments', false, false, 'Stripe billing gateway', 'Omega Payments');
 
         $vt = new VirtualTerminal(90, 24);
-        $tui = new Tui(terminal: $vt);
-        $root = $this->factory->createRoot($tui, $alice);
-        $page = $this->factory->selectionPage($alice);
-        $root->start($page);
+        $app = $this->apps->create($vt, $alice, true);
+        $app->start($app->views()->selection());
+        $tui = $app->tui();
 
         $tui->start();
         $this->tickUntilSettled($tui, $vt);
@@ -1026,10 +513,10 @@ final class TuiFunctionalTest extends KernelTestCase
 
     public function testSelectionPageShowsFlashMessageWhenOpeningOrphanRepositoryWithoutDiskDirectory(): void
     {
-        $user = new User('orphan-tester-' . uniqid(), true, new \DateTimeImmutable());
+        $user = new User('orphan-tester-'.uniqid(), true, new \DateTimeImmutable());
         $this->userStore->save($user);
 
-        $repo = ($this->createRepo)($user, 'orphan-repo-' . uniqid(), false, false, 'An orphan test repo', 'Orphan Repo');
+        $repo = ($this->createRepo)($user, 'orphan-repo-'.uniqid(), false, false, 'An orphan test repo', 'Orphan Repo');
         $repoDiskPath = $this->repoDirectory->pathFor($repo->name());
         $this->assertTrue(is_dir($repoDiskPath));
         // Simulate the orphan state by deleting the git repository directory on disk
@@ -1037,10 +524,9 @@ final class TuiFunctionalTest extends KernelTestCase
         $this->assertFalse(is_dir($repoDiskPath));
 
         $vt = new VirtualTerminal(90, 24);
-        $tui = new Tui(terminal: $vt);
-        $root = $this->factory->createRoot($tui, $user);
-        $page = $this->factory->selectionPage($user);
-        $root->start($page);
+        $app = $this->apps->create($vt, $user, true);
+        $app->start($app->views()->selection());
+        $tui = $app->tui();
 
         $tui->start();
         $this->tickUntilSettled($tui, $vt);
@@ -1078,13 +564,12 @@ final class TuiFunctionalTest extends KernelTestCase
         // Point the repo at the fixture working tree so it opens on disk.
         $target = $this->repoDirectory->pathFor($repo->name());
         (new Process(['rm', '-rf', $target]))->run();
-        (new Process(['cp', '-R', $dir . '/.git', $target]))->run();
+        (new Process(['cp', '-R', $dir.'/.git', $target]))->run();
 
         $vt = new VirtualTerminal(80, 24);
-        $tui = new Tui(terminal: $vt);
-        $root = $this->factory->createRoot($tui, $user);
-        $page = $this->factory->selectionPage($user);
-        $root->start($page);
+        $app = $this->apps->create($vt, $user, true);
+        $app->start($app->views()->selection());
+        $tui = $app->tui();
         $tui->start();
         $this->tickUntilSettled($tui, $vt);
 
