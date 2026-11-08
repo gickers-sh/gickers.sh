@@ -1,144 +1,6 @@
 parameters:
 	ignoreErrors:
 		-
-			message: '#^Offset ''new'' on array\{ref\: string, old\: string, new\: string\} on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: src/CodeIntel/Application/PushIndexSubscriber.php
-
-		-
-			message: '#^Method App\\CodeIntel\\Domain\\SymbolInfo\:\:toArray\(\) should return array\{symbol\: string, definitions\: array\<int, array\{path\: string, line\: int, col\: int, endLine\: int\|null, endCol\: int\|null\}\>, references\: array\<int, array\{path\: string, line\: int, col\: int, endLine\: int\|null, endCol\: int\|null\}\>\} but returns array\{symbol\: string, definitions\: array\<array\{path\: string, line\: int, col\: int, endLine\: int\|null, endCol\: int\|null\}\>, references\: array\<array\{path\: string, line\: int, col\: int, endLine\: int\|null, endCol\: int\|null\}\>\}\.$#'
-			identifier: return.type
-			count: 1
-			path: src/CodeIntel/Domain/SymbolInfo.php
-
-		-
-			message: '#^Offset ''occurrences'' on array\{relative_path\: string, occurrences\: array\<int, array\{range\: array\<int\>, symbol\: string, symbol_roles\: int\}\>, language\: string\} on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: src/CodeIntel/Infrastructure/FilesystemIndexStore.php
-
-		-
-			message: '#^Offset ''range'' on array\{range\: array\<int\>, symbol\: string, symbol_roles\: int\} on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: src/CodeIntel/Infrastructure/FilesystemIndexStore.php
-
-		-
-			message: '#^Offset ''relative_path'' on array\{relative_path\: string, occurrences\: array\<int, array\{range\: array\<int\>, symbol\: string, symbol_roles\: int\}\>, language\: string\} on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: src/CodeIntel/Infrastructure/FilesystemIndexStore.php
-
-		-
-			message: '#^Offset ''symbol'' on array\{range\: array\<int\>, symbol\: string, symbol_roles\: int\} on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: src/CodeIntel/Infrastructure/FilesystemIndexStore.php
-
-		-
-			message: '#^Offset ''symbol_roles'' on array\{range\: array\<int\>, symbol\: string, symbol_roles\: int\} on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: src/CodeIntel/Infrastructure/FilesystemIndexStore.php
-
-		-
-			message: '#^Cannot call method getRealPath\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: src/CodeIntel/Infrastructure/GitArchiveExtractor.php
-
-		-
-			message: '#^Cannot call method isDir\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/CodeIntel/Infrastructure/GitArchiveExtractor.php
-
-		-
-			message: '#^Parameter \#1 \$directory of function rmdir expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/CodeIntel/Infrastructure/GitArchiveExtractor.php
-
-		-
-			message: '#^Parameter \#1 \$filename of function unlink expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/CodeIntel/Infrastructure/GitArchiveExtractor.php
-
-		-
-			message: '#^Cannot call method getFilename\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
-
-		-
-			message: '#^Cannot call method getPathname\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
-
-		-
-			message: '#^Cannot call method isFile\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 2
-			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
-
-		-
-			message: '#^Method App\\CodeIntel\\Infrastructure\\Indexer\\NativePhpIndexer\:\:index\(\) never returns null so it can be removed from the return type\.$#'
-			identifier: return.unusedType
-			count: 1
-			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
-
-		-
-			message: '#^Parameter \#1 \$haystack of function str_ends_with expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 2
-			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
-
-		-
-			message: '#^Parameter \#1 \$string of function substr expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
-
-		-
-			message: '#^Parameter \#1 \.\.\.\$arrays of function array_merge expects array, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
-
-		-
-			message: '#^Parameter \#2 \.\.\.\$arrays of function array_merge expects array, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/CodeIntel/Infrastructure/Indexer/NativePhpIndexer.php
-
-		-
-			message: '#^Method App\\CodeIntel\\Infrastructure\\Scip\\ScipProtobufCodec\:\:encodeIndex\(\) has parameter \$documents with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/CodeIntel/Infrastructure/Scip/ScipProtobufCodec.php
-
-		-
-			message: '#^Parameter \#1 \$doc of method App\\CodeIntel\\Infrastructure\\Scip\\ScipProtobufCodec\:\:encodeDocument\(\) expects array\{relative_path\?\: string, path\?\: string, occurrences\?\: array\<int, App\\CodeIntel\\Domain\\Occurrence\|array\{range\?\: array\<int\>, symbol\?\: string, symbol_roles\?\: int\}\>, language\?\: string\}, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/CodeIntel/Infrastructure/Scip/ScipProtobufCodec.php
-
-		-
-			message: '#^Right side of && is always true\.$#'
-			identifier: booleanAnd.rightAlwaysTrue
-			count: 1
-			path: src/CodeIntel/Infrastructure/Scip/ScipProtobufCodec.php
-
-		-
 			message: '#^Parameter \#3 \$length of function substr expects int\|null, mixed given\.$#'
 			identifier: argument.type
 			count: 1
@@ -157,12 +19,6 @@ parameters:
 			path: src/Repo/Infrastructure/Doctrine/DoctrineCollaboratorStore.php
 
 		-
-			message: '#^Cannot cast mixed to int\.$#'
-			identifier: cast.int
-			count: 1
-			path: src/Repo/Infrastructure/Doctrine/DoctrineRepoStore.php
-
-		-
 			message: '#^Offset 0 on non\-empty\-list\<string\> on left side of \?\? always exists and is not nullable\.$#'
 			identifier: nullCoalesce.offset
 			count: 1
@@ -173,30 +29,6 @@ parameters:
 			identifier: booleanAnd.rightAlwaysTrue
 			count: 1
 			path: src/Repo/Infrastructure/Git/GitRepositoryReader.php
-
-		-
-			message: '#^Cannot cast mixed to int\.$#'
-			identifier: cast.int
-			count: 1
-			path: src/UI/GitDaemon/GitDaemonCommand.php
-
-		-
-			message: '#^Cannot cast mixed to string\.$#'
-			identifier: cast.string
-			count: 1
-			path: src/UI/GitDaemon/GitDaemonCommand.php
-
-		-
-			message: '#^Call to function is_array\(\) with array\{timed_out\: bool, blocked\: bool, eof\: bool, unread_bytes\: int, stream_type\: string, wrapper_type\: string, wrapper_data\: mixed, mode\: string, \.\.\.\} will always evaluate to true\.$#'
-			identifier: function.alreadyNarrowedType
-			count: 1
-			path: src/UI/GitDaemon/GitDaemonProtocol.php
-
-		-
-			message: '#^Parameter \#2 \$length of function fread expects int\<1, max\>, int given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/UI/GitDaemon/GitDaemonProtocol.php
 
 		-
 			message: '#^Cannot cast mixed to int\.$#'
@@ -249,72 +81,6 @@ parameters:
 		-
 			message: '#^Parameter \#1 \$command of class Symfony\\Component\\Console\\Tester\\CommandTester constructor expects \(callable\(\)\: mixed\)\|Symfony\\Component\\Console\\Command\\Command, object given\.$#'
 			identifier: argument.type
-			count: 10
-			path: tests/Functional/Ssh/PullRequestCommandTest.php
-
-		-
-			message: '#^Service "test\.pr_close_command" is not registered in the container\.$#'
-			identifier: symfonyContainer.serviceNotFound
-			count: 1
-			path: tests/Functional/Ssh/PullRequestCommandTest.php
-
-		-
-			message: '#^Service "test\.pr_comment_command" is not registered in the container\.$#'
-			identifier: symfonyContainer.serviceNotFound
-			count: 1
-			path: tests/Functional/Ssh/PullRequestCommandTest.php
-
-		-
-			message: '#^Service "test\.pr_create_command" is not registered in the container\.$#'
-			identifier: symfonyContainer.serviceNotFound
-			count: 1
-			path: tests/Functional/Ssh/PullRequestCommandTest.php
-
-		-
-			message: '#^Service "test\.pr_delete_command" is not registered in the container\.$#'
-			identifier: symfonyContainer.serviceNotFound
-			count: 1
-			path: tests/Functional/Ssh/PullRequestCommandTest.php
-
-		-
-			message: '#^Service "test\.pr_diff_command" is not registered in the container\.$#'
-			identifier: symfonyContainer.serviceNotFound
-			count: 1
-			path: tests/Functional/Ssh/PullRequestCommandTest.php
-
-		-
-			message: '#^Service "test\.pr_list_command" is not registered in the container\.$#'
-			identifier: symfonyContainer.serviceNotFound
-			count: 1
-			path: tests/Functional/Ssh/PullRequestCommandTest.php
-
-		-
-			message: '#^Service "test\.pr_merge_command" is not registered in the container\.$#'
-			identifier: symfonyContainer.serviceNotFound
-			count: 1
-			path: tests/Functional/Ssh/PullRequestCommandTest.php
-
-		-
-			message: '#^Service "test\.pr_reopen_command" is not registered in the container\.$#'
-			identifier: symfonyContainer.serviceNotFound
-			count: 1
-			path: tests/Functional/Ssh/PullRequestCommandTest.php
-
-		-
-			message: '#^Service "test\.pr_view_command" is not registered in the container\.$#'
-			identifier: symfonyContainer.serviceNotFound
-			count: 1
-			path: tests/Functional/Ssh/PullRequestCommandTest.php
-
-		-
-			message: '#^Service "test\.ssh_session" is not registered in the container\.$#'
-			identifier: symfonyContainer.serviceNotFound
-			count: 1
-			path: tests/Functional/Ssh/PullRequestCommandTest.php
-
-		-
-			message: '#^Parameter \#1 \$command of class Symfony\\Component\\Console\\Tester\\CommandTester constructor expects \(callable\(\)\: mixed\)\|Symfony\\Component\\Console\\Command\\Command, object given\.$#'
-			identifier: argument.type
 			count: 5
 			path: tests/Functional/Ssh/WebhookCommandTest.php
 
@@ -343,30 +109,6 @@ parameters:
 			path: tests/Functional/Ssh/WebhookCommandTest.php
 
 		-
-			message: '#^Cannot call method number\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: tests/Functional/Tui/TuiFunctionalTest.php
-
-		-
-			message: '#^Service "test\.open_pull_request" is not registered in the container\.$#'
-			identifier: symfonyContainer.serviceNotFound
-			count: 1
-			path: tests/Functional/Tui/TuiFunctionalTest.php
-
-		-
-			message: '#^Service "test\.pull_request_query" is not registered in the container\.$#'
-			identifier: symfonyContainer.serviceNotFound
-			count: 1
-			path: tests/Functional/Tui/TuiFunctionalTest.php
-
-		-
-			message: '#^Trying to invoke object but it might not be a callable\.$#'
-			identifier: callable.nonCallable
-			count: 1
-			path: tests/Functional/Tui/TuiFunctionalTest.php
-
-		-
 			message: '#^Parameter \#1 \$kernel of class Symfony\\Bundle\\FrameworkBundle\\Console\\Application constructor expects Symfony\\Component\\HttpKernel\\KernelInterface, Symfony\\Component\\HttpKernel\\KernelInterface\|null given\.$#'
 			identifier: argument.type
 			count: 1
@@ -375,7 +117,7 @@ parameters:
 		-
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with int will always evaluate to true\.$#'
 			identifier: method.alreadyNarrowedType
-			count: 2
+			count: 1
 			path: tests/Functional/UI/Ssh/SshEntrypointCommandTest.php
 
 		-
@@ -407,60 +149,6 @@ parameters:
 			identifier: symfonyContainer.serviceNotFound
 			count: 1
 			path: tests/Integration/Access/AccessGuardTest.php
-
-		-
-			message: '#^Cannot call method getRealPath\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: tests/Integration/CodeIntel/CodeIntelTestCase.php
-
-		-
-			message: '#^Cannot call method isDir\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: tests/Integration/CodeIntel/CodeIntelTestCase.php
-
-		-
-			message: '#^Parameter \#1 \$directory of function rmdir expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: tests/Integration/CodeIntel/CodeIntelTestCase.php
-
-		-
-			message: '#^Parameter \#1 \$filename of function unlink expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: tests/Integration/CodeIntel/CodeIntelTestCase.php
-
-		-
-			message: '#^Parameter \#1 \$command of class Symfony\\Component\\Process\\Process constructor expects array\<string\>, array given\.$#'
-			identifier: argument.type
-			count: 1
-			path: tests/Integration/CodeIntel/IndexCommitHandlerTest.php
-
-		-
-			message: '#^Call to function assert\(\) with true will always evaluate to true\.$#'
-			identifier: function.alreadyNarrowedType
-			count: 2
-			path: tests/Integration/GitDaemon/GitDaemonProtocolTest.php
-
-		-
-			message: '#^Instanceof between App\\Identity\\Infrastructure\\Doctrine\\DoctrineUserStore and App\\Identity\\Domain\\UserStore will always evaluate to true\.$#'
-			identifier: instanceof.alwaysTrue
-			count: 1
-			path: tests/Integration/GitDaemon/GitDaemonProtocolTest.php
-
-		-
-			message: '#^Instanceof between App\\Repo\\Infrastructure\\Doctrine\\DoctrineRepoStore and App\\Repo\\Domain\\RepoStore will always evaluate to true\.$#'
-			identifier: instanceof.alwaysTrue
-			count: 1
-			path: tests/Integration/GitDaemon/GitDaemonProtocolTest.php
-
-		-
-			message: '#^Service "test\.access_guard" is not registered in the container\.$#'
-			identifier: symfonyContainer.serviceNotFound
-			count: 1
-			path: tests/Integration/GitDaemon/GitDaemonProtocolTest.php
 
 		-
 			message: '#^Property App\\Tests\\Integration\\Identity\\AccessTokenTest\:\:\$authToken \(App\\Identity\\Application\\AuthenticateAccessToken\) does not accept object\.$#'
@@ -655,30 +343,6 @@ parameters:
 			path: tests/Integration/Identity/UserLifecycleTest.php
 
 		-
-			message: '#^Property App\\Tests\\Integration\\PullRequest\\MergePullRequestTest\:\:\$mergePr \(App\\PullRequest\\Application\\MergePullRequest\) does not accept object\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: tests/Integration/PullRequest/MergePullRequestTest.php
-
-		-
-			message: '#^Property App\\Tests\\Integration\\PullRequest\\MergePullRequestTest\:\:\$openPr \(App\\PullRequest\\Application\\OpenPullRequest\) does not accept object\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: tests/Integration/PullRequest/MergePullRequestTest.php
-
-		-
-			message: '#^Service "test\.merge_pull_request" is not registered in the container\.$#'
-			identifier: symfonyContainer.serviceNotFound
-			count: 1
-			path: tests/Integration/PullRequest/MergePullRequestTest.php
-
-		-
-			message: '#^Service "test\.open_pull_request" is not registered in the container\.$#'
-			identifier: symfonyContainer.serviceNotFound
-			count: 1
-			path: tests/Integration/PullRequest/MergePullRequestTest.php
-
-		-
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsArray\(\) with array\<string\> will always evaluate to true\.$#'
 			identifier: method.alreadyNarrowedType
 			count: 1
@@ -689,12 +353,6 @@ parameters:
 			identifier: method.alreadyNarrowedType
 			count: 1
 			path: tests/Integration/Repo/Git/GitRepositoryReaderTest.php
-
-		-
-			message: '#^Method App\\Tests\\Integration\\Repo\\Git\\GitRepositoryWriterTest\:\:invalidPathProvider\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: tests/Integration/Repo/Git/GitRepositoryWriterTest.php
 
 		-
 			message: '#^Property App\\Tests\\Integration\\Repo\\RepoUseCaseTestCase\:\:\$accessGuard \(App\\Access\\Application\\AccessGuard\) does not accept object\.$#'
