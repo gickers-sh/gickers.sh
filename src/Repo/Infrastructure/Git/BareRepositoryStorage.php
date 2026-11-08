@@ -60,14 +60,13 @@ final class BareRepositoryStorage implements RepoDirectory
         RepoName $name,
         string $defaultBranch = 'main',
         string $description = '',
-        bool $exportOk = true,
     ): GitRepository {
         $path = $this->pathFor($name);
         if ($this->exists($name)) {
             throw new \RuntimeException(sprintf('Repository "%s" already exists.', $name->value));
         }
 
-        $repo = $this->initBareRepository($path, $defaultBranch, $description, $exportOk);
+        $repo = $this->initBareRepository($path, $defaultBranch, $description);
         if ($repo->name !== $name->value) {
             return new GitRepository(
                 name: $name->value,
@@ -91,7 +90,6 @@ final class BareRepositoryStorage implements RepoDirectory
         string $path,
         string $defaultBranch = 'main',
         string $description = '',
-        bool $exportOk = true,
     ): GitRepository {
         if (!is_dir($path)) {
             if (!mkdir($path, 0755, true) && !is_dir($path)) {
@@ -107,10 +105,6 @@ final class BareRepositoryStorage implements RepoDirectory
 
         if ('' !== $description) {
             file_put_contents($path.'/description', $description."\n");
-        }
-
-        if ($exportOk) {
-            touch($path.'/git-daemon-export-ok');
         }
 
         $realPath = realpath($path) ?: $path;
@@ -175,8 +169,6 @@ final class BareRepositoryStorage implements RepoDirectory
             file_put_contents($targetPath.'/description', $description."\n");
         }
 
-        touch($targetPath.'/git-daemon-export-ok');
-
         $realPath = realpath($targetPath) ?: $targetPath;
 
         return ($this->reader ?? new GitRepositoryReader())->openRepository($realPath);
@@ -205,8 +197,6 @@ final class BareRepositoryStorage implements RepoDirectory
         $args[] = $targetPath;
 
         GitCommand::mustRun($parentDir, $args);
-
-        touch($targetPath.'/git-daemon-export-ok');
 
         return $this->open($target);
     }
