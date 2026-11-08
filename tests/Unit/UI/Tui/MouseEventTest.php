@@ -64,11 +64,30 @@ final class MouseEventTest extends TestCase
         self::assertFalse($release->press);
     }
 
-    public function testIgnoresWheelMotionAndNonMouseSequences(): void
+    public function testDecodesWheelUpAndDown(): void
     {
-        self::assertNull(MouseEvent::tryParse("\e[<64;3;4M")); // wheel up
+        $up = MouseEvent::tryParse("\e[<64;10;5M");
+        self::assertNotNull($up);
+        self::assertSame(-1, $up->wheel);
+        self::assertSame(10, $up->x);
+        self::assertSame(5, $up->y);
+        self::assertTrue($up->press);
+
+        $down = MouseEvent::tryParse("\e[<65;10;5M");
+        self::assertNotNull($down);
+        self::assertSame(1, $down->wheel);
+
+        $click = MouseEvent::tryParse("\e[<0;10;5M");
+        self::assertNotNull($click);
+        self::assertSame(0, $click->wheel);
+    }
+
+    public function testIgnoresMotionAndNonMouseSequences(): void
+    {
         self::assertNull(MouseEvent::tryParse("\e[<35;3;4M")); // motion (bit 32) + button
+        self::assertTrue(MouseEvent::isReport("\e[<35;3;4M"));
         self::assertNull(MouseEvent::tryParse("\e[A"));        // arrow key
+        self::assertFalse(MouseEvent::isReport("\e[A"));
         self::assertNull(MouseEvent::tryParse('j'));           // plain key
     }
 }
