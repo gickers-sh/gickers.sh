@@ -25,9 +25,4 @@ interface RepoStore
     public function save(Repo $repo): void;
 
     public function remove(Repo $repo): void;
-
-    /**
-     * Atomically reserves the next pull request number of the repository (UPDATE … SET n = n + 1).
-     */
-    public function reservePullRequestNumber(Repo $repo): int;
 }

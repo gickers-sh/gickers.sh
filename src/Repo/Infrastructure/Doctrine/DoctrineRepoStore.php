@@ -68,25 +68,4 @@ final class DoctrineRepoStore extends ServiceEntityRepository implements RepoSto
         $this->getEntityManager()->remove($repo);
         $this->getEntityManager()->flush();
     }
-
-    public function reservePullRequestNumber(Repo $repo): int
-    {
-        $em = $this->getEntityManager();
-        $conn = $em->getConnection();
-
-        return $conn->transactional(static function () use ($em, $conn, $repo): int {
-            $repoId = $repo->id();
-            $conn->executeStatement(
-                'UPDATE repos SET next_pull_request_number = next_pull_request_number + 1 WHERE id = ?',
-                [$repoId]
-            );
-            $current = (int) $conn->fetchOne(
-                'SELECT next_pull_request_number FROM repos WHERE id = ?',
-                [$repoId]
-            );
-            $em->refresh($repo);
-
-            return $current - 1;
-        });
-    }
 }

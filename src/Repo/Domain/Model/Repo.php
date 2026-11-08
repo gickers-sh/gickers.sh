@@ -20,9 +20,6 @@ class Repo
     #[ORM\Column(length: 255, unique: true)]
     private string $name;
 
-    #[ORM\Column(options: ['default' => 1])]
-    private int $nextPullRequestNumber = 1;
-
     #[ORM\Column]
     private \DateTimeImmutable $updatedAt;
 
