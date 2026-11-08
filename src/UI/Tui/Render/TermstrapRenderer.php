@@ -10,16 +10,11 @@ use Termstrap\Termstrap;
 final class TermstrapRenderer implements MarkdownRenderer
 {
     public const THEME_OVERRIDE_CSS = <<<'CSS'
-h1, h2, h3, h4, h5, h6 {
-  margin-top: 0 !important;
-  margin-bottom: 0 !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-}
-pre {
-  margin-top: 0 !important;
-  margin-bottom: 0 !important;
-}
+h1 { margin-top: 0 !important; margin-bottom: 1em !important; padding: 0 !important; }
+h2 { margin-top: 1em !important; margin-bottom: 1em !important; padding: 0 !important; }
+h3 { margin-top: 1em !important; margin-bottom: 0 !important; padding: 0 !important; }
+h4, h5, h6 { margin-top: 0 !important; margin-bottom: 0 !important; padding: 0 !important; }
+pre { margin-top: 0 !important; margin-bottom: 1em !important; padding: 1em 2em !important; border-left: 3px solid !important; border-left-color: #7aa2f7 !important; }
 CSS;
 
     private ?Termstrap $termstrap = null;
@@ -70,7 +65,7 @@ CSS;
                 $input = $content;
                 break;
             case '.gif':
-                $input = '<img src="'.htmlspecialchars($filename, \ENT_QUOTES, 'UTF-8').'" alt="Animated GIF" />';
+                $input = '<img src="' . htmlspecialchars($filename, \ENT_QUOTES, 'UTF-8') . '" alt="Animated GIF" />';
                 break;
             default:
                 $input = $content;
@@ -88,6 +83,7 @@ CSS;
             'link_mode' => $options['link_mode'] ?? 'osc8',
             'image_mode' => $options['image_mode'] ?? 'smart',
             'disable_animated_images' => true,
+            'syntax_theme' => $options['syntax_theme'] ?? 'monokai',
             'stylesheets' => [self::THEME_OVERRIDE_CSS],
             'markdown' => $isMarkdown,
         ];
@@ -121,12 +117,12 @@ CSS;
      */
     public function startRenderDocumentProcess(string $filename, string $content, int $width, array $options = []): Process
     {
-        $autoload = \dirname(__DIR__, 4).'/vendor/autoload.php';
+        $autoload = \dirname(__DIR__, 4) . '/vendor/autoload.php';
         $script = 'require $argv[1];'
-            .'$payload = json_decode(stream_get_contents(STDIN), true);'
-            .'if (!is_array($payload)) { exit(1); }'
-            .'$r = new \App\UI\Tui\Render\TermstrapRenderer($payload["libraryPath"] ?? null);'
-            .'fwrite(STDOUT, $r->renderDocument((string) $payload["filename"], (string) $payload["content"], (int) $payload["width"], (array) ($payload["options"] ?? [])));';
+            . '$payload = json_decode(stream_get_contents(STDIN), true);'
+            . 'if (!is_array($payload)) { exit(1); }'
+            . '$r = new \App\UI\Tui\Render\TermstrapRenderer($payload["libraryPath"] ?? null);'
+            . 'fwrite(STDOUT, $r->renderDocument((string) $payload["filename"], (string) $payload["content"], (int) $payload["width"], (array) ($payload["options"] ?? [])));';
 
         $payload = json_encode([
             'libraryPath' => $this->libraryPath,
@@ -151,16 +147,16 @@ CSS;
      */
     public function startRenderSnippetsBatchProcess(string $filename, array $snippets, int $width, string $docDefs = ''): Process
     {
-        $autoload = \dirname(__DIR__, 4).'/vendor/autoload.php';
+        $autoload = \dirname(__DIR__, 4) . '/vendor/autoload.php';
         $script = 'require $argv[1];'
-            .'$payload = json_decode(stream_get_contents(STDIN), true);'
-            .'if (!is_array($payload)) { exit(1); }'
-            .'$r = new \App\UI\Tui\Render\TermstrapRenderer($payload["libraryPath"] ?? null);'
-            .'$out = [];'
-            .'foreach (($payload["snippets"] ?? []) as $k => $line) {'
-            .'    $out[$k] = $r->renderSnippet((string) $payload["filename"], (string) $line, (int) $payload["width"], (string) ($payload["docDefs"] ?? ""));'
-            .'}'
-            .'fwrite(STDOUT, json_encode($out, JSON_THROW_ON_ERROR));';
+            . '$payload = json_decode(stream_get_contents(STDIN), true);'
+            . 'if (!is_array($payload)) { exit(1); }'
+            . '$r = new \App\UI\Tui\Render\TermstrapRenderer($payload["libraryPath"] ?? null);'
+            . '$out = [];'
+            . 'foreach (($payload["snippets"] ?? []) as $k => $line) {'
+            . '    $out[$k] = $r->renderSnippet((string) $payload["filename"], (string) $line, (int) $payload["width"], (string) ($payload["docDefs"] ?? ""));'
+            . '}'
+            . 'fwrite(STDOUT, json_encode($out, JSON_THROW_ON_ERROR));';
 
         $payload = json_encode([
             'libraryPath' => $this->libraryPath,
@@ -194,7 +190,7 @@ CSS;
 
         $renderInput = $content;
         if ('' !== $docDefs && str_contains($content, '][')) {
-            $renderInput = $content."\n\n".$docDefs;
+            $renderInput = $content . "\n\n" . $docDefs;
         }
 
         $ext = $this->normalizeExt($filename);
@@ -223,7 +219,7 @@ CSS;
         }
 
         if (!$this->termstrapAvailable || null === $this->termstrap) {
-            return $leadIndent.$this->fallbackRender($input, $width);
+            return $leadIndent . $this->fallbackRender($input, $width);
         }
 
         $termstrapOptions = [
@@ -255,9 +251,9 @@ CSS;
                 }
             }
 
-            return $leadIndent.$target;
+            return $leadIndent . $target;
         } catch (\Throwable) {
-            return $leadIndent.$this->fallbackRender($input, $width);
+            return $leadIndent . $this->fallbackRender($input, $width);
         }
     }
 
@@ -287,7 +283,7 @@ CSS;
         $html = '<table class="table table-striped table-hover table-sm">';
         $html .= '<thead><tr>';
         foreach ($rows[0] as $col) {
-            $html .= '<th>'.htmlspecialchars((string) $col, \ENT_QUOTES, 'UTF-8').'</th>';
+            $html .= '<th>' . htmlspecialchars((string) $col, \ENT_QUOTES, 'UTF-8') . '</th>';
         }
         $html .= '</tr></thead>';
 
@@ -296,7 +292,7 @@ CSS;
             for ($i = 1; $i < count($rows); ++$i) {
                 $html .= '<tr>';
                 foreach ($rows[$i] as $col) {
-                    $html .= '<td>'.htmlspecialchars((string) $col, \ENT_QUOTES, 'UTF-8').'</td>';
+                    $html .= '<td>' . htmlspecialchars((string) $col, \ENT_QUOTES, 'UTF-8') . '</td>';
                 }
                 $html .= '</tr>';
             }
@@ -314,12 +310,12 @@ CSS;
             $lower = strtolower($filename);
 
             return match ($lower) {
-                'csv', 'tsv', 'html', 'htm', 'md', 'markdown', 'gif' => '.'.$lower,
+                'csv', 'tsv', 'html', 'htm', 'md', 'markdown', 'gif' => '.' . $lower,
                 default => '',
             };
         }
 
-        return '.'.$ext;
+        return '.' . $ext;
     }
 
     private function fallbackRender(string $content, int $width): string
