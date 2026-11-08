@@ -212,21 +212,6 @@ ssh:
   # The number of seconds a connection can be idle before it is closed.
   idle_timeout: 120
 
-# The Git daemon configuration.
-git:
-  # The address on which the Git daemon will listen.
-  listen_addr: ":9418"
-
-  # The maximum number of seconds a connection can take.
-  # A value of 0 means no timeout.
-  max_timeout: 0
-
-  # The number of seconds a connection can be idle before it is closed.
-  idle_timeout: 3
-
-  # The maximum number of concurrent connections.
-  max_connections: 32
-
 # The HTTP server configuration.
 http:
   # The address on which the HTTP server will listen.
@@ -323,7 +308,6 @@ name all in uppercase. Here are some examples:
 - `SOFT_SERVE_SSH_KEY_PATH`: SSH host key-pair path
 - `SOFT_SERVE_HTTP_LISTEN_ADDR`: HTTP listen address
 - `SOFT_SERVE_HTTP_PUBLIC_URL`: HTTP public URL used for cloning
-- `SOFT_SERVE_GIT_MAX_CONNECTIONS`: The number of simultaneous connections to git daemon
 - `SOFT_SERVE_ANON_ACCESS`: Overrides the `anon-access` setting (see [Authentication](#authentication))
 - `SOFT_SERVE_ALLOW_KEYLESS`: Overrides the `allow-keyless` setting (see [Authentication](#authentication))
 - `SOFT_SERVE_DEFAULT_REPO`: Repository name to create on boot if missing
@@ -440,7 +424,7 @@ Use "ssh -p 23231 localhost settings [command] --help" for more information abou
 > **Note** These settings can only be changed by admins.
 
 When `allow-keyless` is disabled, connections that don't use SSH Public Key
-authentication will get denied. This means cloning repos over HTTP(s) or git://
+authentication will get denied. This means cloning repos over HTTP(s)
 will get denied.
 
 Meanwhile, `anon-access` controls the access level granted to connections that
@@ -449,7 +433,7 @@ setting for this is `read-only`. This will grant anonymous connections that use
 SSH Public Key authentication `read-only` access to public repos.
 
 `anon-access` is also used in combination with `allow-keyless` to determine the
-access level for HTTP(s) and git:// clone requests.
+access level for HTTP(s) clone requests.
 
 #### Local/dev bootstrap
 
@@ -759,32 +743,6 @@ ssh -p 23231 localhost repo blob soft-serve cmd/soft/main.go -c -l
 
 Use `--raw` to print raw file contents. This is useful for dumping binary data.
 
-### Repository webhooks
-
-Soft Serve supports repository webhooks using the `repo webhook` command. You
-can create and manage webhooks for different repository events such as _push_,
-_collaborators_, and _branch_tag_create_ events.
-
-```
-Manage repository webhooks
-
-Usage:
-  ssh -p 23231 localhost repo webhook [command]
-
-Aliases:
-  webhook, webhooks
-
-Available Commands:
-  create      Create a repository webhook
-  delete      Delete a repository webhook
-  deliveries  Manage webhook deliveries
-  list        List repository webhooks
-  update      Update a repository webhook
-
-Flags:
-  -h, --help   help for webhook
-```
-
 ## The Soft Serve TUI
 
 <img src="https://stuff.charm.sh/soft-serve/soft-serve-demo-commit.png" width="750" alt="TUI example showing a diff">
@@ -813,15 +771,15 @@ You can copy text to your clipboard over SSH. For instance, you can press
 
 ## Hooks
 
-Soft Serve supports git server-side hooks `pre-receive`, `update`,
-`post-update`, and `post-receive`. This means you can define your own hooks to
-run on repository push events. Hooks can be defined as a per-repository hook,
-and/or global hooks that run for all repositories.
+codes.sh uses Git's native server-side hooks `pre-receive`, `update`,
+`post-update`, and `post-receive` for pushes. It installs dispatchers in each
+bare repository; executable per-repository hook scripts can be placed in that
+hook's `.d` directory (for example, `hooks/update.d/`).
 
-You can find per-repository hooks under the repository `hooks` directory.
-
-Globs hooks can be found in your `SOFT_SERVE_DATA_PATH` directory under
-`hooks`. Defining global hooks is useful if you want to run CI/CD for example.
+You can also define a global hook at
+`$SOFT_SERVE_DATA_PATH/hooks/<hook-name>` to run for every repository. For
+example, `<data path>/hooks/update` runs for each updated ref. These are local
+Git hook scripts executed by the server; they are not outbound HTTP webhooks.
 
 Here's an example of sending a message after receiving a push event. Create an
 executable file `<data path>/hooks/update`:
@@ -869,6 +827,22 @@ exit 0
 ```
 
 Now, you should get a message after pushing changes to any repository.
+
+### HTTP webhooks
+
+Repository webhooks send event payloads to an HTTP endpoint asynchronously.
+Create, list, or delete them over SSH:
+
+```sh
+ssh -p 23231 localhost repo webhook create demo https://example.net/hooks -s secret -e push
+ssh -p 23231 localhost repo webhook list demo
+ssh -p 23231 localhost repo webhook delete demo 1
+```
+
+Supported events include `push`, `branch_tag_create`, `branch_tag_delete`,
+`collaborator`, `repository`, and `repository_visibility_change`. Deliveries are
+signed with the configured secret. For private destination networks, configure
+`SOFT_SERVE_WEBHOOK_ALLOW_LIST` with the allowed IPs or CIDRs.
 
 ## A note about RSA keys
 

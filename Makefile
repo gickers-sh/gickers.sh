@@ -31,7 +31,7 @@ UPSTREAM_URL ?= https://github.com/charmbracelet/soft-serve.git
 UPSTREAM_REMOTE ?= upstream
 UPSTREAM_BRANCH ?= main
 
-.PHONY: all build setup install run serve debug e2e browse publish index migrate rollback sync-hooks test test-render lint cs cs-check stan deptrac clean clean-all help upstream-setup upstream-fetch upstream-status upstream-sync
+.PHONY: all build setup install run serve debug e2e browse publish migrate rollback sync-hooks test test-render lint cs cs-check stan deptrac clean clean-all help upstream-setup upstream-fetch upstream-status upstream-sync
 
 all: build
 
@@ -39,7 +39,7 @@ all: build
 build:
 	@chmod +x bin/soft bin/console
 
-## setup: Install / check system tools (bore, scip-go indexer)
+## setup: Install / check system tools (php, composer)
 setup:
 	@echo "==> Verification des outils d'environnement..."
 	@which $(PHP) >/dev/null 2>&1 || { echo "!! php introuvable"; exit 1; }
@@ -61,7 +61,7 @@ setup:
 install:
 	$(COMPOSER) install
 
-## run: Run the codes.sh server (sshd :2223, HTTP :23232, git daemon, Messenger worker)
+## run: Run codes.sh (sshd :2223, HTTP :23232, Messenger worker)
 run: build
 	$(SERVE_ENV) SOFT_SERVE_SSH_PUBLIC_URL="$(SSH_PUBLIC_URL)" ./bin/soft serve
 
@@ -103,10 +103,6 @@ publish: build
 	SOFT_PID=$$!; \
 	echo ">> soft serve lance (pid $$SOFT_PID) | clone: git clone ssh://bore.pub:$$BORE_PORT/<repo>"; \
 	wait $$SOFT_PID
-
-## index: Run code intelligence SCIP indexing for all repositories (Go To Def & Ref)
-index: build
-	SOFT_SERVE_DATA_PATH="$(SOFT_SERVE_DATA_PATH)" ./bin/soft admin reindex-codeintel
 
 ## migrate: Apply database migrations (SQLite / PostgreSQL)
 migrate: build
