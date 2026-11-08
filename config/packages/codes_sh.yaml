@@ -11,8 +11,6 @@ services:
             $sshPublicUrl: '%env(SOFT_SERVE_SSH_PUBLIC_URL)%'
             $httpListenAddr: '%env(SOFT_SERVE_HTTP_LISTEN_ADDR)%'
             $httpPublicUrl: '%env(SOFT_SERVE_HTTP_PUBLIC_URL)%'
-            $gitListenAddr: '%env(SOFT_SERVE_GIT_LISTEN_ADDR)%'
-            $gitMaxConnections: '%env(int:SOFT_SERVE_GIT_MAX_CONNECTIONS)%'
             $lfsEnabled: '%env(bool:SOFT_SERVE_LFS_ENABLED)%'
             $anonAccess: '%env(SOFT_SERVE_ANON_ACCESS)%'
             $allowKeyless: '%env(bool:SOFT_SERVE_ALLOW_KEYLESS)%'

@@ -10,7 +10,10 @@ services:
         exclude:
             - '../src/Kernel.php'
             - '../src/*/Domain/'
-            - '../src/UI/Tui/Page/'
+            - '../src/UI/Tui/View/'
+            - '../src/UI/Tui/Widget/'
+            - '../src/UI/Tui/Format/'
+            - '../src/UI/Tui/{TuiApp,Navigator,InputRouter,HitTester,AsyncLoader,Session,Views}.php'
             - '../src/Shared/Infrastructure/Config/ServerSettings.php'
             - '../src/UI/Ssh/Command/'
 

@@ -1,4 +1,4 @@
 when@test:
     services:
-        App\UI\Tui\TuiPageFactory:
+        App\UI\Tui\TuiAppFactory:
             public: true

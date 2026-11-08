@@ -21,3 +21,12 @@ when@test:
         test.webhook_event_subscriber:
             alias: App\Webhook\Application\WebhookEventSubscriber
             public: true
+        test.webhook_list_command:
+            alias: App\UI\Ssh\Command\Repo\Webhook\ListCommand
+            public: true
+        test.webhook_create_command:
+            alias: App\UI\Ssh\Command\Repo\Webhook\CreateCommand
+            public: true
+        test.webhook_delete_command:
+            alias: App\UI\Ssh\Command\Repo\Webhook\DeleteCommand
+            public: true
