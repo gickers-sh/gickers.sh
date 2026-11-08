@@ -25,35 +25,6 @@ final class DoctrineRepoStoreTest extends KernelTestCase
         $this->repoStore = $container->get(RepoStore::class);
     }
 
-    public function testReservePullRequestNumberReturnsSequentialNumbers(): void
-    {
-        $now = new \DateTimeImmutable();
-        $owner = new User('alice', false, $now);
-        $this->userStore->save($owner);
-
-        $repo = new Repo(
-            RepoName::fromInput('pr-test-repo'),
-            $owner,
-            'PR Test Repo',
-            'Testing PR reservation',
-            false,
-            false,
-            false,
-            null,
-            $now
-        );
-        $this->repoStore->save($repo);
-
-        $first = $this->repoStore->reservePullRequestNumber($repo);
-        $this->assertSame(1, $first);
-
-        $second = $this->repoStore->reservePullRequestNumber($repo);
-        $this->assertSame(2, $second);
-
-        $third = $this->repoStore->reservePullRequestNumber($repo);
-        $this->assertSame(3, $third);
-    }
-
     public function testRepoStoreCrudAndQueries(): void
     {
         $now = new \DateTimeImmutable();

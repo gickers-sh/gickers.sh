@@ -77,8 +77,6 @@ final class AccessResolverTest extends TestCase
             sshPublicUrl: 'ssh://localhost',
             httpListenAddr: ':80',
             httpPublicUrl: 'http://localhost',
-            gitListenAddr: ':9418',
-            gitMaxConnections: 10,
             lfsEnabled: false,
             anonAccess: $anonLevel->toString(),
             allowKeyless: true,

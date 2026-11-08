@@ -32,6 +32,7 @@ use App\Repo\Infrastructure\Git\GitRepositoryWriter;
 use App\Repo\Infrastructure\Git\HookInstaller;
 use App\Shared\Infrastructure\Config\ServerSettings;
 use App\Shared\Infrastructure\Security\SsrfGuard;
+use App\Tests\GitTestHelper;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\Clock\MockClock;
 use Symfony\Component\Process\Process;
@@ -80,8 +81,6 @@ abstract class RepoUseCaseTestCase extends KernelTestCase
             sshPublicUrl: 'ssh://localhost:2222',
             httpListenAddr: '127.0.0.1:23232',
             httpPublicUrl: 'http://localhost:23232',
-            gitListenAddr: '127.0.0.1:9418',
-            gitMaxConnections: 32,
             lfsEnabled: true,
             anonAccess: 'read-only',
             allowKeyless: false,
@@ -150,7 +149,7 @@ abstract class RepoUseCaseTestCase extends KernelTestCase
     {
         $repoName = RepoName::fromInput($name);
         $gitRepo = $this->storage->init($repoName, 'main');
-        $this->writer->writeFile($gitRepo, 'main', 'README.md', "# {$name}\n", 'init', 'Tester', 'tester@codes.sh');
+        GitTestHelper::writeFile($gitRepo, 'main', 'README.md', "# {$name}\n", 'init', 'Tester', 'tester@codes.sh');
 
         return $this->storage->open($repoName);
     }

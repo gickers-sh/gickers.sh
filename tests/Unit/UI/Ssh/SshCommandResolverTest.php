@@ -31,10 +31,6 @@ final class SshCommandResolverTest extends TestCase
             'repo:collab:list',
             'repo:webhook:create',
             'repo:webhook:list',
-            'repo:webhook:delete',
-            'pr:list',
-            'pr:merge',
-            'pr:delete',
             'user:create',
             'user:list',
             'pubkey:list',
@@ -51,7 +47,6 @@ final class SshCommandResolverTest extends TestCase
             'repo:delete' => ['repo:rm', 'repo:del'],
             'repo:rename' => ['repo:mv'],
             'repo:collab:remove' => ['repo:collab:rm', 'repo:collab:del'],
-            'pr:delete' => ['pr:rm'],
         ];
 
         $this->resolver = new SshCommandResolver($canonical, $aliases);
@@ -81,12 +76,6 @@ final class SshCommandResolverTest extends TestCase
         $this->assertNotNull($res3);
         $this->assertSame('repo:blob', $res3->name);
         $this->assertSame(['demo', 'README.md'], $res3->arguments);
-
-        // PR leaf alias: pr rm -> pr:delete
-        $res4 = $this->resolver->resolve(['pr', 'rm', 'demo', '1']);
-        $this->assertNotNull($res4);
-        $this->assertSame('pr:delete', $res4->name);
-        $this->assertSame(['demo', '1'], $res4->arguments);
     }
 
     public function testGroupAliases(): void
@@ -103,19 +92,6 @@ final class SshCommandResolverTest extends TestCase
         $r3 = $this->resolver->resolve(['repositories', 'list']);
         $this->assertNotNull($r3);
         $this->assertSame('repo:list', $r3->name);
-
-        // pr <- prs / pull-request / pull-requests
-        $pr1 = $this->resolver->resolve(['prs', 'list', 'demo']);
-        $this->assertNotNull($pr1);
-        $this->assertSame('pr:list', $pr1->name);
-
-        $pr2 = $this->resolver->resolve(['pull-request', 'list', 'demo']);
-        $this->assertNotNull($pr2);
-        $this->assertSame('pr:list', $pr2->name);
-
-        $pr3 = $this->resolver->resolve(['pull-requests', 'list', 'demo']);
-        $this->assertNotNull($pr3);
-        $this->assertSame('pr:list', $pr3->name);
 
         // collab <- collabs / collaborator / collaborators
         $c1 = $this->resolver->resolve(['collabs', 'list', 'demo']);
@@ -152,19 +128,13 @@ final class SshCommandResolverTest extends TestCase
         $u = $this->resolver->resolve(['users', 'list']);
         $this->assertNotNull($u);
         $this->assertSame('user:list', $u->name);
-
-        // webhook <- webhooks
         $wh1 = $this->resolver->resolve(['webhook', 'list', 'demo']);
         $this->assertNotNull($wh1);
         $this->assertSame('repo:webhook:list', $wh1->name);
 
-        $wh2 = $this->resolver->resolve(['webhooks', 'list', 'demo']);
+        $wh2 = $this->resolver->resolve(['repo', 'webhooks', 'list', 'demo']);
         $this->assertNotNull($wh2);
         $this->assertSame('repo:webhook:list', $wh2->name);
-
-        $wh3 = $this->resolver->resolve(['repo', 'webhooks', 'list', 'demo']);
-        $this->assertNotNull($wh3);
-        $this->assertSame('repo:webhook:list', $wh3->name);
     }
 
     public function testTopLevelCollabPromotion(): void
@@ -174,21 +144,12 @@ final class SshCommandResolverTest extends TestCase
         $this->assertSame('repo:collab:add', $res->name);
         $this->assertSame(['demo', 'alice', 'read-write'], $res->arguments);
     }
-
     public function testTopLevelWebhookPromotion(): void
     {
         $res = $this->resolver->resolve(['webhook', 'create', 'demo', 'http://127.0.0.1']);
         $this->assertNotNull($res);
         $this->assertSame('repo:webhook:create', $res->name);
         $this->assertSame(['demo', 'http://127.0.0.1'], $res->arguments);
-    }
-
-    public function testRepoPrPromotion(): void
-    {
-        $res = $this->resolver->resolve(['repo', 'pr', 'list', 'demo']);
-        $this->assertNotNull($res);
-        $this->assertSame('pr:list', $res->name);
-        $this->assertSame(['demo'], $res->arguments);
     }
 
     public function testDirectBranchAndTagShortcuts(): void

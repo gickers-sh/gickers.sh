@@ -505,13 +505,6 @@ final class SshEntrypointCommandTest extends KernelTestCase
         $this->assertSame(0, $help->getStatusCode());
     }
 
-    public function testRepoWebhookCommandsRouting(): void
-    {
-        $this->dispatch('repo create wh_repo', $this->adminFp);
-        $tester = $this->dispatch('webhook list wh_repo', $this->adminFp);
-        $this->assertNotNull($tester->getStatusCode());
-    }
-
     public function testDenyReadSemantics(): void
     {
         $this->dispatch('repo create hidden_priv -p', $this->adminFp);

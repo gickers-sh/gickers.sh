@@ -8,8 +8,8 @@ use App\Repo\Domain\Git\GitRepository;
 use App\Repo\Domain\RepoName;
 use App\Repo\Infrastructure\Git\BareRepositoryStorage;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
-use App\Repo\Infrastructure\Git\GitRepositoryWriter;
 use App\Shared\Infrastructure\Config\ServerSettings;
+use App\Tests\GitTestHelper;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
 
@@ -30,8 +30,6 @@ final class BareRepositoryStorageTest extends TestCase
             sshPublicUrl: 'ssh://localhost:2222',
             httpListenAddr: '127.0.0.1:23232',
             httpPublicUrl: 'http://localhost:23232',
-            gitListenAddr: '127.0.0.1:9418',
-            gitMaxConnections: 32,
             lfsEnabled: true,
             anonAccess: 'read-only',
             allowKeyless: false,
@@ -73,7 +71,7 @@ final class BareRepositoryStorageTest extends TestCase
     public function testInitBareRepository(): void
     {
         $repoName = RepoName::fromInput('my-new-repo');
-        $repo = $this->storage->init($repoName, 'main', 'A shiny new repository', true);
+        $repo = $this->storage->init($repoName, 'main', 'A shiny new repository');
 
         $this->assertInstanceOf(GitRepository::class, $repo);
         $this->assertSame('my-new-repo', $repo->name);
@@ -84,7 +82,6 @@ final class BareRepositoryStorageTest extends TestCase
         $expectedPath = $this->tempDataDir.'/repos/my-new-repo.git';
         $this->assertDirectoryExists($expectedPath);
         $this->assertFileExists($expectedPath.'/HEAD');
-        $this->assertFileExists($expectedPath.'/git-daemon-export-ok');
         $this->assertStringContainsString('A shiny new repository', (string) file_get_contents($expectedPath.'/description'));
     }
 
@@ -163,15 +160,14 @@ final class BareRepositoryStorageTest extends TestCase
 
         $sourceRepo = $this->storage->init($sourceName, 'main', 'Source repository');
 
-        $writer = new GitRepositoryWriter();
-        $writer->writeFile(
+        GitTestHelper::writeFile(
             repo: $sourceRepo,
             branch: 'main',
             filePath: 'greeting.txt',
             content: "Hello from source!\n",
             message: 'init source',
             authorName: 'Author',
-            authorEmail: 'author@codes.sh'
+            authorEmail: 'author@codes.sh',
         );
 
         $forkedRepo = $this->storage->fork($sourceName, $targetName, 'Forked repository');
@@ -197,9 +193,8 @@ final class BareRepositoryStorageTest extends TestCase
         (new Process(['git', 'init', '--bare', '-b', 'main', $sourceDir]))->mustRun();
 
         $reader = new GitRepositoryReader();
-        $writer = new GitRepositoryWriter();
         $sourceRepo = $reader->openRepository($sourceDir);
-        $writer->writeFile($sourceRepo, 'main', 'file.txt', "import content\n", 'init', 'Importer', 'import@codes.sh');
+        GitTestHelper::writeFile($sourceRepo, 'main', 'file.txt', "import content\n", 'init', 'Importer', 'import@codes.sh');
 
         $targetName = RepoName::fromInput('mirrored-target');
         $mirrored = $this->storage->importMirror($sourceDir, $targetName, true);

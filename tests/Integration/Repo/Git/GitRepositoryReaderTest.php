@@ -6,8 +6,8 @@ namespace App\Tests\Integration\Repo\Git;
 
 use App\Repo\Domain\Git\GitRepository;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
-use App\Repo\Infrastructure\Git\GitRepositoryWriter;
 use App\Shared\Domain\Exception\InvalidInput;
+use App\Tests\GitTestHelper;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
@@ -142,13 +142,12 @@ final class GitRepositoryReaderTest extends TestCase
     public function testReadmeDiscoversReadmeMd(): void
     {
         $dir = $this->createTempDir('readme_md_');
-        $writer = new GitRepositoryWriter();
 
         // Bare repo
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
 
-        $writer->writeFile($repo, 'main', 'README.md', "# My Project\nDocumentation here.\n", 'add readme', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'README.md', "# My Project\nDocumentation here.\n", 'add readme', 'Tester', 'test@codes.sh');
 
         $readme = $this->reader->readme($repo, 'main');
         $this->assertNotNull($readme);
@@ -159,12 +158,11 @@ final class GitRepositoryReaderTest extends TestCase
     public function testReadmeDiscoversCaseInsensitiveReadmeTxt(): void
     {
         $dir = $this->createTempDir('readme_txt_');
-        $writer = new GitRepositoryWriter();
 
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
 
-        $writer->writeFile($repo, 'main', 'readme.txt', "Plain text readme\n", 'add txt readme', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'readme.txt', "Plain text readme\n", 'add txt readme', 'Tester', 'test@codes.sh');
 
         $readme = $this->reader->readme($repo, 'main');
         $this->assertNotNull($readme);
@@ -175,13 +173,12 @@ final class GitRepositoryReaderTest extends TestCase
     public function testReadmePrefersReadmeMdOverTxt(): void
     {
         $dir = $this->createTempDir('readme_multi_');
-        $writer = new GitRepositoryWriter();
 
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
 
-        $writer->writeFile($repo, 'main', 'README.txt', "txt version\n", 'add txt', 'Tester', 'test@codes.sh');
-        $writer->writeFile($repo, 'main', 'README.md', "markdown version\n", 'add md', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'README.txt', "txt version\n", 'add txt', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'README.md', "markdown version\n", 'add md', 'Tester', 'test@codes.sh');
 
         $readme = $this->reader->readme($repo, 'main');
         $this->assertNotNull($readme);
@@ -192,12 +189,11 @@ final class GitRepositoryReaderTest extends TestCase
     public function testReadmeReturnsNullWhenNoReadmeExists(): void
     {
         $dir = $this->createTempDir('readme_none_');
-        $writer = new GitRepositoryWriter();
 
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
 
-        $writer->writeFile($repo, 'main', 'src/Main.php', "<?php\n", 'add code', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'src/Main.php', "<?php\n", 'add code', 'Tester', 'test@codes.sh');
 
         $readme = $this->reader->readme($repo, 'main');
         $this->assertNull($readme);
@@ -224,7 +220,7 @@ final class GitRepositoryReaderTest extends TestCase
         $dir = $this->createTempDir('reader_inject_');
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
-        (new GitRepositoryWriter())->writeFile($repo, 'main', 'a.txt', "a\n", 'add', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'a.txt', "a\n", 'add', 'Tester', 'test@codes.sh');
         $target = $this->createTempDir('reader_inject_out_').'/written';
 
         try {
@@ -241,7 +237,7 @@ final class GitRepositoryReaderTest extends TestCase
         $dir = $this->createTempDir('reader_show_');
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
-        (new GitRepositoryWriter())->writeFile($repo, 'main', '-dash.txt', "dash line\n", 'add dash file', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', '-dash.txt', "dash line\n", 'add dash file', 'Tester', 'test@codes.sh');
 
         $this->assertStringContainsString('add dash file', (string) $this->reader->show($repo, 'main'));
         $this->assertStringNotContainsString('add dash file', (string) $this->reader->show($repo, 'main~0', patchOnly: true));
@@ -257,10 +253,9 @@ final class GitRepositoryReaderTest extends TestCase
         $dir = $this->createTempDir('reader_recursive_tree_');
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
-        $writer = new GitRepositoryWriter();
-        $writer->writeFile($repo, 'main', 'README.md', "# Root\n", 'add readme', 'Tester', 'test@codes.sh');
-        $writer->writeFile($repo, 'main', 'src/Service/Calculator.php', "<?php\n", 'add calc', 'Tester', 'test@codes.sh');
-        $writer->writeFile($repo, 'main', 'tests/Unit/CalculatorTest.php', "<?php\n", 'add test', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'README.md', "# Root\n", 'add readme', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'src/Service/Calculator.php', "<?php\n", 'add calc', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'tests/Unit/CalculatorTest.php', "<?php\n", 'add test', 'Tester', 'test@codes.sh');
 
         $entries = $this->reader->getRecursiveTree($repo, 'main');
         $paths = array_map(static fn ($e): string => $e->path, $entries);

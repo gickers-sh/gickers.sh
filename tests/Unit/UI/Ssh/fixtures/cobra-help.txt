@@ -8,7 +8,6 @@ Available Commands:
   help                 Help about any command
   info                 Show your info
   jwt                  Generate a JSON Web Token
-  pr                   Manage pull requests
   pubkey               Manage your public keys
   repo                 Manage repositories
   set-username         Set your username
@@ -36,111 +35,6 @@ Usage:
 
 Flags:
   -h, --help   help for jwt
-########## help pr
-Manage pull requests
-
-Usage:
-  ssh -p 2223 localhost pr [command]
-
-Aliases:
-  pr, prs, pull-request, pull-requests
-
-Available Commands:
-  close       Close a pull request without merging
-  comment     Add a comment to a pull request
-  create      Create a new pull request
-  delete      Permanently delete a pull request
-  diff        Show diff for a pull request
-  list        List pull requests for a repository
-  merge       Merge a pull request
-  reopen      Reopen a closed pull request
-  view        View details of a pull request
-
-Flags:
-  -h, --help   help for pr
-
-Use "ssh -p 2223 localhost pr [command] --help" for more information about a command.
-########## help pr close
-Close a pull request without merging
-
-Usage:
-   pr close REPOSITORY NUMBER [flags]
-
-Flags:
-  -h, --help   help for close
-########## help pr comment
-Add a comment to a pull request
-
-Usage:
-   pr comment REPOSITORY NUMBER BODY... [flags]
-
-Flags:
-  -h, --help   help for comment
-########## help pr create
-Create a new pull request
-
-Usage:
-   pr create REPOSITORY --head <[REPO:]BRANCH> [--base <BRANCH>] [--title <TITLE>] [--body <BODY>] [flags]
-
-Flags:
-  -B, --base string    target branch to merge into (defaults to default branch)
-  -b, --body string    description/body of the pull request
-  -H, --head string    source branch to merge from (e.g. 'my-feature' or 'my-fork:feature')
-  -h, --help           help for create
-  -t, --title string   title of the pull request
-########## help pr delete
-Permanently delete a pull request
-
-Usage:
-   pr delete REPOSITORY NUMBER [flags]
-
-Aliases:
-  delete, rm
-
-Flags:
-  -h, --help   help for delete
-########## help pr diff
-Show diff for a pull request
-
-Usage:
-   pr diff REPOSITORY NUMBER [flags]
-
-Flags:
-  -h, --help   help for diff
-########## help pr list
-List pull requests for a repository
-
-Usage:
-   pr list REPOSITORY [flags]
-
-Flags:
-  -h, --help            help for list
-  -s, --status string   filter by status (open, closed, merged, all) (default "open")
-########## help pr merge
-Merge a pull request
-
-Usage:
-   pr merge REPOSITORY NUMBER [flags]
-
-Flags:
-  -h, --help           help for merge
-  -t, --title string   custom merge commit title
-########## help pr reopen
-Reopen a closed pull request
-
-Usage:
-   pr reopen REPOSITORY NUMBER [flags]
-
-Flags:
-  -h, --help   help for reopen
-########## help pr view
-View details of a pull request
-
-Usage:
-   pr view REPOSITORY NUMBER [flags]
-
-Flags:
-  -h, --help   help for view
 ########## help pubkey
 Manage your public keys
 
@@ -209,7 +103,6 @@ Available Commands:
   info         Get information about a repository
   list         List repositories
   mirror       Set or get a repository mirror property
-  pr           Manage pull requests
   private      Set or get a repository private property
   project-name Set or get the project name for a repository
   rename       Rename an existing repository
@@ -429,111 +322,6 @@ Usage:
 
 Flags:
   -h, --help   help for mirror
-########## help repo pr
-Manage pull requests
-
-Usage:
-  ssh -p 2223 localhost repo pr [command]
-
-Aliases:
-  pr, prs, pull-request, pull-requests
-
-Available Commands:
-  close       Close a pull request without merging
-  comment     Add a comment to a pull request
-  create      Create a new pull request
-  delete      Permanently delete a pull request
-  diff        Show diff for a pull request
-  list        List pull requests for a repository
-  merge       Merge a pull request
-  reopen      Reopen a closed pull request
-  view        View details of a pull request
-
-Flags:
-  -h, --help   help for pr
-
-Use "ssh -p 2223 localhost repo pr [command] --help" for more information about a command.
-########## help repo pr close
-Close a pull request without merging
-
-Usage:
-   repo pr close REPOSITORY NUMBER [flags]
-
-Flags:
-  -h, --help   help for close
-########## help repo pr comment
-Add a comment to a pull request
-
-Usage:
-   repo pr comment REPOSITORY NUMBER BODY... [flags]
-
-Flags:
-  -h, --help   help for comment
-########## help repo pr create
-Create a new pull request
-
-Usage:
-   repo pr create REPOSITORY --head <[REPO:]BRANCH> [--base <BRANCH>] [--title <TITLE>] [--body <BODY>] [flags]
-
-Flags:
-  -B, --base string    target branch to merge into (defaults to default branch)
-  -b, --body string    description/body of the pull request
-  -H, --head string    source branch to merge from (e.g. 'my-feature' or 'my-fork:feature')
-  -h, --help           help for create
-  -t, --title string   title of the pull request
-########## help repo pr delete
-Permanently delete a pull request
-
-Usage:
-   repo pr delete REPOSITORY NUMBER [flags]
-
-Aliases:
-  delete, rm
-
-Flags:
-  -h, --help   help for delete
-########## help repo pr diff
-Show diff for a pull request
-
-Usage:
-   repo pr diff REPOSITORY NUMBER [flags]
-
-Flags:
-  -h, --help   help for diff
-########## help repo pr list
-List pull requests for a repository
-
-Usage:
-   repo pr list REPOSITORY [flags]
-
-Flags:
-  -h, --help            help for list
-  -s, --status string   filter by status (open, closed, merged, all) (default "open")
-########## help repo pr merge
-Merge a pull request
-
-Usage:
-   repo pr merge REPOSITORY NUMBER [flags]
-
-Flags:
-  -h, --help           help for merge
-  -t, --title string   custom merge commit title
-########## help repo pr reopen
-Reopen a closed pull request
-
-Usage:
-   repo pr reopen REPOSITORY NUMBER [flags]
-
-Flags:
-  -h, --help   help for reopen
-########## help repo pr view
-View details of a pull request
-
-Usage:
-   repo pr view REPOSITORY NUMBER [flags]
-
-Flags:
-  -h, --help   help for view
 ########## help repo private
 Set or get a repository private property
 
@@ -620,9 +408,7 @@ Aliases:
 Available Commands:
   create      Create a repository webhook
   delete      Delete a repository webhook
-  deliveries  Manage webhook deliveries
   list        List repository webhooks
-  update      Update a repository webhook
 
 Flags:
   -h, --help   help for webhook
@@ -648,48 +434,6 @@ Usage:
 
 Flags:
   -h, --help   help for delete
-########## help repo webhook deliveries
-Manage webhook deliveries
-
-Usage:
-  ssh -p 2223 localhost repo webhook deliveries [command]
-
-Aliases:
-  deliveries, delivery, deliver
-
-Available Commands:
-  get         Get a webhook delivery
-  list        List webhook deliveries
-  redeliver   Redeliver a webhook delivery
-
-Flags:
-  -h, --help   help for deliveries
-
-Use "ssh -p 2223 localhost repo webhook deliveries [command] --help" for more information about a command.
-########## help repo webhook deliveries get
-Get a webhook delivery
-
-Usage:
-   repo webhook deliveries get REPOSITORY WEBHOOK_ID DELIVERY_ID [flags]
-
-Flags:
-  -h, --help   help for get
-########## help repo webhook deliveries list
-List webhook deliveries
-
-Usage:
-   repo webhook deliveries list REPOSITORY WEBHOOK_ID [flags]
-
-Flags:
-  -h, --help   help for list
-########## help repo webhook deliveries redeliver
-Redeliver a webhook delivery
-
-Usage:
-   repo webhook deliveries redeliver REPOSITORY WEBHOOK_ID DELIVERY_ID [flags]
-
-Flags:
-  -h, --help   help for redeliver
 ########## help repo webhook list
 List repository webhooks
 
@@ -698,19 +442,6 @@ Usage:
 
 Flags:
   -h, --help   help for list
-########## help repo webhook update
-Update a repository webhook
-
-Usage:
-   repo webhook update REPOSITORY WEBHOOK_ID [flags]
-
-Flags:
-  -a, --active string       whether the webhook is active
-  -c, --content-type json   content type of the webhook payload, can be either json or `form`
-  -e, --events strings      events to trigger the webhook, available events are (branch_tag_create, branch_tag_delete, collaborator, push, repository, repository_visibility_change)
-  -h, --help                help for update
-  -s, --secret string       secret to sign the webhook payload
-  -u, --url string          webhook URL
 ########## help set-username
 Set your username
 
