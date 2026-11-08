@@ -106,7 +106,6 @@ final class CommandCatalog
         $root->addChild($this->leaf('help [command]', 'Help about any command'));
         $root->addChild($this->leaf('info', 'Show your info'));
         $root->addChild($this->leaf('jwt [repository1 repository2...]', 'Generate a JSON Web Token'));
-        $root->addChild($this->pullRequests());
         $root->addChild($this->pubkey());
         $root->addChild($this->repo());
         $root->addChild($this->leaf('set-username USERNAME', 'Set your username'));
@@ -115,37 +114,6 @@ final class CommandCatalog
         $root->addChild($this->user());
 
         return $root;
-    }
-
-    private function pullRequests(): CommandSpec
-    {
-        $pr = $this->group('pr', 'Manage pull requests', ['prs', 'pull-request', 'pull-requests']);
-        $pr->addChild($this->leaf('close REPOSITORY NUMBER', 'Close a pull request without merging'));
-        $pr->addChild($this->leaf('comment REPOSITORY NUMBER BODY...', 'Add a comment to a pull request'));
-        $pr->addChild($this->leaf(
-            'create REPOSITORY --head <[REPO:]BRANCH> [--base <BRANCH>] [--title <TITLE>] [--body <BODY>]',
-            'Create a new pull request',
-            '',
-            [],
-            [
-                new FlagSpec('B', 'base', 'string', 'target branch to merge into (defaults to default branch)'),
-                new FlagSpec('b', 'body', 'string', 'description/body of the pull request'),
-                new FlagSpec('H', 'head', 'string', "source branch to merge from (e.g. 'my-feature' or 'my-fork:feature')"),
-                new FlagSpec('t', 'title', 'string', 'title of the pull request'),
-            ],
-        ));
-        $pr->addChild($this->leaf('delete REPOSITORY NUMBER', 'Permanently delete a pull request', '', ['rm']));
-        $pr->addChild($this->leaf('diff REPOSITORY NUMBER', 'Show diff for a pull request'));
-        $pr->addChild($this->leaf('list REPOSITORY', 'List pull requests for a repository', '', [], [
-            new FlagSpec('s', 'status', 'string', 'filter by status (open, closed, merged, all)', '"open"'),
-        ]));
-        $pr->addChild($this->leaf('merge REPOSITORY NUMBER', 'Merge a pull request', '', [], [
-            new FlagSpec('t', 'title', 'string', 'custom merge commit title'),
-        ]));
-        $pr->addChild($this->leaf('reopen REPOSITORY NUMBER', 'Reopen a closed pull request'));
-        $pr->addChild($this->leaf('view REPOSITORY NUMBER', 'View details of a pull request'));
-
-        return $pr;
     }
 
     private function pubkey(): CommandSpec
@@ -246,7 +214,6 @@ final class CommandCatalog
             new FlagSpec('a', 'all', '', 'List all repositories'),
         ]));
         $repo->addChild($this->leaf('mirror REPOSITORY [true|false]', 'Set or get a repository mirror property'));
-        $repo->addChild($this->pullRequests());
         $repo->addChild($this->leaf('private REPOSITORY [true|false]', 'Set or get a repository private property'));
         $repo->addChild($this->leaf('project-name REPOSITORY [NAME]', 'Set or get the project name for a repository', '', ['project']));
         $repo->addChild($this->leaf('rename REPOSITORY NEW_NAME', 'Rename an existing repository', '', ['mv', 'move']));
@@ -274,11 +241,9 @@ final class CommandCatalog
             new FlagSpec('H', 'hidden', '', 'hide the repository from the UI'),
         ];
     }
-
     private function webhook(): CommandSpec
     {
         $events = 'events to trigger the webhook, available events are (branch_tag_create, branch_tag_delete, collaborator, push, repository, repository_visibility_change)';
-
         $webhook = $this->group('webhook', 'Manage repository webhooks', ['webhooks']);
         $webhook->addChild($this->leaf('create REPOSITORY URL', 'Create a repository webhook', '', [], [
             new FlagSpec('a', 'active', '', 'whether the webhook is active', 'true'),
@@ -287,21 +252,7 @@ final class CommandCatalog
             new FlagSpec('s', 'secret', 'string', 'secret to sign the webhook payload'),
         ]));
         $webhook->addChild($this->leaf('delete REPOSITORY WEBHOOK_ID', 'Delete a repository webhook'));
-
-        $deliveries = $this->group('deliveries', 'Manage webhook deliveries', ['delivery', 'deliver']);
-        $deliveries->addChild($this->leaf('get REPOSITORY WEBHOOK_ID DELIVERY_ID', 'Get a webhook delivery'));
-        $deliveries->addChild($this->leaf('list REPOSITORY WEBHOOK_ID', 'List webhook deliveries'));
-        $deliveries->addChild($this->leaf('redeliver REPOSITORY WEBHOOK_ID DELIVERY_ID', 'Redeliver a webhook delivery'));
-        $webhook->addChild($deliveries);
-
         $webhook->addChild($this->leaf('list REPOSITORY', 'List repository webhooks'));
-        $webhook->addChild($this->leaf('update REPOSITORY WEBHOOK_ID', 'Update a repository webhook', '', [], [
-            new FlagSpec('a', 'active', 'string', 'whether the webhook is active'),
-            new FlagSpec('c', 'content-type', 'json', 'content type of the webhook payload, can be either json or `form`'),
-            new FlagSpec('e', 'events', 'strings', $events),
-            new FlagSpec('s', 'secret', 'string', 'secret to sign the webhook payload'),
-            new FlagSpec('u', 'url', 'string', 'webhook URL'),
-        ]));
 
         return $webhook;
     }

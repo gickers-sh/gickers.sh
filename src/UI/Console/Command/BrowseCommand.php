@@ -6,7 +6,7 @@ namespace App\UI\Console\Command;
 
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
 use App\UI\Ssh\SshSession;
-use App\UI\Tui\TuiPageFactory;
+use App\UI\Tui\TuiAppFactory;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -14,7 +14,6 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Tui\Terminal\Terminal;
 use Symfony\Component\Tui\Terminal\TerminalInterface;
-use Symfony\Component\Tui\Tui;
 
 #[AsCommand(
     name: 'soft:browse',
@@ -24,7 +23,7 @@ use Symfony\Component\Tui\Tui;
 final class BrowseCommand extends Command
 {
     public function __construct(
-        private readonly TuiPageFactory $factory,
+        private readonly TuiAppFactory $apps,
         private readonly GitRepositoryReader $gitReader,
         private readonly ?SshSession $sshSession = null,
         private readonly ?TerminalInterface $terminal = null,
@@ -56,14 +55,8 @@ final class BrowseCommand extends Command
         }
 
         $actor = $this->sshSession?->user();
-        $tui = new Tui(terminal: $this->terminal ?? new Terminal());
-        $root = $this->factory->createBrowseRoot($tui, $actor);
-        $root->start($this->factory->repoPageForGit($actor, $git));
-        try {
-            $tui->run();
-        } finally {
-            $root->quit();
-        }
+        $app = $this->apps->create($this->terminal ?? new Terminal(), $actor, false);
+        $app->run($app->views()->repoForGit($git));
 
         return Command::SUCCESS;
     }

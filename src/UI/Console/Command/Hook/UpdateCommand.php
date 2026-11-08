@@ -42,7 +42,7 @@ final class UpdateCommand extends Command
         $oldRev = is_string($oldArg) ? $oldArg : '';
         $newRev = is_string($newArg) ? $newArg : '';
 
-        // Note: update hook does not record pushes or emit webhooks anymore; RecordPush is executed once in post-receive.
+        // Note: update hook does not record pushes; RecordPush is executed once in post-receive.
         $exitCode = $this->customHookRunner->run(
             hookName: 'update',
             stdin: '',

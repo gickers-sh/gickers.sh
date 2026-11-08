@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\UI\Console\Command;
 
 use App\UI\Ssh\SshSession;
-use App\UI\Tui\TuiPageFactory;
+use App\UI\Tui\TuiAppFactory;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -14,7 +14,6 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Tui\Terminal\Terminal;
 use Symfony\Component\Tui\Terminal\TerminalInterface;
-use Symfony\Component\Tui\Tui;
 
 #[AsCommand(
     name: 'soft:tui',
@@ -24,7 +23,7 @@ use Symfony\Component\Tui\Tui;
 final class TuiCommand extends Command
 {
     public function __construct(
-        private readonly TuiPageFactory $factory,
+        private readonly TuiAppFactory $apps,
         private readonly ?SshSession $sshSession = null,
         private readonly ?TerminalInterface $terminal = null,
         private readonly ?LoggerInterface $logger = null,
@@ -45,14 +44,13 @@ final class TuiCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $actor = $this->sshSession?->user();
-        $tui = new Tui(terminal: $this->terminal ?? new Terminal());
-        $root = $this->factory->createRoot($tui, $actor);
+        $app = $this->apps->create($this->terminal ?? new Terminal(), $actor, true);
 
         $initialRepo = $input->getArgument('initial-repo');
-        $initialPage = null;
+        $initialView = null;
         if (null !== $initialRepo && is_string($initialRepo) && '' !== trim($initialRepo)) {
             try {
-                $initialPage = $this->factory->repoPageForName($actor, trim($initialRepo));
+                $initialView = $app->views()->repoByName(trim($initialRepo));
             } catch (\Throwable $e) {
                 $this->logger?->warning(sprintf('TUI: Failed to open initial repository "%s": %s', $initialRepo, $e->getMessage()), [
                     'repo' => $initialRepo,
@@ -62,13 +60,7 @@ final class TuiCommand extends Command
             }
         }
 
-        $initialPage ??= $this->factory->selectionPage($actor);
-        $root->start($initialPage);
-        try {
-            $tui->run();
-        } finally {
-            $root->quit();
-        }
+        $app->run($initialView ?? $app->views()->selection());
 
         return Command::SUCCESS;
     }

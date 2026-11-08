@@ -12,8 +12,7 @@ final readonly class ResolvedCommand
     public function __construct(
         public string $name,
         public array $arguments,
-    ) {
-    }
+    ) {}
 }
 
 final class SshCommandResolver
@@ -95,15 +94,11 @@ final class SshCommandResolver
         } elseif (in_array($tokens[0], ['webhook', 'webhooks'], true)) {
             array_shift($tokens);
             array_unshift($tokens, 'repo', 'webhook');
-        } elseif (count($tokens) >= 2 && 'repo' === $tokens[0] && in_array($tokens[1], ['pr', 'prs', 'pull-request', 'pull-requests'], true)) {
-            array_shift($tokens); // remove 'repo'
-            $tokens[0] = 'pr';
         }
 
         // Group alias normalizations on token 0
         $tokens[0] = match ($tokens[0]) {
             'repos', 'repository', 'repositories' => 'repo',
-            'prs', 'pull-request', 'pull-requests' => 'pr',
             'pubkeys', 'publickey', 'publickeys' => 'pubkey',
             'access-token' => 'token',
             'users' => 'user',

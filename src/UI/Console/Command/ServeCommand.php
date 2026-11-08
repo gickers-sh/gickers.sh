@@ -29,12 +29,12 @@ use Symfony\Component\Process\Process;
 
 /**
  * `soft serve`: prepares the data directory, database, keys and sshd configuration,
- * then supervises sshd, the HTTP server, the git daemon and the Messenger worker.
+ * then supervises sshd, the HTTP server and the Messenger worker.
  * Listen addresses come from the SOFT_SERVE_* environment variables.
  */
 #[AsCommand(
     name: 'soft:serve',
-    description: 'Start the server (SSH, HTTP, git daemon and background worker)',
+    description: 'Start the server (SSH, HTTP and background worker)',
 )]
 final class ServeCommand extends Command
 {
@@ -88,7 +88,6 @@ final class ServeCommand extends Command
 
         $sshListen = ListenAddress::parse($this->settings->sshListenAddr, 23231);
         $httpListen = ListenAddress::parse($this->settings->httpListenAddr, 23232);
-        $gitListen = ListenAddress::parse($this->settings->gitListenAddr, 9418);
         $sshdConfigPath = $this->sshdConfig->write($sshListen, $this->hostKeys->path(), $this->authorizedKeys->path(), [
             'APP_ENV' => $this->environment,
             'DATABASE_URL' => $this->databaseUrl,
@@ -117,7 +116,6 @@ final class ServeCommand extends Command
         $output->writeln(sprintf('Data directory: <info>%s</info>', $this->settings->dataPath));
         $output->writeln(sprintf('SSH:        <info>%s</info> (%s)', $sshListen, $this->settings->sshPublicUrl));
         $output->writeln(sprintf('HTTP:       <info>%s</info> (%s)', $httpListen, $this->settings->httpPublicUrl));
-        $output->writeln(sprintf('Git daemon: <info>%s</info>', $gitListen));
         foreach ($processes as $name => $process) {
             $output->writeln(sprintf('  %-6s %s', $name, $process->getCommandLine()), OutputInterface::VERBOSITY_VERBOSE);
         }
@@ -156,7 +154,7 @@ final class ServeCommand extends Command
     private function buildProcesses(string $sshdConfigPath, ListenAddress $httpListen, OutputInterface $errOutput): ?array
     {
         $finder = new ExecutableFinder();
-        $console = $this->projectDir.'/bin/console';
+        $console = $this->projectDir . '/bin/console';
 
         $sshd = $finder->find('sshd', null, ['/usr/sbin', '/usr/local/sbin']);
         if (null === $sshd) {
@@ -167,7 +165,7 @@ final class ServeCommand extends Command
 
         $frankenphp = $finder->find('frankenphp');
         $http = null !== $frankenphp
-            ? new Process([$frankenphp, 'run', '--config', $this->projectDir.'/Caddyfile'], $this->projectDir, ['SOFT_SERVE_HTTP_LISTEN_ADDR' => (string) $httpListen])
+            ? new Process([$frankenphp, 'run', '--config', $this->projectDir . '/Caddyfile'], $this->projectDir, ['SOFT_SERVE_HTTP_LISTEN_ADDR' => (string) $httpListen])
             // Development fallback: PHP's built-in server (single process, no worker mode).
             // variables_order=EGPCS fills $_ENV, otherwise Dotenv lets .env shadow the real environment.
             : new Process([\PHP_BINARY, '-d', 'variables_order=EGPCS', '-S', (string) $httpListen, '-t', 'public', 'public/index.php'], $this->projectDir);
@@ -178,7 +176,6 @@ final class ServeCommand extends Command
         return [
             'sshd' => new Process([$sshd, '-D', '-e', '-f', $sshdConfigPath], $this->projectDir),
             'http' => $http,
-            'git' => new Process([\PHP_BINARY, $console, 'soft:git-daemon'], $this->projectDir),
             'worker' => new Process([\PHP_BINARY, $console, 'messenger:consume', 'async', '--time-limit=3600', '--memory-limit=128M'], $this->projectDir),
         ];
     }
