@@ -24,8 +24,8 @@ final class SettingsPane extends RepoScreen
                 return [
                     '',
                     '  Local repository (not registered on this server).',
-                    '  Name         '.$this->repo->state->name,
-                    '  Default ref  '.$this->repo->state->git->defaultBranch,
+                    '  Name         ' . $this->repo->state->name,
+                    '  Default ref  ' . $this->repo->state->git->defaultBranch,
                 ];
             }
 
@@ -36,16 +36,16 @@ final class SettingsPane extends RepoScreen
             $badge = $admin
                 ? Chrome::badge('ADMIN', Theme::FG, Theme::HIGHLIGHT)
                 : Chrome::badge('READ-ONLY', Theme::MUTED2, Theme::BORDER);
-            $header = '  '.Theme::style('Repository settings', Theme::BLUE, bold: true).'  '.$badge;
+            $header = '  ' . Theme::style('Repository settings', Theme::BLUE, bold: true) . '  ' . $badge;
 
             $keyWidth = 14;
             $renderKV = static function (string $key, string $val, bool $isSpecial = false) use ($keyWidth, $innerWidth): string {
                 $keyPadded = Theme::style(Ansi::fit($key, $keyWidth), Theme::MUTED);
                 if ($isSpecial) {
-                    return '  '.$keyPadded.' '.$val;
+                    return '  ' . $keyPadded . ' ' . $val;
                 }
 
-                return '  '.$keyPadded.' '.Theme::style(Ansi::truncate($val, $innerWidth - $keyWidth - 3), Theme::FG);
+                return '  ' . $keyPadded . ' ' . Theme::style(Ansi::truncate($val, $innerWidth - $keyWidth - 3), Theme::FG);
             };
 
             $lines = [
@@ -62,10 +62,10 @@ final class SettingsPane extends RepoScreen
 
             $desc = trim($db->description());
             if ('' === $desc) {
-                $lines[] = '    '.Theme::style('(no description)', Theme::MUTED, italic: true);
+                $lines[] = '    ' . Theme::style('(no description)', Theme::MUTED, italic: true);
             } else {
                 foreach (explode("\n", $desc) as $dl) {
-                    $lines[] = '    '.Theme::style(Ansi::truncate($dl, $innerWidth - 6), Theme::FG);
+                    $lines[] = '    ' . Theme::style(Ansi::truncate($dl, $innerWidth - 6), Theme::FG);
                 }
             }
 
@@ -77,9 +77,9 @@ final class SettingsPane extends RepoScreen
             $lines[] = '';
 
             $hint = $admin
-                ? 'press e to edit settings'
+                ? 'administrator'
                 : 'read-only (write access required)';
-            $lines[] = '  '.Theme::style($hint, Theme::MUTED, italic: true);
+            $lines[] = '  ' . Theme::style($hint, Theme::MUTED, italic: true);
 
             return Chrome::box('', $lines, $cardWidth);
         }));

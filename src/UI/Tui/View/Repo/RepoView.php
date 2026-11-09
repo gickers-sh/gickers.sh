@@ -130,11 +130,7 @@ final class RepoView extends RepoScreen
         ];
 
         $actions = match ($this->activeTab) {
-            0 => [['e', 'edit readme'], ['^p', 'live preview']],
-            1 => [['/', 'fuzzy search'], ['e', 'edit file'], ['n', 'new file'], ['D', 'delete file'], ['p', 'render md'], ['^p', 'live preview']],
-            2, 3, 4 => [['/', 'fuzzy search']],
-            5 => [['/', 'fuzzy search'], ['n', 'new PR'], ['f', 'filter'], ['m', 'merge'], ['d', 'diff'], ['s', 'close / reopen'], ['e', 'edit'], ['c', 'comment'], ['x', 'delete']],
-            7 => [['e', 'edit settings']],
+            1, 2, 3, 4 => [['/', 'fuzzy search']],
             default => [],
         };
 
