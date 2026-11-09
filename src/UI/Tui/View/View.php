@@ -69,7 +69,7 @@ abstract class View extends ContainerWidget
     }
 
     /**
-     * Columns of the full help grid shown by {@see Common\HelpView}.
+     * Columns of the full help grid shown at the bottom of the page.
      *
      * @return list<list<array{string, string}>>
      */
@@ -81,6 +81,32 @@ abstract class View extends ContainerWidget
     }
 
     /**
+     * Locate the active {@see \App\UI\Tui\Widget\ChromeWidget} in this view tree, if any.
+     */
+    public function findChrome(): ?\App\UI\Tui\Widget\ChromeWidget
+    {
+        foreach ($this->all() as $child) {
+            if ($child instanceof \App\UI\Tui\Widget\ChromeWidget) {
+                return $child;
+            }
+            if ($child instanceof self && null !== ($chrome = $child->findChrome())) {
+                return $chrome;
+            }
+            if ($child instanceof \Symfony\Component\Tui\Widget\WidgetContainerInterface) {
+                foreach ($child->all() as $grandChild) {
+                    if ($grandChild instanceof \App\UI\Tui\Widget\ChromeWidget) {
+                        return $grandChild;
+                    }
+                    if ($grandChild instanceof self && null !== ($chrome = $grandChild->findChrome())) {
+                        return $chrome;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+    /**
      * Mounted (again) on screen: re-binds widget listeners, then runs
      * {@see onActivate()} (register focus, refresh data). Idempotent.
      */
@@ -88,7 +114,7 @@ abstract class View extends ContainerWidget
     {
         $pending = [];
         foreach ($this->bindings as [$widget, $event, $listener]) {
-            $key = spl_object_id($widget).'|'.$event;
+            $key = spl_object_id($widget) . '|' . $event;
             if (!isset($pending[$key])) {
                 $pending[$key] = !$widget->hasListeners($event);
             }
@@ -102,13 +128,9 @@ abstract class View extends ContainerWidget
     /**
      * Left the navigation stack for good (popped, replaced or reset).
      */
-    public function deactivate(): void
-    {
-    }
+    public function deactivate(): void {}
 
-    protected function onActivate(): void
-    {
-    }
+    protected function onActivate(): void {}
 
     /**
      * Register a widget event listener that survives detach/re-attach cycles.

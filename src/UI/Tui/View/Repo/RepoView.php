@@ -45,6 +45,11 @@ final class RepoView extends RepoScreen
         return $this->repo->state->name;
     }
 
+    public function findChrome(): ChromeWidget
+    {
+        return $this->chrome;
+    }
+
     public function activeTab(): int
     {
         return $this->activeTab;

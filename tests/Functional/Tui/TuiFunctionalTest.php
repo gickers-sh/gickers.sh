@@ -58,7 +58,7 @@ final class TuiFunctionalTest extends KernelTestCase
 
     private function createTempDir(string $prefix = 'tui_test_'): string
     {
-        $path = sys_get_temp_dir().'/'.$prefix.uniqid('', true);
+        $path = sys_get_temp_dir() . '/' . $prefix . uniqid('', true);
         mkdir($path, 0755, true);
         $this->tempDirs[] = $path;
 
@@ -77,10 +77,10 @@ final class TuiFunctionalTest extends KernelTestCase
         );
         exec($cmd);
 
-        file_put_contents($dir.'/README.md', "# Demo Repository\n\nWelcome to demo.");
-        mkdir($dir.'/src', 0755, true);
+        file_put_contents($dir . '/README.md', "# Demo Repository\n\nWelcome to demo.");
+        mkdir($dir . '/src', 0755, true);
         file_put_contents(
-            $dir.'/src/Calculator.php',
+            $dir . '/src/Calculator.php',
             "<?php\n\nnamespace App;\n\nclass Calculator\n{\n    public function add(int \$a, int \$b): int\n    {\n        return \$a + \$b;\n    }\n}\n"
         );
 
@@ -174,21 +174,52 @@ final class TuiFunctionalTest extends KernelTestCase
         $tui = $app->tui();
 
         $tui->start();
-        $tui->tick();
-        $vt->clearOutput();
+        $initialOutput = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('Soft Serve', $initialOutput);
+        $this->assertStringContainsString('About', $initialOutput);
 
         // Open expanded help grid
         $vt->simulateInput('?');
         $tui->tick();
-        $output = $vt->consumeOutput();
-        $this->assertStringContainsString('go to end', $output);
-        $this->assertStringContainsString('toggle help', $output);
+
+        $refTui = new \ReflectionClass($tui);
+        $propWriter = $refTui->getProperty('screenWriter');
+        $writer = $propWriter->getValue($tui);
+        $refWriter = new \ReflectionClass($writer);
+        $propLines = $refWriter->getProperty('previousLines');
+        /** @var list<string> $screenLines */
+        $screenLines = $propLines->getValue($writer);
+        $screenText = implode("\n", $screenLines);
+
+        // Ensure help is displayed at the bottom
+        $this->assertStringContainsString('go to end', $screenText);
+        $this->assertStringContainsString('toggle help', $screenText);
+        // Ensure header and main selection page content remain visible above the helper
+        $this->assertStringContainsString('Soft Serve', $screenText);
+        $this->assertStringContainsString('About', $screenText);
+        $this->assertStringContainsString('No readme found.', $screenText);
+
+        // Verify the help grid lines appear below the page header lines
+        $headerLineIndex = null;
+        $helpLineIndex = null;
+        foreach ($screenLines as $idx => $line) {
+            if (null === $headerLineIndex && str_contains($line, 'Soft Serve')) {
+                $headerLineIndex = $idx;
+            }
+            if (null === $helpLineIndex && str_contains($line, 'toggle help')) {
+                $helpLineIndex = $idx;
+            }
+        }
+        $this->assertNotNull($headerLineIndex);
+        $this->assertNotNull($helpLineIndex);
+        $this->assertGreaterThan($headerLineIndex, $helpLineIndex);
 
         // Toggle help off with '?'
         $vt->simulateInput('?');
         $tui->tick();
-        $output = $vt->consumeOutput();
-        $this->assertStringNotContainsString('go to end', $output);
+        $screenLinesClosed = $propLines->getValue($writer);
+        $screenTextClosed = implode("\n", $screenLinesClosed);
+        $this->assertStringNotContainsString('go to end', $screenTextClosed);
 
         $tui->stop();
     }
@@ -198,7 +229,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $vt = new VirtualTerminal(80, 2);
         $tui = new Tui(terminal: $vt);
         $async = new AsyncLoader($tui);
-        $tui->onTick(static fn (): bool => $async->poll());
+        $tui->onTick(static fn(): bool => $async->poll());
         $widget = new DocumentWidget(new TermstrapRenderer(), $async);
         $tui->add($widget);
         $tui->setFocus($widget->scrollWidget());
@@ -278,9 +309,9 @@ final class TuiFunctionalTest extends KernelTestCase
     public function testFilesTabFuzzySearchFiltersAndOpensNestedFile(): void
     {
         [$dir] = $this->createFixtureRepo();
-        mkdir($dir.'/src/Deep/Nested', 0755, true);
+        mkdir($dir . '/src/Deep/Nested', 0755, true);
         file_put_contents(
-            $dir.'/src/Deep/Nested/TargetService.php',
+            $dir . '/src/Deep/Nested/TargetService.php',
             "<?php\n\nnamespace App\\Deep\\Nested;\n\nfinal class TargetService {}\n"
         );
         exec(sprintf('cd %s && git add . && git commit -m "add nested target"', escapeshellarg($dir)));
@@ -339,7 +370,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $user = new User('alice-dev', true, new \DateTimeImmutable());
         $this->userStore->save($user);
 
-        $repo = ($this->createRepo)($user, 'fuzzy-all-tabs-'.uniqid(), false, false, 'Fuzzy tabs repo');
+        $repo = ($this->createRepo)($user, 'fuzzy-all-tabs-' . uniqid(), false, false, 'Fuzzy tabs repo');
         $repoPath = $this->repoDirectory->pathFor($repo->name());
         $gitRepo = $this->gitReader->openRepository($repoPath);
 
@@ -451,9 +482,9 @@ final class TuiFunctionalTest extends KernelTestCase
 
     public function testSelectionPageFeedAndMyRepositoriesFuzzySearch(): void
     {
-        $alice = new User('alice-owner-'.uniqid(), false, new \DateTimeImmutable());
+        $alice = new User('alice-owner-' . uniqid(), false, new \DateTimeImmutable());
         $this->userStore->save($alice);
-        $bob = new User('bob-owner-'.uniqid(), false, new \DateTimeImmutable());
+        $bob = new User('bob-owner-' . uniqid(), false, new \DateTimeImmutable());
         $this->userStore->save($bob);
 
         ($this->createRepo)($alice, 'alpha-engine', false, false, 'High performance physics engine', 'Alpha Engine');
@@ -513,10 +544,10 @@ final class TuiFunctionalTest extends KernelTestCase
 
     public function testSelectionPageShowsFlashMessageWhenOpeningOrphanRepositoryWithoutDiskDirectory(): void
     {
-        $user = new User('orphan-tester-'.uniqid(), true, new \DateTimeImmutable());
+        $user = new User('orphan-tester-' . uniqid(), true, new \DateTimeImmutable());
         $this->userStore->save($user);
 
-        $repo = ($this->createRepo)($user, 'orphan-repo-'.uniqid(), false, false, 'An orphan test repo', 'Orphan Repo');
+        $repo = ($this->createRepo)($user, 'orphan-repo-' . uniqid(), false, false, 'An orphan test repo', 'Orphan Repo');
         $repoDiskPath = $this->repoDirectory->pathFor($repo->name());
         $this->assertTrue(is_dir($repoDiskPath));
         // Simulate the orphan state by deleting the git repository directory on disk
@@ -564,7 +595,7 @@ final class TuiFunctionalTest extends KernelTestCase
         // Point the repo at the fixture working tree so it opens on disk.
         $target = $this->repoDirectory->pathFor($repo->name());
         (new Process(['rm', '-rf', $target]))->run();
-        (new Process(['cp', '-R', $dir.'/.git', $target]))->run();
+        (new Process(['cp', '-R', $dir . '/.git', $target]))->run();
 
         $vt = new VirtualTerminal(80, 24);
         $app = $this->apps->create($vt, $user, true);

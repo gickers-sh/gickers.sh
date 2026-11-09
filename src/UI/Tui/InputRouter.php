@@ -67,6 +67,17 @@ final class InputRouter
 
         $nav = $this->app->navigator();
         $top = $nav->top();
+
+        $chrome = $top->findChrome();
+        if (null !== $chrome && $chrome->showsHelp()) {
+            if ('?' === $data || '?' === $this->parser->decodePrintable($data) || 'q' === $data || $this->parser->matches($data, 'escape')) {
+                $chrome->setShowsHelp(false);
+
+                return true;
+            }
+            $chrome->setShowsHelp(false);
+        }
+
         if ($top->onAnyKey($data)) {
             return true;
         }
@@ -85,6 +96,13 @@ final class InputRouter
         }
 
         if ('?' === $data || '?' === $this->parser->decodePrintable($data)) {
+            if (null !== $chrome) {
+                $chrome->setHelpColumns($top->helpColumns());
+                $chrome->toggleHelp();
+
+                return true;
+            }
+
             $nav->push($this->app->views()->help($top));
 
             return true;

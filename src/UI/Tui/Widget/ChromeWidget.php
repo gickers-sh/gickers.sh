@@ -23,8 +23,12 @@ final class ChromeWidget extends ContainerWidget
     private readonly LinesWidget $header;
     private readonly ContainerWidget $tabSlot;
     private readonly ContainerWidget $bodySlot;
+    private readonly LinesWidget $help;
     private readonly LinesWidget $status;
     private ?string $flash = null;
+    private bool $showsHelp = false;
+    /** @var list<list<array{0: string, 1: string}>> */
+    private array $helpColumns = [];
     /** @var \Closure(int): list<string> */
     private \Closure $statusPainter;
 
@@ -32,15 +36,26 @@ final class ChromeWidget extends ContainerWidget
     {
         $this->addStyleClass('chrome');
         $this->expandVertically(true);
-        $this->statusPainter = static fn (int $cols): array => [];
+        $this->statusPainter = static fn(int $cols): array => [];
         $this->margin = new LinesWidget(['']);
         $this->header = new LinesWidget();
         $this->tabSlot = new ContainerWidget();
         $this->bodySlot = new ContainerWidget();
         $this->bodySlot->expandVertically(true);
+        $this->help = new LinesWidget(function (int $cols): array {
+            if (!$this->showsHelp || [] === $this->helpColumns) {
+                return [];
+            }
+
+            return array_merge(
+                [''],
+                array_map(static fn(string $l): string => '  ' . $l, \App\UI\Tui\Format\Chrome::helpGrid($this->helpColumns, max(1, $cols - 4))),
+                [''],
+            );
+        });
         $this->status = new LinesWidget(function (int $cols): array {
             if (null !== $this->flash) {
-                return ["\e[7m".Ansi::fit(' '.$this->flash, $cols)."\e[0m"];
+                return ["\e[7m" . Ansi::fit(' ' . $this->flash, $cols) . "\e[0m"];
             }
 
             return ($this->statusPainter)($cols);
@@ -49,6 +64,7 @@ final class ChromeWidget extends ContainerWidget
         $this->add($this->header);
         $this->add($this->tabSlot);
         $this->add($this->bodySlot);
+        $this->add($this->help);
         $this->add($this->status);
         $this->setTabs($tabs);
         $this->setBody($body);
@@ -99,10 +115,43 @@ final class ChromeWidget extends ContainerWidget
 
         return $this;
     }
-
     public function body(): ?AbstractWidget
     {
         return $this->bodySlot->all()[0] ?? null;
+    }
+
+    /**
+     * @param list<list<array{0: string, 1: string}>> $columns
+     */
+    public function setHelpColumns(array $columns): static
+    {
+        $this->helpColumns = $columns;
+        $this->help->refresh();
+
+        return $this;
+    }
+
+    public function toggleHelp(): bool
+    {
+        $this->showsHelp = !$this->showsHelp;
+        $this->help->refresh();
+
+        return $this->showsHelp;
+    }
+
+    public function setShowsHelp(bool $shows): static
+    {
+        if ($this->showsHelp !== $shows) {
+            $this->showsHelp = $shows;
+            $this->help->refresh();
+        }
+
+        return $this;
+    }
+
+    public function showsHelp(): bool
+    {
+        return $this->showsHelp;
     }
 
     /**
@@ -110,7 +159,7 @@ final class ChromeWidget extends ContainerWidget
      */
     public function setStatus(\Closure|array $painter): static
     {
-        $this->statusPainter = $painter instanceof \Closure ? $painter : static fn (int $cols): array => $painter;
+        $this->statusPainter = $painter instanceof \Closure ? $painter : static fn(int $cols): array => $painter;
         $this->status->refresh();
 
         return $this;
@@ -140,6 +189,7 @@ final class ChromeWidget extends ContainerWidget
     public function refresh(): void
     {
         $this->header->refresh();
+        $this->help->refresh();
         $this->status->refresh();
     }
 

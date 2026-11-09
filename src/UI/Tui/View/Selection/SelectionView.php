@@ -30,7 +30,7 @@ final class SelectionView extends View
 
         $this->tabBar = new TabBarWidget(self::TABS, TabBarWidget::DOTS, 1);
         $this->tabBar->setActive(0);
-        $this->tabBar->onSelect(fn (int $i) => $this->selectTab($i));
+        $this->tabBar->onSelect(fn(int $i) => $this->selectTab($i));
 
         $onTab = function (int $dir): void {
             $this->cycleTab($dir);
@@ -50,8 +50,8 @@ final class SelectionView extends View
         ];
 
         $this->chrome = new ChromeWidget($this->tabBar, $this->panes[0]);
-        $this->chrome->setHeader(fn (int $cols): array => [
-            ' '.Chrome::serverBadge('' !== $this->views->settings->name ? $this->views->settings->name : 'Soft Serve'),
+        $this->chrome->setHeader(fn(int $cols): array => [
+            ' ' . Chrome::serverBadge('' !== $this->views->settings->name ? $this->views->settings->name : 'Soft Serve'),
             '',
         ]);
 
@@ -69,6 +69,11 @@ final class SelectionView extends View
     public function title(): string
     {
         return 'Soft Serve';
+    }
+
+    public function findChrome(): ChromeWidget
+    {
+        return $this->chrome;
     }
 
     public function activeChild(): ?View
