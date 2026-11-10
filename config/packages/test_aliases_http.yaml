@@ -1,0 +1,5 @@
+when@test:
+    services:
+        test.git_service_process:
+            alias: App\UI\Http\Git\GitServiceProcess
+            public: true

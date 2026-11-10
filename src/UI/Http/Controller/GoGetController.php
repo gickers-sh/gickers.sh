@@ -13,7 +13,6 @@ use App\Shared\Infrastructure\Config\ServerSettings;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Routing\Attribute\Route;
 
 final readonly class GoGetController
 {
@@ -25,9 +24,10 @@ final readonly class GoGetController
     ) {
     }
 
-    // Catch-all like Go's `/{repo:.*}`: sub-package import paths walk up to the repository.
-    // Lowest priority so every specific git/LFS route (all of which carry a fixed suffix) wins.
-    #[Route('/{repo}', requirements: ['repo' => '.+'], methods: ['GET'], priority: -100)]
+    // Go's `?go-get=1` discovery document: sub-package import paths walk up to the repository.
+    // Not routed on its own: RepoWebController owns the lowest-priority catch-all `/{repo}` route
+    // (every specific git/LFS/raw/release route, all with a fixed suffix, wins over it) and hands
+    // `?go-get=1` requests to this handler.
     public function __invoke(Request $request, string $repo): Response
     {
         if ('1' !== $request->query->get('go-get')) {

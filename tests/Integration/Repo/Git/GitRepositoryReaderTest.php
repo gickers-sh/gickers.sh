@@ -266,4 +266,48 @@ final class GitRepositoryReaderTest extends TestCase
             'tests/Unit/CalculatorTest.php',
         ], $paths);
     }
+
+    public function testCatBlobReturnsBytesAndDistinguishesMissingRefOrPath(): void
+    {
+        $dir = $this->createTempDir('reader_catblob_');
+        (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
+        $repo = $this->reader->openRepository($dir);
+        GitTestHelper::writeFile($repo, 'main', 'docs/guide.md', "# Guide\nbody\n", 'add guide', 'Tester', 'test@codes.sh');
+
+        self::assertSame("# Guide\nbody\n", $this->reader->catBlob($repo, 'main', 'docs/guide.md'));
+        self::assertSame('blob', $this->reader->objectType($repo, 'main:docs/guide.md'));
+        // A directory is not a blob -> null (so raw adapters answer 404).
+        self::assertNull($this->reader->catBlob($repo, 'main', 'docs'));
+        self::assertNull($this->reader->catBlob($repo, 'main', 'missing.txt'));
+        self::assertNull($this->reader->catBlob($repo, 'no-such-ref', 'docs/guide.md'));
+    }
+
+    public function testGrepMatchesEmptyAndMissingRef(): void
+    {
+        $dir = $this->createTempDir('reader_grep_');
+        (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
+        $repo = $this->reader->openRepository($dir);
+        GitTestHelper::writeFile($repo, 'main', 'app.txt', "alpha\nbeta gamma\n", 'add app', 'Tester', 'test@codes.sh');
+
+        $hits = $this->reader->grep($repo, 'beta', 'main');
+        self::assertNotNull($hits);
+        self::assertCount(1, $hits);
+        self::assertStringContainsString('app.txt', $hits[0]);
+        self::assertStringContainsString('beta gamma', $hits[0]);
+
+        self::assertSame([], $this->reader->grep($repo, 'nomatch', 'main'));
+        self::assertNull($this->reader->grep($repo, 'beta', 'no-such-ref'));
+    }
+
+    public function testDiskUsageBytesIsPositiveForPopulatedRepo(): void
+    {
+        $dir = $this->createTempDir('reader_disk_');
+        (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
+        $repo = $this->reader->openRepository($dir);
+        GitTestHelper::writeFile($repo, 'main', 'README.md', str_repeat("line\n", 200), 'add readme', 'Tester', 'test@codes.sh');
+
+        $bytes = $this->reader->diskUsageBytes($repo);
+        self::assertNotNull($bytes);
+        self::assertGreaterThan(0, $bytes);
+    }
 }

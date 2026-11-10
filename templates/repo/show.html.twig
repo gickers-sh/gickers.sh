@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ repository }} - {{ serverName }}</title>
+    <link rel="stylesheet" href="/css/repo-web.css">
+</head>
+<body>
+<main>
+    <header class="repo-head">
+        <div class="identity">
+            <h1>{{ repository }}</h1>
+            {% if description is not empty %}<p class="description">{{ description }}</p>{% endif %}
+        </div>
+        {% if cloneCommand is not empty %}<div class="clone"><span class="clone-label">Clone</span><code>{{ cloneCommand }}</code></div>{% endif %}
+    </header>
+    {% if empty %}
+        <p class="notice">This repository is empty.</p>
+    {% else %}
+        <nav class="tabs" aria-label="Repository sections"><a class="active" href="#readme">Readme</a></nav>
+        <section id="readme" class="section">
+            {% if readmePath is null %}
+                <h2>README</h2>
+                <p class="notice">This repository has no README.</p>
+            {% else %}
+                <h2>{{ readmePath }}</h2>
+                <div class="readme">{{ readmeHtml }}</div>
+            {% endif %}
+        </section>
+    {% endif %}
+    <footer class="status"><span class="status-name">{{ repository }}</span><span class="status-summary">{{ empty ? 'empty repository' : 'README · HEAD' }}</span><span class="status-meta">HTTP · {{ serverName }}</span></footer>
+</main>
+</body>
+</html>
