@@ -1,0 +1,11 @@
+when@test:
+    services:
+        test.repo_grep_command:
+            alias: App\UI\Ssh\Command\Repo\RepoGrepCommand
+            public: true
+        test.repo_readme_command:
+            alias: App\UI\Ssh\Command\Repo\RepoReadmeCommand
+            public: true
+        test.repo_diff_command:
+            alias: App\UI\Ssh\Command\Repo\RepoDiffCommand
+            public: true

@@ -13,6 +13,11 @@ use PHPUnit\Framework\TestCase;
  * Asserts the cobra-style SSH help output matches the upstream Soft Serve
  * server byte-for-byte. The fixture is captured from `ssh codes.sh help …`
  * with the SSH prefix rewritten to this server's `ssh -p 2223 localhost`.
+ *
+ * Commands that only exist in codes.sh (`release`, `repo release`,
+ * `repo signatures`, `repo branch protect|unprotect`, `repo diff`,
+ * `repo grep`, `repo readme`) have no upstream capture: their blocks, and their
+ * lines in the parent command listings, follow the same format.
  */
 final class HelpRendererTest extends TestCase
 {

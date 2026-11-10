@@ -21,6 +21,9 @@ final class SshCommandResolverTest extends TestCase
             'repo:info',
             'repo:tree',
             'repo:blob',
+            'repo:grep',
+            'repo:readme',
+            'repo:diff',
             'repo:branch:list',
             'repo:branch:default',
             'repo:branch:delete',
@@ -44,6 +47,7 @@ final class SshCommandResolverTest extends TestCase
             'repo:tag:list' => ['repo:tag:ls'],
             'repo:list' => ['repo:ls'],
             'repo:blob' => ['repo:cat', 'repo:show'],
+            'repo:grep' => ['repo:search'],
             'repo:delete' => ['repo:rm', 'repo:del'],
             'repo:rename' => ['repo:mv'],
             'repo:collab:remove' => ['repo:collab:rm', 'repo:collab:del'],
@@ -76,6 +80,29 @@ final class SshCommandResolverTest extends TestCase
         $this->assertNotNull($res3);
         $this->assertSame('repo:blob', $res3->name);
         $this->assertSame(['demo', 'README.md'], $res3->arguments);
+    }
+
+    public function testGrepSearchAliasReadmeAndDiff(): void
+    {
+        $grep = $this->resolver->resolve(['repo', 'grep', 'demo', 'needle', 'main']);
+        $this->assertNotNull($grep);
+        $this->assertSame('repo:grep', $grep->name);
+        $this->assertSame(['demo', 'needle', 'main'], $grep->arguments);
+
+        $search = $this->resolver->resolve(['repo', 'search', 'demo', 'needle']);
+        $this->assertNotNull($search);
+        $this->assertSame('repo:grep', $search->name);
+        $this->assertSame(['demo', 'needle'], $search->arguments);
+
+        $readme = $this->resolver->resolve(['repo', 'readme', 'demo', 'main']);
+        $this->assertNotNull($readme);
+        $this->assertSame('repo:readme', $readme->name);
+        $this->assertSame(['demo', 'main'], $readme->arguments);
+
+        $diff = $this->resolver->resolve(['repo', 'diff', 'demo', 'v1', 'v2']);
+        $this->assertNotNull($diff);
+        $this->assertSame('repo:diff', $diff->name);
+        $this->assertSame(['demo', 'v1', 'v2'], $diff->arguments);
     }
 
     public function testGroupAliases(): void
@@ -144,6 +171,7 @@ final class SshCommandResolverTest extends TestCase
         $this->assertSame('repo:collab:add', $res->name);
         $this->assertSame(['demo', 'alice', 'read-write'], $res->arguments);
     }
+
     public function testTopLevelWebhookPromotion(): void
     {
         $res = $this->resolver->resolve(['webhook', 'create', 'demo', 'http://127.0.0.1']);

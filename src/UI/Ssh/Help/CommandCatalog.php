@@ -107,6 +107,7 @@ final class CommandCatalog
         $root->addChild($this->leaf('info', 'Show your info'));
         $root->addChild($this->leaf('jwt [repository1 repository2...]', 'Generate a JSON Web Token'));
         $root->addChild($this->pubkey());
+        $root->addChild($this->release());
         $root->addChild($this->repo());
         $root->addChild($this->leaf('set-username USERNAME', 'Set your username'));
         $root->addChild($this->settings());
@@ -179,6 +180,12 @@ final class CommandCatalog
         $branch->addChild($this->leaf('default REPOSITORY [BRANCH]', 'Set or get the default branch'));
         $branch->addChild($this->leaf('delete REPOSITORY BRANCH', 'Delete a branch', '', ['remove', 'rm', 'del']));
         $branch->addChild($this->leaf('list REPOSITORY', 'List repository branches'));
+        $branch->addChild($this->leaf('protect REPOSITORY PATTERN', 'Add or update a branch protection rule', '', [], [
+            new FlagSpec(null, 'no-force', '', 'reject non-fast-forward (force) updates'),
+            new FlagSpec(null, 'no-delete', '', 'reject deletion of matching refs'),
+            new FlagSpec(null, 'admins-only', '', 'only administrators may update matching refs'),
+        ]));
+        $branch->addChild($this->leaf('unprotect REPOSITORY PATTERN', 'Remove a branch protection rule'));
         $repo->addChild($branch);
 
         $collab = $this->group('collab', 'Manage collaborators', ['collabs', 'collaborator', 'collaborators']);
@@ -198,7 +205,9 @@ final class CommandCatalog
         $repo->addChild($this->leaf('create REPOSITORY', 'Create a new repository', '', [], $this->repoWriteFlags()));
         $repo->addChild($this->leaf('delete REPOSITORY', 'Delete a repository', '', ['del', 'remove', 'rm']));
         $repo->addChild($this->leaf('description REPOSITORY [DESCRIPTION]', 'Set or get the description for a repository', '', ['desc']));
+        $repo->addChild($this->leaf('diff REPOSITORY FROM [TO]', 'Print the diff between two references'));
         $repo->addChild($this->leaf('fork SOURCE [NEW_NAME]', 'Fork an existing repository', '', [], $this->repoWriteFlags()));
+        $repo->addChild($this->leaf('grep REPOSITORY PATTERN [REFERENCE]', 'Search repository contents', '', ['search']));
         $repo->addChild($this->leaf('hidden REPOSITORY [TRUE|FALSE]', 'Hide or unhide a repository', '', ['hide']));
         $repo->addChild($this->leaf('import REPOSITORY REMOTE', 'Import a new repository from remote', '', [], [
             new FlagSpec(null, 'lfs', '', 'pull Git LFS objects'),
@@ -216,6 +225,7 @@ final class CommandCatalog
         $repo->addChild($this->leaf('mirror REPOSITORY [true|false]', 'Set or get a repository mirror property'));
         $repo->addChild($this->leaf('private REPOSITORY [true|false]', 'Set or get a repository private property'));
         $repo->addChild($this->leaf('project-name REPOSITORY [NAME]', 'Set or get the project name for a repository', '', ['project']));
+        $repo->addChild($this->leaf('readme REPOSITORY [REFERENCE]', 'Print the repository README'));
         $repo->addChild($this->leaf('rename REPOSITORY NEW_NAME', 'Rename an existing repository', '', ['mv', 'move']));
 
         $tag = $this->group('tag', 'Manage repository tags');
@@ -223,10 +233,23 @@ final class CommandCatalog
         $tag->addChild($this->leaf('list REPOSITORY', 'List repository tags', '', ['ls']));
         $repo->addChild($tag);
 
+        $release = $this->group('release', 'Manage release artifacts');
+        $release->addChild($this->leaf('upload REPOSITORY TAG FILENAME', 'Upload a release artifact (the file is read from stdin)'));
+        $repo->addChild($release);
+
         $repo->addChild($this->leaf('tree REPOSITORY [REFERENCE] [PATH]', 'Print repository tree at path'));
+        $repo->addChild($this->leaf('signatures REPOSITORY [true|false]', 'Require or check verified signed commits on push'));
         $repo->addChild($this->webhook());
 
         return $repo;
+    }
+
+    private function release(): CommandSpec
+    {
+        $release = $this->group('release', 'Manage release artifacts');
+        $release->addChild($this->leaf('upload REPOSITORY TAG FILENAME', 'Upload a release artifact (the file is read from stdin)'));
+
+        return $release;
     }
 
     /**
@@ -241,6 +264,7 @@ final class CommandCatalog
             new FlagSpec('H', 'hidden', '', 'hide the repository from the UI'),
         ];
     }
+
     private function webhook(): CommandSpec
     {
         $events = 'events to trigger the webhook, available events are (branch_tag_create, branch_tag_delete, collaborator, push, repository, repository_visibility_change)';
