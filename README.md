@@ -711,6 +711,57 @@ ssh -p 23231 localhost repo private icecream true
 Use `repo branch` and `repo tag` to list, and delete branches or tags. You can
 also use `repo branch default` to set or get the repository default branch.
 
+### Branch Protection & Signed Commits
+
+Protect refs from force-pushes, deletion, or non-admin writes with
+`repo branch protect`, and lift a rule with `repo branch unprotect`:
+
+```sh
+# Reject force-pushes and deletions on main
+ssh -p 23231 localhost repo branch protect icecream main --no-force --no-delete
+
+# Only admins may update release/* refs
+ssh -p 23231 localhost repo branch protect icecream 'release/*' --admins-only
+
+# Remove a rule
+ssh -p 23231 localhost repo branch unprotect icecream main
+```
+
+Require every pushed commit to carry a verified signature with
+`repo signatures`:
+
+```sh
+# Require signed commits on push
+ssh -p 23231 localhost repo signatures icecream true
+
+# Check the current setting
+ssh -p 23231 localhost repo signatures icecream
+```
+
+Both rules are enforced server-side by the `pre-receive` hook: a rejected push
+reports the offending ref and reason and leaves the repository unchanged.
+
+### Release Artifacts
+
+Attach binary artifacts to a tag with `repo release upload`. The file is read
+from stdin, so pipe or redirect it:
+
+```sh
+# Upload a build artifact for tag v1.0.0
+ssh -p 23231 localhost repo release upload icecream v1.0.0 icecream-linux-amd64 < ./dist/icecream-linux-amd64
+```
+
+Artifacts are served over HTTP for anyone who can read the repository:
+
+```sh
+curl -O http://localhost:23232/icecream/releases/v1.0.0/icecream-linux-amd64
+```
+
+
+### HTML Repository Browser
+
+Open `http://localhost:23232/icecream` (using your HTTP URL and repository name) to browse a repository in a web browser. The Twig-rendered page uses a separate CSS file and shows the clone command, repository description, and README in a dark terminal-inspired layout. README content is rendered as GitHub-flavored Markdown; raw HTML is stripped and unsafe links are disabled. Private repositories use the same HTTP read authorization. The page has no JavaScript or external assets. The HTTP root `/` does not list repositories.
+
 ### Repository Tree
 
 To print a file tree for the project, just use the `repo tree` command along with
@@ -742,6 +793,41 @@ ssh -p 23231 localhost repo blob soft-serve cmd/soft/main.go -c -l
 ```
 
 Use `--raw` to print raw file contents. This is useful for dumping binary data.
+
+The same file can be fetched over HTTP at `GET /{repo}/raw/{ref}/{path}`, resolved
+straight from git with no checkout and gated by the repository's read access:
+
+```sh
+curl http://localhost:23232/soft-serve/raw/main/cmd/soft/main.go
+```
+
+### Searching, README & Diffs
+
+Search a repository's text files with `repo grep` (also spelled `repo search`).
+The pattern is a regular expression as understood by `git grep`, and the optional
+last argument is the reference to search (default `HEAD`). Each match prints as
+`REFERENCE:PATH:LINE:TEXT`, and no match prints nothing:
+
+```sh
+ssh -p 23231 localhost repo grep soft-serve 'func main'
+ssh -p 23231 localhost repo grep soft-serve TODO v0.8.0
+```
+
+Use `repo readme` to print the README at a reference (default `HEAD`); nothing
+is printed when the reference has none:
+
+```sh
+ssh -p 23231 localhost repo readme soft-serve
+ssh -p 23231 localhost repo readme soft-serve main
+```
+
+`repo diff` prints the diff between two references, or, given a single commit,
+the changes it introduced:
+
+```sh
+ssh -p 23231 localhost repo diff soft-serve v0.7.0 v0.8.0
+ssh -p 23231 localhost repo diff soft-serve 4e8b9c1
+```
 
 ## The Soft Serve TUI
 
