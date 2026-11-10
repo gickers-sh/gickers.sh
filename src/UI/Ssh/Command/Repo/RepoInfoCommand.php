@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\UI\Ssh\Command\Repo;
 
 use App\Repo\Application\Query\RepoQuery;
+use App\Repo\Application\RepoStatsService;
 use App\Repo\Infrastructure\Git\BareRepositoryStorage;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
 use App\UI\Ssh\Command\AbstractSshCommand;
@@ -26,6 +27,7 @@ final class RepoInfoCommand extends AbstractSshCommand
         private readonly RepoQuery $repoQuery,
         private readonly BareRepositoryStorage $storage,
         private readonly GitRepositoryReader $gitReader,
+        private readonly RepoStatsService $stats,
     ) {
         parent::__construct($sshSession);
     }
@@ -75,6 +77,13 @@ final class RepoInfoCommand extends AbstractSshCommand
         $this->line($output, trim(sprintf('Owner: %s', $owner->username())));
         $this->line($output, sprintf('Default Branch: %s', $defaultBranch));
 
+        $stats = $this->stats->forRepo($repo);
+        $this->line($output, sprintf('Clones: %d', $stats->clones));
+        $this->line($output, sprintf('Fetches: %d', $stats->fetches));
+        if (null !== $stats->diskUsageBytes) {
+            $this->line($output, sprintf('Disk Usage: %s', self::humanBytes($stats->diskUsageBytes)));
+        }
+
         if (count($branches) > 0) {
             $this->line($output, 'Branches:');
             foreach ($branches as $b) {
@@ -90,5 +99,20 @@ final class RepoInfoCommand extends AbstractSshCommand
         }
 
         return Command::SUCCESS;
+    }
+
+    private static function humanBytes(int $bytes): string
+    {
+        $units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+        $value = (float) $bytes;
+        $unit = 0;
+        while ($value >= 1024.0 && $unit < \count($units) - 1) {
+            $value /= 1024.0;
+            ++$unit;
+        }
+
+        return 0 === $unit
+            ? sprintf('%d %s', $bytes, $units[0])
+            : sprintf('%.1f %s', $value, $units[$unit]);
     }
 }

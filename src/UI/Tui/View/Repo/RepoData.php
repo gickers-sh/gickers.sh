@@ -30,6 +30,9 @@ final class RepoData
     /** @var array<string, array{path: string, content: string}|null> ref => doc */
     private array $readmeDocCache = [];
 
+    private ?int $diskUsage = null;
+    private bool $diskUsageComputed = false;
+
     /** @var array<string, list<\Closure(list<TreeEntry>): void>> */
     private array $treeQueue = [];
     /** @var array<string, list<\Closure(list<TreeEntry>): void>> */
@@ -393,6 +396,25 @@ final class RepoData
         }
 
         return $commits[0]->hash ?? '';
+    }
+
+    /**
+     * On-disk size of the repository in bytes, computed once via `git count-objects`
+     * and memoised. Null when the size cannot be determined.
+     */
+    public function diskUsageBytes(): ?int
+    {
+        if ($this->diskUsageComputed) {
+            return $this->diskUsage;
+        }
+        $this->diskUsageComputed = true;
+        try {
+            $this->diskUsage = $this->reader->diskUsageBytes($this->state->git);
+        } catch (\Throwable) {
+            $this->diskUsage = null;
+        }
+
+        return $this->diskUsage;
     }
 
     /**

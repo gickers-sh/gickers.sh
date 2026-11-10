@@ -6,6 +6,7 @@ namespace App\UI\Tui\View\Repo\Profile;
 
 use App\UI\Tui\Format\Ansi;
 use App\UI\Tui\Format\Chrome;
+use App\UI\Tui\Format\Size;
 use App\UI\Tui\Format\Time;
 use App\UI\Tui\Render\Theme;
 use App\UI\Tui\View\Repo\RepoScreen;
@@ -49,6 +50,13 @@ final class ProfilePane extends RepoScreen
             if ('' !== $clone) {
                 $out[] = $bar.' '.Theme::style(Ansi::truncate($clone, $cols - 2), Theme::SELECTOR);
             }
+
+            $usage = sprintf('Clones: %d · Fetches: %d', $db->cloneCount(), $db->fetchCount());
+            $disk = $this->repo->data->diskUsageBytes();
+            if (null !== $disk) {
+                $usage .= ' · '.Size::human($disk);
+            }
+            $out[] = $bar.' '.Theme::style($usage, Theme::MUTED);
 
             return $out;
         }));

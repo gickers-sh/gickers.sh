@@ -1,0 +1,8 @@
+when@test:
+    services:
+        test.repo_info_command:
+            alias: App\UI\Ssh\Command\Repo\RepoInfoCommand
+            public: true
+        test.repo_stats_service:
+            alias: App\Repo\Application\RepoStatsService
+            public: true

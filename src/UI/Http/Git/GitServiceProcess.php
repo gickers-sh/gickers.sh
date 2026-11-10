@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\UI\Http\Git;
 
 use App\Identity\Domain\Model\User;
+use App\Repo\Application\RepoStatsService;
+use App\Repo\Domain\RepoName;
 use App\Repo\Infrastructure\Git\GitCommand;
 use App\Repo\Infrastructure\Git\Revision;
 use App\Shared\Infrastructure\Config\ServerSettings;
@@ -19,6 +21,7 @@ final readonly class GitServiceProcess
 {
     public function __construct(
         private ServerSettings $settings,
+        private RepoStatsService $stats,
     ) {
     }
 
@@ -117,6 +120,11 @@ final readonly class GitServiceProcess
         }
         $inBuffer = '';
         $inEof = false;
+        // For upload-pack, tap the decompressed negotiation to tell a clone (no `have`
+        // lines) from a fetch. Capped: wants/haves sit at the very start of the stream.
+        $trackUsage = 'git-upload-pack' === $service && null !== $repoName;
+        $negotiation = '';
+        $negotiationCap = 262144;
 
         while (true) {
             if (null !== $pipes[0] && '' === $inBuffer && !$inEof) {
@@ -138,6 +146,10 @@ final readonly class GitServiceProcess
                         $inBuffer = $raw;
                     }
                 }
+            }
+
+            if ($trackUsage && '' !== $inBuffer && \strlen($negotiation) < $negotiationCap) {
+                $negotiation .= $inBuffer;
             }
 
             $r = [];
@@ -208,11 +220,35 @@ final readonly class GitServiceProcess
             fclose($pipes[2]);
         }
 
-        proc_close($process);
+        $exitCode = proc_close($process);
 
         if ('git-receive-pack' === $service) {
             $this->ensureDefaultBranch($repoPath);
             $this->updateServerInfo($repoPath);
+        }
+
+        if ($trackUsage && 0 === $exitCode) {
+            $this->recordUsage($repoName, $negotiation);
+        }
+    }
+
+    /**
+     * Records a completed upload-pack as a clone or a fetch. A full clone negotiates
+     * no `have` lines; an incremental fetch sends at least one. Never breaks the
+     * transfer: an unknown repo name is silently ignored.
+     */
+    private function recordUsage(string $repoName, string $negotiation): void
+    {
+        try {
+            $name = RepoName::fromInput($repoName);
+        } catch (\Throwable) {
+            return;
+        }
+
+        if (str_contains($negotiation, 'have ')) {
+            $this->stats->recordFetch($name);
+        } else {
+            $this->stats->recordClone($name);
         }
     }
 
