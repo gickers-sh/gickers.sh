@@ -1,0 +1,23 @@
+when@test:
+    services:
+        test.manage_branch_protection:
+            alias: App\Repo\Application\ManageBranchProtection
+            public: true
+        test.evaluate_push_policy:
+            alias: App\Repo\Application\EvaluatePushPolicy
+            public: true
+        test.commit_signature_verifier:
+            alias: App\Repo\Infrastructure\Git\CommitSignatureVerifier
+            public: true
+        test.repo_branch_protect_command:
+            alias: App\UI\Ssh\Command\Repo\Branch\RepoBranchProtectCommand
+            public: true
+        test.repo_branch_unprotect_command:
+            alias: App\UI\Ssh\Command\Repo\Branch\RepoBranchUnprotectCommand
+            public: true
+        test.repo_signatures_command:
+            alias: App\UI\Ssh\Command\Repo\RepoSignaturesCommand
+            public: true
+        test.pre_receive_command:
+            alias: App\UI\Console\Command\Hook\PreReceiveCommand
+            public: true

@@ -70,11 +70,13 @@ BASH;
                 }
             }
 
-            // 3. Arguments matching Go switch hook
+            // 3. Arguments matching Go switch hook. pre-receive and post-receive additionally
+            // receive the server-set repository and actor identity as explicit options, so the
+            // PHP hook commands never read the environment directly (sshd-contract boundary).
             $args = match ($hook) {
                 'update' => '$1 $2 $3',
                 'post-update' => '$@',
-                default => '',
+                'pre-receive', 'post-receive' => '--repo "$SOFT_SERVE_REPO_NAME" --actor "$SOFT_SERVE_USERNAME"',
             };
 
             // 4. Soft-serve / codes.sh hook inside ${hook}.d (matching hooksTmpl from pkg/hooks/gen.go).
