@@ -101,4 +101,20 @@ final class DoctrineRepoStoreTest extends KernelTestCase
         $this->repoStore->remove($fork);
         $this->assertNull($this->repoStore->byName(RepoName::fromInput('alpha-fork')));
     }
+
+    public function testMirrorsReturnsOnlyMirrorRepositoriesOrderedByName(): void
+    {
+        $now = new \DateTimeImmutable();
+        $owner = new User('mirror-owner', false, $now);
+        $this->userStore->save($owner);
+
+        foreach ([['zeta-mirror', true], ['plain-repo', false], ['alpha-mirror', true]] as [$name, $isMirror]) {
+            $this->repoStore->save(new Repo(RepoName::fromInput($name), $owner, '', '', false, false, $isMirror, null, $now));
+        }
+
+        $this->assertSame(
+            ['alpha-mirror', 'zeta-mirror'],
+            array_map(static fn (Repo $repo): string => $repo->nameString(), $this->repoStore->mirrors()),
+        );
+    }
 }

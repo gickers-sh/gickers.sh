@@ -1,0 +1,5 @@
+when@test:
+    services:
+        test.sync_mirrors_command:
+            alias: App\UI\Console\Command\Admin\SyncMirrorsCommand
+            public: true
