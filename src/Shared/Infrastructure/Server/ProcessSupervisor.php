@@ -23,7 +23,9 @@ final class ProcessSupervisor
 
     private bool $stopRequested = false;
 
-    public function __construct(private readonly LoggerInterface $logger) {}
+    public function __construct(private readonly LoggerInterface $logger)
+    {
+    }
 
     /**
      * @param array<string, Process>                                     $processes keyed by display name
@@ -106,7 +108,7 @@ final class ProcessSupervisor
 
         $deadline = microtime(true) + self::GRACE_SECONDS;
         do {
-            $running = array_filter($processes, static fn(Process $p): bool => $p->isRunning());
+            $running = array_filter($processes, static fn (Process $p): bool => $p->isRunning());
             if ([] === $running) {
                 return;
             }

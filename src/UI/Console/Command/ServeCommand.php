@@ -154,7 +154,7 @@ final class ServeCommand extends Command
     private function buildProcesses(string $sshdConfigPath, ListenAddress $httpListen, OutputInterface $errOutput): ?array
     {
         $finder = new ExecutableFinder();
-        $console = $this->projectDir . '/bin/console';
+        $console = $this->projectDir.'/bin/console';
 
         $sshd = $finder->find('sshd', null, ['/usr/sbin', '/usr/local/sbin']);
         if (null === $sshd) {
@@ -165,10 +165,10 @@ final class ServeCommand extends Command
 
         $frankenphp = $finder->find('frankenphp');
         $http = null !== $frankenphp
-            ? new Process([$frankenphp, 'run', '--config', $this->projectDir . '/Caddyfile'], $this->projectDir, ['SOFT_SERVE_HTTP_LISTEN_ADDR' => (string) $httpListen])
+            ? new Process([$frankenphp, 'run', '--config', $this->projectDir.'/Caddyfile'], $this->projectDir, ['SOFT_SERVE_HTTP_LISTEN_ADDR' => (string) $httpListen])
             // Development fallback: PHP's built-in server (single process, no worker mode).
             // variables_order=EGPCS fills $_ENV, otherwise Dotenv lets .env shadow the real environment.
-            : new Process([\PHP_BINARY, '-d', 'variables_order=EGPCS', '-S', (string) $httpListen, '-t', 'public', 'public/index.php'], $this->projectDir);
+            : new Process([\PHP_BINARY, '-d', 'variables_order=EGPCS', '-S', (string) $httpListen, '-t', 'public', 'public/router.php'], $this->projectDir);
         if (null === $frankenphp) {
             $errOutput->writeln('<comment>frankenphp not found: serving HTTP with the PHP built-in server</comment>');
         }
@@ -176,7 +176,8 @@ final class ServeCommand extends Command
         return [
             'sshd' => new Process([$sshd, '-D', '-e', '-f', $sshdConfigPath], $this->projectDir),
             'http' => $http,
-            'worker' => new Process([\PHP_BINARY, $console, 'messenger:consume', 'async', '--time-limit=3600', '--memory-limit=128M'], $this->projectDir),
+            // `scheduler_default` is the transport Symfony derives from the #[AsSchedule('default')] provider (recurring jobs, e.g. mirror sync).
+            'worker' => new Process([\PHP_BINARY, $console, 'messenger:consume', 'async', 'scheduler_default', '--time-limit=3600', '--memory-limit=128M'], $this->projectDir),
         ];
     }
 }

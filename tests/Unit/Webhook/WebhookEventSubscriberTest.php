@@ -62,7 +62,9 @@ final class WebhookEventSubscriberTest extends TestCase
         $this->dispatchedMessages = [];
         $this->messageBus = new class($this->dispatchedMessages) implements MessageBusInterface {
             /** @param list<SendWebhook> $messages */
-            public function __construct(private array &$messages) {}
+            public function __construct(private array &$messages)
+            {
+            }
 
             public function dispatch(object $message, array $stamps = []): Envelope
             {

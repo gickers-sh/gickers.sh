@@ -12,7 +12,8 @@ final readonly class ResolvedCommand
     public function __construct(
         public string $name,
         public array $arguments,
-    ) {}
+    ) {
+    }
 }
 
 final class SshCommandResolver
