@@ -17,20 +17,16 @@ h4, h5, h6 { margin-top: 0 !important; margin-bottom: 0 !important; padding: 0 !
 pre { margin-top: 0 !important; margin-bottom: 1em !important; padding: 1em 2em !important; border-left: 3px solid !important; border-left-color: #7aa2f7 !important; }
 CSS;
 
-    private ?Termstrap $termstrap = null;
-    private bool $termstrapAvailable = false;
+    private Termstrap $termstrap;
+    private bool $termstrapAvailable = true;
 
     private ?string $libraryPath;
 
     public function __construct(?string $libraryPath = null)
     {
         $this->libraryPath = $libraryPath;
-        try {
-            $this->termstrap = new Termstrap($libraryPath);
-            $this->termstrapAvailable = true;
-        } catch (\Throwable) {
-            $this->termstrapAvailable = false;
-        }
+        $this->termstrap = new Termstrap($libraryPath);
+        $this->termstrapAvailable = true;
     }
 
     public function isAvailable(): bool

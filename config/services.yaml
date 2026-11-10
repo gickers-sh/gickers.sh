@@ -28,3 +28,6 @@ services:
 
     App\UI\Tui\Render\TermstrapRenderer:
         lazy: true
+
+    Termstrap\Command\RenderCommand:
+        tags: ['console.command']
