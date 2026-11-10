@@ -44,6 +44,14 @@ final class DoctrineRepoStore extends ServiceEntityRepository implements RepoSto
     /**
      * @return list<Repo>
      */
+    public function mirrors(): array
+    {
+        return $this->findBy(['isMirror' => true], ['name' => 'ASC']);
+    }
+
+    /**
+     * @return list<Repo>
+     */
     public function ownedBy(User $user): array
     {
         return $this->findBy(['owner' => $user], ['name' => 'ASC']);
@@ -67,5 +75,27 @@ final class DoctrineRepoStore extends ServiceEntityRepository implements RepoSto
     {
         $this->getEntityManager()->remove($repo);
         $this->getEntityManager()->flush();
+    }
+
+    public function incrementCloneCount(RepoName $name): void
+    {
+        $this->bumpCounter('clone_count', $name);
+    }
+
+    public function incrementFetchCount(RepoName $name): void
+    {
+        $this->bumpCounter('fetch_count', $name);
+    }
+
+    /**
+     * Atomic in-DB increment so concurrent clone/fetch transfers never clobber
+     * each other's counter, and no stale entity write can overwrite the value.
+     */
+    private function bumpCounter(string $column, RepoName $name): void
+    {
+        $this->getEntityManager()->getConnection()->executeStatement(
+            sprintf('UPDATE repos SET %s = %s + 1 WHERE name = ?', $column, $column),
+            [$name->value],
+        );
     }
 }

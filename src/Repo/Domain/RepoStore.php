@@ -16,6 +16,9 @@ interface RepoStore
     /** @return list<Repo> ordered by name */
     public function all(): array;
 
+    /** @return list<Repo> mirror repositories ordered by name */
+    public function mirrors(): array;
+
     /** @return list<Repo> ordered by name */
     public function ownedBy(User $user): array;
 
@@ -25,4 +28,10 @@ interface RepoStore
     public function save(Repo $repo): void;
 
     public function remove(Repo $repo): void;
+
+    /** Atomically increments the successful-clone counter for the named repository. */
+    public function incrementCloneCount(RepoName $name): void;
+
+    /** Atomically increments the successful-fetch counter for the named repository. */
+    public function incrementFetchCount(RepoName $name): void;
 }

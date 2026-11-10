@@ -271,6 +271,93 @@ final class GitRepositoryReader
     }
 
     /**
+     * Resolves the git object type (`blob`, `tree`, `commit`, `tag`) of a
+     * `<rev>` or `<rev>:<path>` spec via `git cat-file -t`. Returns null when
+     * the spec does not resolve (missing ref/path), so callers can answer 404.
+     */
+    public function objectType(GitRepository $repo, string $spec): ?string
+    {
+        $process = GitCommand::run($repo->path, ['cat-file', '-t', new Revision($spec)]);
+        if (!$process->isSuccessful()) {
+            return null;
+        }
+        $type = trim($process->getOutput());
+
+        return '' !== $type ? $type : null;
+    }
+
+    /**
+     * Returns the raw blob bytes at `<ref>:<path>`, or null when the ref/path does
+     * not resolve to a blob (missing ref, missing path, or a tree). Distinguishes a
+     * missing blob (null -> 404) from a successful read of empty content (""), so
+     * the raw HTTP/SSH adapters never materialize a checkout.
+     */
+    public function catBlob(GitRepository $repo, string $ref, string $path): ?string
+    {
+        $spec = sprintf('%s:%s', $ref, ltrim($path, '/'));
+        if ('blob' !== $this->objectType($repo, $spec)) {
+            return null;
+        }
+
+        $process = GitCommand::run($repo->path, ['cat-file', '-p', new Revision($spec)]);
+
+        return $process->isSuccessful() ? $process->getOutput() : null;
+    }
+
+    /**
+     * Runs `git grep -n -I -e <pattern> <ref>` inside the bare repository. The
+     * pattern follows git's native (basic) regex and is passed after `-e`, so a
+     * leading "-" is never parsed as an option. Returns matching lines (empty on
+     * "no match", which git signals with exit code 1), or null when the ref does
+     * not resolve so the caller can emit an explicit error.
+     *
+     * @return list<string>|null
+     */
+    public function grep(GitRepository $repo, string $pattern, string $ref = 'HEAD'): ?array
+    {
+        $process = GitCommand::run($repo->path, ['grep', '-n', '-I', '-e', $pattern, new Revision($ref)]);
+        $exit = $process->getExitCode();
+        if (1 === $exit) {
+            return [];
+        }
+        if (0 !== $exit) {
+            return null;
+        }
+
+        $output = rtrim($process->getOutput(), "\n");
+        if ('' === $output) {
+            return [];
+        }
+
+        return explode("\n", $output);
+    }
+
+    /**
+     * Total on-disk object size in bytes (loose objects + packs), computed on
+     * demand from `git count-objects -v` (its `size` and `size-pack` fields are
+     * reported in KiB). Returns null when the command fails or the output is
+     * unparseable, so callers can show an "unavailable" state.
+     */
+    public function diskUsageBytes(GitRepository $repo): ?int
+    {
+        $process = GitCommand::run($repo->path, ['count-objects', '-v']);
+        if (!$process->isSuccessful()) {
+            return null;
+        }
+
+        $kib = 0;
+        $matched = false;
+        foreach (explode("\n", $process->getOutput()) as $line) {
+            if (preg_match('/^(size|size-pack):\s*(\d+)$/', trim($line), $m)) {
+                $kib += (int) $m[2];
+                $matched = true;
+            }
+        }
+
+        return $matched ? $kib * 1024 : null;
+    }
+
+    /**
      * Finds and reads the README file at the root of the repository.
      * Looks for README.md, README, readme.markdown, README.txt (case-insensitive).
      *

@@ -10,6 +10,7 @@ use App\Repo\Domain\RepoName;
 use App\Shared\Infrastructure\Config\ServerSettings;
 use Symfony\Component\DependencyInjection\Attribute\AsAlias;
 use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Process\Process;
 
 #[AsAlias(RepoDirectory::class)]
 final class BareRepositoryStorage implements RepoDirectory
@@ -202,6 +203,41 @@ final class BareRepositoryStorage implements RepoDirectory
     }
 
     /**
+     * Refreshes a mirror from its origin with `git remote update --prune`: fetches every
+     * configured remote and drops the refs deleted upstream.
+     *
+     * @throws \RuntimeException when the repository is missing, has no remote, or git fails
+     */
+    public function syncMirror(RepoName $name): void
+    {
+        if (!$this->exists($name)) {
+            throw new \RuntimeException(sprintf('Repository "%s" does not exist.', $name->value));
+        }
+
+        $path = $this->pathFor($name);
+
+        // `git remote update` quietly succeeds when there is nothing to update: a mirror
+        // without a remote has to surface as a failure, not as a silent success.
+        $remotes = GitCommand::run($path, ['remote']);
+        if (!$remotes->isSuccessful()) {
+            throw self::gitFailure('git remote', $remotes);
+        }
+        if ('' === trim($remotes->getOutput())) {
+            throw new \RuntimeException(sprintf('Mirror "%s" has no remote configured.', $name->value));
+        }
+
+        // Catching up with a large upstream can take minutes: like the git transport, no
+        // wall-clock limit. Credential prompts are off so an upstream that started requiring
+        // authentication fails fast instead of waiting for input nobody can give.
+        $update = GitCommand::start($path, ['remote', 'update', '--prune'], env: ['GIT_TERMINAL_PROMPT' => '0']);
+        $update->setTimeout(null);
+        $update->wait();
+        if (!$update->isSuccessful()) {
+            throw self::gitFailure('git remote update', $update);
+        }
+    }
+
+    /**
      * Renames a repository on disk.
      */
     public function rename(RepoName $from, RepoName $to): void
@@ -273,5 +309,15 @@ final class BareRepositoryStorage implements RepoDirectory
         }
 
         return $repo;
+    }
+
+    /**
+     * One-line failure for a finished git process, built from its stderr.
+     */
+    private static function gitFailure(string $command, Process $process): \RuntimeException
+    {
+        $detail = trim((string) preg_replace('/\s+/', ' ', $process->getErrorOutput()));
+
+        return new \RuntimeException(sprintf('%s failed: %s', $command, '' !== $detail ? $detail : sprintf('exit code %s', $process->getExitCode() ?? 'unknown')));
     }
 }

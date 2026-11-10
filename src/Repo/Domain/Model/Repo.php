@@ -6,6 +6,8 @@ namespace App\Repo\Domain\Model;
 
 use App\Identity\Domain\Model\User;
 use App\Repo\Domain\RepoName;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]
@@ -22,6 +24,19 @@ class Repo
 
     #[ORM\Column]
     private \DateTimeImmutable $updatedAt;
+
+    #[ORM\Column(options: ['default' => false])]
+    private bool $requireSignedCommits = false;
+
+    #[ORM\Column(options: ['default' => 0])]
+    private int $cloneCount = 0;
+
+    #[ORM\Column(options: ['default' => 0])]
+    private int $fetchCount = 0;
+
+    /** @var Collection<int, BranchProtection> */
+    #[ORM\OneToMany(targetEntity: BranchProtection::class, mappedBy: 'repo', cascade: ['persist', 'remove'], orphanRemoval: true)]
+    private Collection $branchProtections;
 
     public function __construct(
         RepoName $name,
@@ -46,6 +61,7 @@ class Repo
     ) {
         $this->name = $name->value;
         $this->updatedAt = $createdAt;
+        $this->branchProtections = new ArrayCollection();
     }
 
     public function id(): int
@@ -147,6 +163,75 @@ class Repo
     {
         $this->isMirror = $isMirror;
         $this->touch($now);
+    }
+
+    public function requireSignedCommits(): bool
+    {
+        return $this->requireSignedCommits;
+    }
+
+    public function setRequireSignedCommits(bool $require, \DateTimeImmutable $now): void
+    {
+        $this->requireSignedCommits = $require;
+        $this->touch($now);
+    }
+
+    public function cloneCount(): int
+    {
+        return $this->cloneCount;
+    }
+
+    public function fetchCount(): int
+    {
+        return $this->fetchCount;
+    }
+
+    /**
+     * @return list<BranchProtection>
+     */
+    public function branchProtections(): array
+    {
+        return array_values($this->branchProtections->toArray());
+    }
+
+    public function branchProtectionFor(string $pattern): ?BranchProtection
+    {
+        foreach ($this->branchProtections as $rule) {
+            if ($rule->pattern() === $pattern) {
+                return $rule;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Creates or replaces the protection rule for the given pattern.
+     */
+    public function protectBranch(string $pattern, bool $noForce, bool $noDelete, bool $adminsOnly, \DateTimeImmutable $now): void
+    {
+        $existing = $this->branchProtectionFor($pattern);
+        if (null !== $existing) {
+            $existing->update($noForce, $noDelete, $adminsOnly);
+        } else {
+            $this->branchProtections->add(new BranchProtection($this, $pattern, $noForce, $noDelete, $adminsOnly));
+        }
+        $this->touch($now);
+    }
+
+    /**
+     * Removes the protection rule matching the pattern. Returns whether a rule was removed.
+     */
+    public function unprotectBranch(string $pattern, \DateTimeImmutable $now): bool
+    {
+        $existing = $this->branchProtectionFor($pattern);
+        if (null === $existing) {
+            return false;
+        }
+        $this->branchProtections->removeElement($existing);
+        $this->touch($now);
+
+        return true;
     }
 
     public function touch(\DateTimeImmutable $now): void
