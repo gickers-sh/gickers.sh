@@ -7,6 +7,7 @@ namespace App\UI\Ssh;
 use App\Access\Application\ServerPolicy;
 use App\Identity\Application\AuthenticateSshKey;
 use App\Identity\Domain\Model\SshKey;
+use App\Identity\Domain\Model\User;
 use App\Identity\Infrastructure\Security\SecurityUser;
 use App\Lfs\Application\IssueLfsToken;
 use App\Shared\Domain\Exception\AccessDenied;
@@ -74,17 +75,27 @@ final class SshEntrypointCommand extends Command
         try {
             // 1. Resolve fingerprint and authenticate
             $fingerprint = $this->resolveFingerprint($input);
+            $rawKey = $this->resolveRawKey($input);
             $user = null;
             if (null !== $fingerprint && '' !== $fingerprint) {
                 $user = ($this->authenticateSshKey)($fingerprint);
             }
 
-            if (null === $user && !$this->serverPolicy->allowKeyless()) {
+            // A presented key (even an unregistered one) is not a keyless caller: it may still
+            // reach `signup`. Only truly keyless connections are gated by allow-keyless here.
+            $hasFingerprint = null !== $fingerprint && '' !== $fingerprint;
+            if (null === $user && !$hasFingerprint && !$this->serverPolicy->allowKeyless()) {
+                throw new AccessDenied('unauthorized');
+            }
+            // An unknown public key may only self-register when allow-signup is enabled;
+            // every other surface stays closed until it is bound to a user.
+            $unknownKey = null === $user && $hasFingerprint;
+            if ($unknownKey && !$this->serverPolicy->allowSignup()) {
                 throw new AccessDenied('unauthorized');
             }
 
             // Fill SshSession and Security TokenStorage
-            $this->sshSession->authenticate($user, $fingerprint);
+            $this->sshSession->authenticate($user, $fingerprint, $rawKey);
             if (null !== $user) {
                 $secUser = new SecurityUser($user);
                 $token = new PreAuthenticatedToken($secUser, 'ssh', $secUser->getRoles());
@@ -102,6 +113,10 @@ final class SshEntrypointCommand extends Command
                 $commandLine = is_string($envCmd) ? trim($envCmd) : '';
             }
             if ('' === $commandLine) {
+                if ($unknownKey) {
+                    return $this->denyUnknownKey($errOutput);
+                }
+
                 return $this->runTui(null, $output, $errOutput);
             }
 
@@ -109,11 +124,18 @@ final class SshEntrypointCommand extends Command
             $tokens = $stringInput->getRawTokens(false);
 
             if ([] === $tokens) {
+                if ($unknownKey) {
+                    return $this->denyUnknownKey($errOutput);
+                }
+
                 return $this->runTui(null, $output, $errOutput);
             }
 
             $firstToken = $tokens[0];
 
+            if ($unknownKey && !$this->isAllowedForUnknownKey($tokens)) {
+                return $this->denyUnknownKey($errOutput);
+            }
             // TUI routing
             if ('tui' === $firstToken || '-t' === $firstToken || '--target' === $firstToken || str_starts_with($firstToken, '-t=')) {
                 $initialRepo = $this->parseTuiRepo($tokens);
@@ -152,7 +174,8 @@ final class SshEntrypointCommand extends Command
 
             // Help routing: `help [path…]`, a trailing `--help`/`-h`, or a bare
             // command group all render cobra-style usage, matching upstream.
-            $helpOutput = $this->renderHelp($tokens, $firstToken);
+            $isAdmin = null !== $user && $user->isAdmin();
+            $helpOutput = $this->renderHelp($tokens, $firstToken, $unknownKey, $isAdmin);
             if (null !== $helpOutput) {
                 $output->write($helpOutput, false, OutputInterface::OUTPUT_RAW);
 
@@ -175,25 +198,61 @@ final class SshEntrypointCommand extends Command
      *
      * @param list<string> $tokens
      */
-    private function renderHelp(array $tokens, string $firstToken): ?string
+    private function renderHelp(array $tokens, string $firstToken, bool $unknownKey, bool $isAdmin): ?string
     {
         $wantsHelpFlag = in_array('--help', $tokens, true) || in_array('-h', $tokens, true);
 
         if ('help' !== $firstToken && !$wantsHelpFlag) {
             // A bare command group (no subcommand, no args) prints its help.
-            [$node, $consumed] = $this->commandCatalog->resolvePrefix($tokens);
+            [$node, $consumed] = $this->commandCatalog->resolvePrefix($tokens, $isAdmin);
             if ($consumed !== count($tokens) || $node->runnable || !$node->hasChildren()) {
                 return null;
             }
         } elseif ('help' === $firstToken) {
-            [$node] = $this->commandCatalog->resolvePrefix(array_slice($tokens, 1));
+            $helpTokens = array_slice($tokens, 1);
+            if ([] !== $helpTokens) {
+                // If target command does not exist in the user's visible catalog, reject it
+                if (null === $this->commandCatalog->resolve($helpTokens, $isAdmin)) {
+                    throw new InvalidInput('Unknown command');
+                }
+            }
+            [$node] = $this->commandCatalog->resolvePrefix($helpTokens, $isAdmin);
         } else {
-            [$node] = $this->commandCatalog->resolvePrefix($tokens);
+            // e.g. `<command> --help`
+            // Verify that the command prefix itself exists in the user's catalog
+            $cmdTokens = array_values(array_filter($tokens, static fn(string $t): bool => !str_starts_with($t, '-')));
+            if ([] !== $cmdTokens && null === $this->commandCatalog->resolve($cmdTokens, $isAdmin)) {
+                throw new InvalidInput('Unknown command');
+            }
+            [$node] = $this->commandCatalog->resolvePrefix($tokens, $isAdmin);
+        }
+
+        if ($unknownKey && $node === $this->commandCatalog->root($isAdmin)) {
+            $node = $this->commandCatalog->restrictedRootForUnknownKey();
         }
 
         $sshCommand = Help\HelpRenderer::sshCommandFromPublicUrl($this->serverSettings->sshPublicUrl);
 
         return $this->helpRenderer->render($node, $sshCommand);
+    }
+
+    /**
+     * @param list<string> $tokens
+     */
+    private function isAllowedForUnknownKey(array $tokens): bool
+    {
+        if ([] === $tokens) {
+            return false;
+        }
+
+        if ('signup' === $tokens[0]) {
+            return true;
+        }
+
+        return ['help'] === $tokens
+            || ['help', 'signup'] === $tokens
+            || ['-h'] === $tokens
+            || ['--help'] === $tokens;
     }
 
     private function resolveFingerprint(InputInterface $input): ?string
@@ -211,6 +270,24 @@ final class SshEntrypointCommand extends Command
         }
 
         return null;
+    }
+
+    private function resolveRawKey(InputInterface $input): ?string
+    {
+        $rawKey = $input->getOption('key');
+
+        return is_string($rawKey) && '' !== trim($rawKey) ? trim($rawKey) : null;
+    }
+
+    private function denyUnknownKey(OutputInterface $errOutput): int
+    {
+        $sshCommand = Help\HelpRenderer::sshCommandFromPublicUrl($this->serverSettings->sshPublicUrl);
+        $errOutput->writeln(
+            sprintf('Your SSH key is not registered. Claim a username with: %s signup <username>', $sshCommand),
+            OutputInterface::OUTPUT_RAW,
+        );
+
+        return Command::FAILURE;
     }
 
     /**
@@ -239,7 +316,7 @@ final class SshEntrypointCommand extends Command
         }
 
         if ('test' === ($app instanceof \Symfony\Bundle\FrameworkBundle\Console\Application ? $app->getKernel()->getEnvironment() : '') || !@posix_isatty(\STDIN)) {
-            $output->writeln(sprintf('Launch TUI%s', null !== $initialRepo ? ' for '.$initialRepo : ''), OutputInterface::OUTPUT_RAW);
+            $output->writeln(sprintf('Launch TUI%s', null !== $initialRepo ? ' for ' . $initialRepo : ''), OutputInterface::OUTPUT_RAW);
 
             return Command::SUCCESS;
         }

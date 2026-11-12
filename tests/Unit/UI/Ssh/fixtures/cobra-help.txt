@@ -1,5 +1,5 @@
 ########## ROOT help
-Soft Serve is a self-hostable Git server for the command line.
+Codes.sh is a self-hostable Git server (inspired by Soft Serve) for the command line.
 
 Usage:
   ssh -p 2223 localhost [command]
@@ -9,10 +9,10 @@ Available Commands:
   info                 Show your info
   jwt                  Generate a JSON Web Token
   pubkey               Manage your public keys
-  release              Manage release artifacts
   repo                 Manage repositories
   set-username         Set your username
   settings             Manage server settings
+  signup               Register yourself as a new user with your SSH key
   token                Manage access tokens
   user                 Manage users
 
@@ -81,27 +81,6 @@ Usage:
 
 Flags:
   -h, --help   help for remove
-########## help release
-Manage release artifacts
-
-Usage:
-  ssh -p 2223 localhost release [command]
-
-Available Commands:
-  upload      Upload a release artifact (the file is read from stdin)
-
-Flags:
-  -h, --help   help for release
-
-Use "ssh -p 2223 localhost release [command] --help" for more information about a command.
-########## help release upload
-Upload a release artifact (the file is read from stdin)
-
-Usage:
-   release upload REPOSITORY TAG FILENAME [flags]
-
-Flags:
-  -h, --help   help for upload
 ########## help repo
 Manage repositories
 
@@ -130,7 +109,6 @@ Available Commands:
   private      Set or get a repository private property
   project-name Set or get the project name for a repository
   readme       Print the repository README
-  release      Manage release artifacts
   rename       Rename an existing repository
   signatures   Require or check verified signed commits on push
   tag          Manage repository tags
@@ -416,27 +394,6 @@ Usage:
 
 Flags:
   -h, --help   help for readme
-########## help repo release
-Manage release artifacts
-
-Usage:
-  ssh -p 2223 localhost repo release [command]
-
-Available Commands:
-  upload      Upload a release artifact (the file is read from stdin)
-
-Flags:
-  -h, --help   help for release
-
-Use "ssh -p 2223 localhost repo release [command] --help" for more information about a command.
-########## help repo release upload
-Upload a release artifact (the file is read from stdin)
-
-Usage:
-   repo release upload REPOSITORY TAG FILENAME [flags]
-
-Flags:
-  -h, --help   help for upload
 ########## help repo rename
 Rename an existing repository
 
@@ -562,6 +519,7 @@ Usage:
 
 Available Commands:
   allow-keyless Set or get allow keyless access to repositories
+  allow-signup  Set or get whether unregistered keys may self-register
   anon-access   Set or get the default access level for anonymous users
 
 Flags:

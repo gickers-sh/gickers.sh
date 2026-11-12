@@ -14,8 +14,8 @@ use PHPUnit\Framework\TestCase;
  * server byte-for-byte. The fixture is captured from `ssh codes.sh help …`
  * with the SSH prefix rewritten to this server's `ssh -p 2223 localhost`.
  *
- * Commands that only exist in codes.sh (`release`, `repo release`,
- * `repo signatures`, `repo branch protect|unprotect`, `repo diff`,
+ * Commands that only exist in codes.sh (`repo signatures`,
+ * `repo branch protect|unprotect`, `repo diff`,
  * `repo grep`, `repo readme`) have no upstream capture: their blocks, and their
  * lines in the parent command listings, follow the same format.
  */
@@ -28,7 +28,7 @@ final class HelpRendererTest extends TestCase
      */
     public static function helpProvider(): iterable
     {
-        $raw = (string) file_get_contents(__DIR__.'/fixtures/cobra-help.txt');
+        $raw = (string) file_get_contents(__DIR__ . '/fixtures/cobra-help.txt');
 
         /** @var array<string, string> $blocks */
         $blocks = [];
@@ -43,7 +43,7 @@ final class HelpRendererTest extends TestCase
                 $path = 'ROOT help' === $header ? '' : trim((string) preg_replace('/^help ?/', '', $header));
                 $buffer = '';
             } else {
-                $buffer .= $line."\n";
+                $buffer .= $line . "\n";
             }
         }
         if (null !== $path) {
@@ -73,5 +73,24 @@ final class HelpRendererTest extends TestCase
         self::assertSame('ssh -p 2223 localhost', HelpRenderer::sshCommandFromPublicUrl('ssh://localhost:2223'));
         self::assertSame('ssh -p 2222 codes.sh', HelpRenderer::sshCommandFromPublicUrl('ssh://codes.sh:2222'));
         self::assertSame('ssh git.example.com', HelpRenderer::sshCommandFromPublicUrl('ssh://git.example.com:22'));
+    }
+
+    public function testNonAdminCatalogHidesAdminCommands(): void
+    {
+        $catalog = new CommandCatalog();
+        $userRoot = $catalog->root(false);
+
+        $childNames = array_map(static fn($c) => $c->name, $userRoot->visibleChildren());
+        self::assertNotContains('settings', $childNames);
+        self::assertNotContains('user', $childNames);
+        self::assertContains('repo', $childNames);
+        self::assertContains('pubkey', $childNames);
+        self::assertContains('token', $childNames);
+        self::assertContains('info', $childNames);
+
+        self::assertNull($catalog->resolve(['settings'], false));
+        self::assertNull($catalog->resolve(['settings', 'allow-keyless'], false));
+        self::assertNull($catalog->resolve(['user'], false));
+        self::assertNull($catalog->resolve(['user', 'create'], false));
     }
 }

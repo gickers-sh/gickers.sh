@@ -12,15 +12,29 @@ namespace App\UI\Ssh\Help;
 final class CommandCatalog
 {
     private CommandSpec $root;
+    private CommandSpec $userRoot;
 
     public function __construct()
     {
-        $this->root = $this->build();
+        $this->root = $this->build(true);
+        $this->userRoot = $this->build(false);
     }
 
-    public function root(): CommandSpec
+    public function root(bool $isAdmin = true): CommandSpec
     {
-        return $this->root;
+        return $isAdmin ? $this->root : $this->userRoot;
+    }
+
+    /**
+     * Restricted root command tree for unauthenticated SSH keys when self-service
+     * signup is enabled: only `signup` is exposed.
+     */
+    public function restrictedRootForUnknownKey(): CommandSpec
+    {
+        $root = new CommandSpec('', '', '', 'Codes.sh is a self-hostable Git server (inspired by Soft Serve) for the command line.', [], [], false);
+        $root->addChild($this->signupSpec());
+
+        return $root;
     }
 
     /**
@@ -29,9 +43,9 @@ final class CommandCatalog
      *
      * @param list<string> $tokens
      */
-    public function resolve(array $tokens): ?CommandSpec
+    public function resolve(array $tokens, bool $isAdmin = true): ?CommandSpec
     {
-        return $this->root->find($tokens);
+        return $this->root($isAdmin)->find($tokens);
     }
 
     /**
@@ -43,9 +57,9 @@ final class CommandCatalog
      *
      * @return array{0: CommandSpec, 1: int} the deepest matched command and the number of tokens consumed
      */
-    public function resolvePrefix(array $tokens): array
+    public function resolvePrefix(array $tokens, bool $isAdmin = true): array
     {
-        $node = $this->root;
+        $node = $this->root($isAdmin);
         $consumed = 0;
         foreach ($tokens as $token) {
             if (str_starts_with($token, '-')) {
@@ -94,9 +108,9 @@ final class CommandCatalog
         return new CommandSpec($name, $name, $short, '', $aliases, [], false);
     }
 
-    private function build(): CommandSpec
+    private function build(bool $includeAdmin = true): CommandSpec
     {
-        $root = new CommandSpec('', '', '', 'Soft Serve is a self-hostable Git server for the command line.', [], [], false);
+        $root = new CommandSpec('', '', '', 'Codes.sh is a self-hostable Git server (inspired by Soft Serve) for the command line.', [], [], false);
 
         $root->addChild($this->hiddenLeaf('git-upload-pack REPO', 'Git upload pack'));
         $root->addChild($this->hiddenLeaf('git-upload-archive REPO', 'Git upload archive'));
@@ -107,15 +121,26 @@ final class CommandCatalog
         $root->addChild($this->leaf('info', 'Show your info'));
         $root->addChild($this->leaf('jwt [repository1 repository2...]', 'Generate a JSON Web Token'));
         $root->addChild($this->pubkey());
-        $root->addChild($this->release());
         $root->addChild($this->repo());
         $root->addChild($this->leaf('set-username USERNAME', 'Set your username'));
-        $root->addChild($this->settings());
+        $root->addChild($this->signupSpec());
+        if ($includeAdmin) {
+            $root->addChild($this->settings());
+        }
         $root->addChild($this->token());
-        $root->addChild($this->user());
+        if ($includeAdmin) {
+            $root->addChild($this->user());
+        }
 
         return $root;
     }
+    private function signupSpec(): CommandSpec
+    {
+        return $this->leaf('signup USERNAME', 'Register yourself as a new user with your SSH key', '', [], [
+            new FlagSpec('k', 'key', 'string', 'public key to register instead of the one you connected with'),
+        ]);
+    }
+
 
     private function pubkey(): CommandSpec
     {
@@ -131,6 +156,7 @@ final class CommandCatalog
     {
         $settings = $this->group('settings', 'Manage server settings');
         $settings->addChild($this->leaf('allow-keyless [true|false]', 'Set or get allow keyless access to repositories'));
+        $settings->addChild($this->leaf('allow-signup [true|false]', 'Set or get whether unregistered keys may self-register'));
         $settings->addChild($this->leaf('anon-access [ACCESS_LEVEL]', 'Set or get the default access level for anonymous users'));
 
         return $settings;
@@ -233,23 +259,12 @@ final class CommandCatalog
         $tag->addChild($this->leaf('list REPOSITORY', 'List repository tags', '', ['ls']));
         $repo->addChild($tag);
 
-        $release = $this->group('release', 'Manage release artifacts');
-        $release->addChild($this->leaf('upload REPOSITORY TAG FILENAME', 'Upload a release artifact (the file is read from stdin)'));
-        $repo->addChild($release);
 
         $repo->addChild($this->leaf('tree REPOSITORY [REFERENCE] [PATH]', 'Print repository tree at path'));
         $repo->addChild($this->leaf('signatures REPOSITORY [true|false]', 'Require or check verified signed commits on push'));
         $repo->addChild($this->webhook());
 
         return $repo;
-    }
-
-    private function release(): CommandSpec
-    {
-        $release = $this->group('release', 'Manage release artifacts');
-        $release->addChild($this->leaf('upload REPOSITORY TAG FILENAME', 'Upload a release artifact (the file is read from stdin)'));
-
-        return $release;
     }
 
     /**
