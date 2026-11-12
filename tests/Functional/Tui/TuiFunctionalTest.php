@@ -166,6 +166,43 @@ final class TuiFunctionalTest extends KernelTestCase
         $tui->stop();
     }
 
+    public function testFeedRefreshKeyPicksUpNewRepos(): void
+    {
+        $user = new User('refresher', false, new \DateTimeImmutable());
+        $this->userStore->save($user);
+
+        ($this->createRepo)($user, 'refresh-early', false, false, 'Loaded first', 'refresh-early');
+
+        $vt = new VirtualTerminal(80, 24);
+        $app = $this->apps->create($vt, $user, true);
+        $app->start($app->views()->selection());
+        $tui = $app->tui();
+
+        $tui->start();
+        $this->tickUntilSettled($tui, $vt);
+
+        // Load the Feed tab (caches the repo list).
+        $vt->simulateInput("\t");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('refresh-early', $output);
+        $this->assertStringNotContainsString('refresh-late', $output);
+
+        // A repo created after the initial load is not visible yet.
+        ($this->createRepo)($user, 'refresh-late', false, false, 'Created later', 'refresh-late');
+        $tui->tick();
+        $this->assertStringNotContainsString('refresh-late', $vt->consumeOutput());
+
+        // Pressing 'r' reloads the list and flashes feedback.
+        $vt->simulateInput('r');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('refresh-late', $output);
+        $this->assertStringContainsString('Refreshed', $output);
+
+        $vt->simulateInput('q');
+        $tui->tick();
+        $tui->stop();
+    }
+
     public function testSelectionPageHelpModal(): void
     {
         $vt = new VirtualTerminal(80, 24);

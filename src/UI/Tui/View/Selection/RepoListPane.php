@@ -44,7 +44,7 @@ final class RepoListPane extends View
             $name = $item->nameString();
             $desc = trim($item->description());
             $clone = $this->cloneCommand($name);
-            $updated = 'Updated '.Time::ago($item->updatedAt());
+            $updated = 'Updated ' . Time::ago($item->updatedAt());
 
             $rows = Rows::repo($name, $desc, $clone, $updated, $selected, $cols);
 
@@ -56,7 +56,7 @@ final class RepoListPane extends View
 
         $this->filterableList = new FilterableListWidget(
             $this->list,
-            fn (string $query, array $all): array => $this->filterRepos($query, $all)
+            fn(string $query, array $all): array => $this->filterRepos($query, $all)
         );
 
         $this->filterableList->onKey(function (string $data): bool {
@@ -108,6 +108,7 @@ final class RepoListPane extends View
             'page_down' => ['ctrl+d', 'ctrl+f', Key::SPACE, 'f'],
             'open' => [Key::RIGHT, 'l'],
             'filter' => ['/', 'ctrl+p'],
+            'reload' => ['r'],
         ];
     }
 
@@ -118,6 +119,7 @@ final class RepoListPane extends View
             'page_down' => $this->list->apply('page_down'),
             'open' => $this->list->apply('select'),
             'filter' => $this->openFilter(),
+            'reload' => $this->refresh(),
             default => false,
         };
     }
@@ -138,11 +140,18 @@ final class RepoListPane extends View
             ['↑↓', 'navigate'],
             ['tab', 'section'],
             ['→/l', 'select'],
-            ['↑/k', 'up'],
-            ['↓/j', 'down'],
+            ['r', 'refresh'],
             ['q', 'quit'],
             ['?', 'toggle help'],
         ];
+    }
+
+    public function refresh(): bool
+    {
+        $this->reload();
+        ($this->onFlash)('Refreshed');
+
+        return true;
     }
 
     public function reload(): void
@@ -197,7 +206,7 @@ final class RepoListPane extends View
             return '';
         }
 
-        return 'git clone '.rtrim($url, '/').'/'.$name.'.git';
+        return 'git clone ' . rtrim($url, '/') . '/' . $name . '.git';
     }
 
     private function updateEmptyText(bool $filterOpen): void
@@ -259,6 +268,6 @@ final class RepoListPane extends View
             return $a['index'] <=> $b['index'];
         });
 
-        return array_map(static fn (array $entry): mixed => $entry['item'], $scored);
+        return array_map(static fn(array $entry): mixed => $entry['item'], $scored);
     }
 }

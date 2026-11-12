@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\UI\Tui\View\Selection;
 
+use App\UI\Tui\Format\Ansi;
 use App\UI\Tui\Format\Chrome;
 use App\UI\Tui\View\View;
 use App\UI\Tui\Views;
@@ -57,7 +58,7 @@ final class SelectionView extends View
 
         $this->chrome->setStatus(function (int $cols): array {
             if (null !== $this->flash) {
-                return [Chrome::helpLine([[trim($this->flash), '']], $cols)];
+                return ["\e[7m" . Ansi::fit(' ' . trim($this->flash), $cols) . "\e[0m"];
             }
 
             return [Chrome::helpLine($this->panes[$this->activeTab]->keyHints(), $cols)];
@@ -119,7 +120,7 @@ final class SelectionView extends View
             [['→/l', 'select']],
             [['↑/k', 'up'], ['↓/j', 'down']],
             [['g/home', 'go to start'], ['G/end', 'go to end']],
-            [['?', 'toggle help'], ['q', 'quit']],
+            [['r', 'refresh'], ['?', 'toggle help'], ['q', 'quit']],
         ];
     }
 

@@ -28,9 +28,7 @@ final class AboutPane extends View
         $this->doc->expandVertically(true);
 
         $this->indicator = new class($this->doc) extends AbstractWidget {
-            public function __construct(private readonly DocumentWidget $doc)
-            {
-            }
+            public function __construct(private readonly DocumentWidget $doc) {}
 
             public function render(RenderContext $context): array
             {
@@ -55,7 +53,7 @@ final class AboutPane extends View
                 $width = Ansi::width($text);
                 $pad = max(0, $cols - $width - 1);
 
-                return [str_repeat(' ', $pad).$text];
+                return [str_repeat(' ', $pad) . $text];
             }
         };
 
@@ -79,6 +77,7 @@ final class AboutPane extends View
             'half_down' => ['d'],
             'top' => [Key::HOME, 'g'],
             'bottom' => [Key::END, 'shift+g'],
+            'reload' => ['r'],
         ];
     }
 
@@ -100,6 +99,7 @@ final class AboutPane extends View
             'half_down' => $scroll->setScroll($scroll->scroll() + (int) round($rows / 2)),
             'top' => $scroll->setScroll(0),
             'bottom' => $scroll->setScroll(\count($scroll->lines())),
+            'reload' => $this->refresh(),
             default => null,
         };
 
@@ -117,9 +117,18 @@ final class AboutPane extends View
         return [
             ['↑↓', 'navigate'],
             ['tab', 'section'],
+            ['r', 'refresh'],
             ['q', 'quit'],
             ['?', 'toggle help'],
         ];
+    }
+
+    public function refresh(): bool
+    {
+        $this->loaded = false;
+        $this->loadAbout();
+
+        return true;
     }
 
     public function beforeRender(): void
