@@ -21,6 +21,7 @@ A tasty, self-hostable Git server for the command line. 🍦
 - Git LFS support with both HTTP and SSH backends
 - Manage repos with SSH
 - Create repos on demand with SSH or `git push`
+- Self-service signup over SSH for new users with an unregistered key
 - Browse repos, files and commits with SSH-accessible UI
 - Print files over SSH with or without syntax highlighting and line numbers
 - Easy access control
@@ -352,7 +353,10 @@ Use the `lfs` config section to customize your Git LFS server.
 
 Soft Serve at its core manages your server authentication and authorization. Authentication verifies the identity of a user, while authorization determines their access rights to a repository.
 
-To manage the server users, access, and repos, you can use the SSH command line interface.
+To manage the server users, access, and repos, you can use the SSH command line
+interface. `codes-ssh` authenticates solely by SSH public key: no local Unix
+account is needed and any SSH username works (`ssh <host>` or
+`ssh anyuser@<host>`).
 
 Try `ssh localhost -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -p 23231 help` for more info. Make sure
 you use your key here.
@@ -503,6 +507,38 @@ no-access, read-only, read-write, and admin-access.
 `read-only` can read public repos.
 
 `no-access` denies access to all repos.
+
+## Self-service signup
+
+A brand-new user does not need an admin to get started. Connecting with an SSH
+key that is not yet registered drops you into a restricted session whose only
+command is `signup`: pick a username and the key you connected with is bound to
+your new account.
+
+```sh
+# Register yourself; the key you connect with becomes your account key
+ssh -p 23231 localhost signup beatrice
+
+# Or register a different public key than the one you connected with
+ssh -p 23231 localhost signup beatrice -k "ssh-ed25519 AAAA..."
+```
+
+Once registered you get `read-only` access to public repos and can create and
+push your own repositories immediately:
+
+```sh
+git remote add origin ssh://localhost:23231/my-project
+git push origin main
+```
+
+Admins can disable self-service registration at any time; new accounts then have
+to be created with `user create`:
+
+```sh
+# Get or set whether unregistered keys may self-register
+ssh -p 23231 localhost settings allow-signup
+ssh -p 23231 localhost settings allow-signup false
+```
 
 ## User Management
 
@@ -741,23 +777,6 @@ ssh -p 23231 localhost repo signatures icecream
 Both rules are enforced server-side by the `pre-receive` hook: a rejected push
 reports the offending ref and reason and leaves the repository unchanged.
 
-### Release Artifacts
-
-Attach binary artifacts to a tag with `repo release upload`. The file is read
-from stdin, so pipe or redirect it:
-
-```sh
-# Upload a build artifact for tag v1.0.0
-ssh -p 23231 localhost repo release upload icecream v1.0.0 icecream-linux-amd64 < ./dist/icecream-linux-amd64
-```
-
-Artifacts are served over HTTP for anyone who can read the repository:
-
-```sh
-curl -O http://localhost:23232/icecream/releases/v1.0.0/icecream-linux-amd64
-```
-
-
 ### HTML Repository Browser
 
 Open `http://localhost:23232/icecream` (using your HTTP URL and repository name) to browse a repository in a web browser. The Twig-rendered page uses a separate CSS file and shows the clone command, repository description, and README in a dark terminal-inspired layout. README content is rendered as GitHub-flavored Markdown; raw HTML is stripped and unsafe links are disabled. Private repositories use the same HTTP read authorization. The page has no JavaScript or external assets. The HTTP root `/` does not list repositories.
@@ -929,26 +948,6 @@ Supported events include `push`, `branch_tag_create`, `branch_tag_delete`,
 `collaborator`, `repository`, and `repository_visibility_change`. Deliveries are
 signed with the configured secret. For private destination networks, configure
 `SOFT_SERVE_WEBHOOK_ALLOW_LIST` with the allowed IPs or CIDRs.
-
-## A note about RSA keys
-
-Unfortunately, due to a shortcoming in Go’s `x/crypto/ssh` package, Soft Serve
-does not currently support access via new SSH RSA keys: only the old SHA-1
-ones will work.
-
-Until we sort this out you’ll either need an SHA-1 RSA key or a key with
-another algorithm, e.g. Ed25519. Not sure what type of keys you have?
-You can check with the following:
-
-```sh
-$ find ~/.ssh/id_*.pub -exec ssh-keygen -l -f {} \;
-```
-
-If you’re curious about the inner workings of this problem have a look at:
-
-- https://github.com/golang/go/issues/37278
-- https://go-review.googlesource.com/c/crypto/+/220037
-- https://github.com/golang/crypto/pull/197
 
 ## Contributing
 

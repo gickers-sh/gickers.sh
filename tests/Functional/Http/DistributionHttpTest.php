@@ -10,17 +10,15 @@ use App\Identity\Domain\Model\User;
 use App\Identity\Domain\UserStore;
 use App\Repo\Application\CreateRepo;
 use App\Repo\Domain\Git\GitRepository;
-use App\Repo\Domain\RepoName;
 use App\Repo\Infrastructure\Git\BareRepositoryStorage;
-use App\Repo\Infrastructure\Release\ReleaseStorage;
 use App\Tests\GitTestHelper;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Functional tests for the distribution HTTP surface: raw blob serving and
- * release artifact download, including access control and 404 handling.
+ * Functional tests for the distribution HTTP surface: raw blob serving,
+ * including access control and 404 handling.
  */
 final class DistributionHttpTest extends KernelTestCase
 {
@@ -28,7 +26,6 @@ final class DistributionHttpTest extends KernelTestCase
     private CreateUser $createUser;
     private IssueAccessToken $issueToken;
     private BareRepositoryStorage $storage;
-    private ReleaseStorage $releases;
     private User $admin;
 
     protected function setUp(): void
@@ -40,7 +37,6 @@ final class DistributionHttpTest extends KernelTestCase
         $this->createUser = $c->get(CreateUser::class);
         $this->issueToken = $c->get(IssueAccessToken::class);
         $this->storage = $c->get(BareRepositoryStorage::class);
-        $this->releases = $c->get('test.release_storage');
 
         $admin = new User('disthttp-admin-'.bin2hex(random_bytes(3)), true, new \DateTimeImmutable());
         $c->get(UserStore::class)->save($admin);
@@ -117,44 +113,6 @@ final class DistributionHttpTest extends KernelTestCase
 
         $ok = $this->handle(Request::create(
             sprintf('/%s/raw/main/README.md', $name),
-            'GET',
-            [],
-            [],
-            [],
-            ['HTTP_AUTHORIZATION' => 'Token '.$this->secret($owner)],
-        ));
-        self::assertSame(200, $ok->getStatusCode());
-    }
-
-    public function testReleaseDownloadServesBytesAsAttachment(): void
-    {
-        $owner = $this->user('dave');
-        [$name] = $this->repoWithContent($owner, private: false);
-        $bytes = random_bytes(2048)."\x00payload";
-        $this->releases->store(RepoName::fromInput($name), 'v1', 'app.bin', $bytes);
-
-        $res = $this->handle(Request::create(sprintf('/%s/releases/v1/app.bin', $name), 'GET'));
-        self::assertSame(200, $res->getStatusCode());
-        self::assertStringContainsString('attachment', (string) $res->headers->get('Content-Disposition'));
-        ob_start();
-        $res->sendContent();
-        self::assertSame($bytes, ob_get_clean());
-
-        self::assertSame(404, $this->handle(Request::create(sprintf('/%s/releases/v1/missing.bin', $name), 'GET'))->getStatusCode());
-        self::assertSame(404, $this->handle(Request::create(sprintf('/%s/releases/no-tag/app.bin', $name), 'GET'))->getStatusCode());
-    }
-
-    public function testReleaseDownloadPrivateRepoRequiresRead(): void
-    {
-        $owner = $this->user('erin');
-        [$name] = $this->repoWithContent($owner, private: true);
-        $this->releases->store(RepoName::fromInput($name), 'v1', 'app.bin', 'secret-bytes');
-
-        $anon = $this->handle(Request::create(sprintf('/%s/releases/v1/app.bin', $name), 'GET'));
-        self::assertSame(401, $anon->getStatusCode());
-
-        $ok = $this->handle(Request::create(
-            sprintf('/%s/releases/v1/app.bin', $name),
             'GET',
             [],
             [],

@@ -371,7 +371,7 @@ final class RepoWebPageTest extends KernelTestCase
         $this->assertStringNotContainsString('text/html', (string) $dumb->headers->get('Content-Type'));
     }
 
-    public function testSpecificGitLfsRawAndReleaseRoutesWinOverTheCatchAll(): void
+    public function testSpecificGitLfsAndRawRoutesWinOverTheCatchAll(): void
     {
         /** @var RouterInterface $router */
         $router = static::getContainer()->get('router');
@@ -379,7 +379,6 @@ final class RepoWebPageTest extends KernelTestCase
         $oid = str_repeat('a', 64);
         $cases = [
             ['GET', '/demo/raw/main/README.md'],
-            ['GET', '/demo/releases/v1/app.bin'],
             ['GET', '/demo.git/info/refs'],
             ['GET', '/demo/info/refs'],
             ['GET', '/demo.git/HEAD'],

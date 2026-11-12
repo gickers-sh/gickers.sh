@@ -41,7 +41,7 @@ final readonly class RepoWebController
     ) {
     }
 
-    // Lowest-priority catch-all: every specific git/LFS/raw/release route (all of which carry
+    // Lowest-priority catch-all: every specific git/LFS/raw route (all of which carry
     // a fixed suffix) wins over it, so only otherwise-unmatched GETs reach the page or the 404.
     #[Route('/{repo}', requirements: ['repo' => '.+'], methods: ['GET'], priority: -110)]
     public function __invoke(Request $request, string $repo): Response

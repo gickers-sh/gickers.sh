@@ -26,7 +26,7 @@ final readonly class GoGetController
 
     // Go's `?go-get=1` discovery document: sub-package import paths walk up to the repository.
     // Not routed on its own: RepoWebController owns the lowest-priority catch-all `/{repo}` route
-    // (every specific git/LFS/raw/release route, all with a fixed suffix, wins over it) and hands
+    // (every specific git/LFS/raw route, all with a fixed suffix, wins over it) and hands
     // `?go-get=1` requests to this handler.
     public function __invoke(Request $request, string $repo): Response
     {
