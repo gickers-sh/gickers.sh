@@ -17,8 +17,7 @@ final readonly class ServerPolicy
         private EntityManagerInterface $entityManager,
         private ServerSettings $serverSettings,
         private ClockInterface $clock,
-    ) {
-    }
+    ) {}
 
     public function anonAccess(): AccessLevel
     {
@@ -62,6 +61,31 @@ final readonly class ServerPolicy
             $setting->change($value, $now);
         } else {
             $setting = new ServerSetting(SettingKey::AllowKeyless, $value, $now);
+            $this->entityManager->persist($setting);
+        }
+        $this->entityManager->flush();
+    }
+
+    public function allowSignup(): bool
+    {
+        $setting = $this->entityManager->find(ServerSetting::class, SettingKey::AllowSignup);
+        if (null !== $setting) {
+            return filter_var($setting->value(), \FILTER_VALIDATE_BOOLEAN);
+        }
+
+        // Self-service signup is on by default; admins disable it via `settings allow-signup false`.
+        return true;
+    }
+
+    public function setAllowSignup(bool $allow): void
+    {
+        $now = $this->clock->now();
+        $value = $allow ? 'true' : 'false';
+        $setting = $this->entityManager->find(ServerSetting::class, SettingKey::AllowSignup);
+        if (null !== $setting) {
+            $setting->change($value, $now);
+        } else {
+            $setting = new ServerSetting(SettingKey::AllowSignup, $value, $now);
             $this->entityManager->persist($setting);
         }
         $this->entityManager->flush();

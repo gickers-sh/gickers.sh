@@ -56,6 +56,20 @@ for port in "$SSH_PORT" "$HTTP_PORT"; do
     done
 done
 
+step "verify host key pinning with known_hosts"
+printf '[127.0.0.1]:%s %s\n' "$SSH_PORT" "$(cat "$WORK/data/ssh/soft_serve_host_ed25519.pub")" >"$WORK/known_hosts"
+ssh -i "$WORK/id_ed25519" -p "$SSH_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$WORK/known_hosts" -o LogLevel=ERROR 127.0.0.1 info | grep -q 'Username: admin'
+
+step "unknown key restricted help & self-service signup with arbitrary username"
+ssh-keygen -q -N '' -t ed25519 -f "$WORK/alice_ed25519" -C alice
+ALICE_SSH="ssh -i $WORK/alice_ed25519 -p $SSH_PORT -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$WORK/known_hosts -o LogLevel=ERROR"
+$ALICE_SSH -l nimporte-qui 127.0.0.1 help >"$WORK/unknown-help.log"
+grep -q 'signup' "$WORK/unknown-help.log"
+! grep -q 'repo ' "$WORK/unknown-help.log"
+! $ALICE_SSH 127.0.0.1 repo list >/dev/null 2>&1
+$ALICE_SSH 127.0.0.1 signup alice | grep -q 'Welcome, alice'
+$ALICE_SSH 127.0.0.1 info | grep -q 'Username: alice'
+
 SSH_CMD="ssh -i $WORK/id_ed25519 -p $SSH_PORT -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
 export GIT_SSH_COMMAND="$SSH_CMD"
 export GIT_TERMINAL_PROMPT=0

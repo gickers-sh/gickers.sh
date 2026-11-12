@@ -8,4 +8,5 @@ enum SettingKey: string
 {
     case AnonAccess = 'anon_access';
     case AllowKeyless = 'allow_keyless';
+    case AllowSignup = 'allow_signup';
 }

@@ -16,11 +16,13 @@ final class SshSession implements ResetInterface
 {
     private ?User $user = null;
     private ?string $publicKeyFingerprint = null;
+    private ?string $authorizedKey = null;
 
-    public function authenticate(?User $user, ?string $publicKeyFingerprint): void
+    public function authenticate(?User $user, ?string $publicKeyFingerprint, ?string $authorizedKey = null): void
     {
         $this->user = $user;
         $this->publicKeyFingerprint = $publicKeyFingerprint;
+        $this->authorizedKey = $authorizedKey;
     }
 
     public function user(): ?User
@@ -33,9 +35,16 @@ final class SshSession implements ResetInterface
         return $this->publicKeyFingerprint;
     }
 
+    /** The raw `type base64 [comment]` key the session connected with, when known (needed for signup). */
+    public function authorizedKey(): ?string
+    {
+        return $this->authorizedKey;
+    }
+
     public function reset(): void
     {
         $this->user = null;
         $this->publicKeyFingerprint = null;
+        $this->authorizedKey = null;
     }
 }
