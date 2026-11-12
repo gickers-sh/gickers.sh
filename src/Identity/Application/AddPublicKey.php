@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Identity\Application;
 
 use App\Access\Application\AccessGuard;
-use App\Identity\Domain\Event\PublicKeysChanged;
 use App\Identity\Domain\Model\PublicKey;
 use App\Identity\Domain\Model\SshKey;
 use App\Identity\Domain\Model\User;
@@ -14,7 +13,6 @@ use App\Shared\Domain\Exception\AccessDenied;
 use App\Shared\Domain\Exception\Conflict;
 use App\Shared\Domain\Exception\NotFound;
 use Psr\Clock\ClockInterface;
-use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 final readonly class AddPublicKey
 {
@@ -22,7 +20,6 @@ final readonly class AddPublicKey
         private UserStore $userStore,
         private AccessGuard $accessGuard,
         private ClockInterface $clock,
-        private EventDispatcherInterface $eventDispatcher,
     ) {
     }
 
@@ -51,8 +48,6 @@ final readonly class AddPublicKey
         $now = $this->clock->now();
         $pk = $user->addPublicKey($key, $now);
         $this->userStore->save($user);
-
-        $this->eventDispatcher->dispatch(new PublicKeysChanged($user->id()));
 
         return $pk;
     }

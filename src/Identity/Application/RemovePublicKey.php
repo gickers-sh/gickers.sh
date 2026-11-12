@@ -5,14 +5,12 @@ declare(strict_types=1);
 namespace App\Identity\Application;
 
 use App\Access\Application\AccessGuard;
-use App\Identity\Domain\Event\PublicKeysChanged;
 use App\Identity\Domain\Model\SshKey;
 use App\Identity\Domain\Model\User;
 use App\Identity\Domain\UserStore;
 use App\Shared\Domain\Exception\AccessDenied;
 use App\Shared\Domain\Exception\NotFound;
 use Psr\Clock\ClockInterface;
-use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 final readonly class RemovePublicKey
 {
@@ -20,7 +18,6 @@ final readonly class RemovePublicKey
         private UserStore $userStore,
         private AccessGuard $accessGuard,
         private ClockInterface $clock,
-        private EventDispatcherInterface $eventDispatcher,
     ) {
     }
 
@@ -48,7 +45,5 @@ final readonly class RemovePublicKey
         }
 
         $this->userStore->save($user);
-
-        $this->eventDispatcher->dispatch(new PublicKeysChanged($user->id()));
     }
 }

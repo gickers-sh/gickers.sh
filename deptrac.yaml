@@ -15,10 +15,10 @@ deptrac:
         - name: SharedInfrastructure
           collectors:
               - { type: directory, value: 'src/Shared/Infrastructure/.*' }
-        # Concrete adapters used by use cases and UI: git/indexer (no interfaces, spec §2.1), Symfony Security user, SSH authorized_keys.
+        # Concrete adapters used by use cases and UI: git/indexer (no interfaces, spec §2.1), Symfony Security user.
         - name: Adapter
           collectors:
-              - { type: directory, value: 'src/[^/]+/Infrastructure/(Git|Security|Ssh)/.*' }
+              - { type: directory, value: 'src/[^/]+/Infrastructure/(Git|Security)/.*' }
         - name: Doctrine
           collectors:
               - { type: directory, value: 'src/[^/]+/Infrastructure/Doctrine/.*' }
@@ -29,7 +29,7 @@ deptrac:
                     - { type: directory, value: 'src/[^/]+/Infrastructure/.*' }
                 must_not:
                     - { type: directory, value: 'src/Shared/Infrastructure/.*' }
-                    - { type: directory, value: 'src/[^/]+/Infrastructure/(Git|Security|Ssh|Doctrine)/.*' }
+                    - { type: directory, value: 'src/[^/]+/Infrastructure/(Git|Security|Doctrine)/.*' }
         - name: UI
           collectors:
               - type: bool

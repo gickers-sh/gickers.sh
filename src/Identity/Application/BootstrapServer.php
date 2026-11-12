@@ -4,13 +4,11 @@ declare(strict_types=1);
 
 namespace App\Identity\Application;
 
-use App\Identity\Domain\Event\PublicKeysChanged;
 use App\Identity\Domain\Model\SshKey;
 use App\Identity\Domain\Model\User;
 use App\Identity\Domain\UserStore;
 use App\Shared\Infrastructure\Config\ServerSettings;
 use Psr\Clock\ClockInterface;
-use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 final readonly class BootstrapServer
 {
@@ -18,7 +16,6 @@ final readonly class BootstrapServer
         private UserStore $userStore,
         private ServerSettings $serverSettings,
         private ClockInterface $clock,
-        private EventDispatcherInterface $eventDispatcher,
     ) {
     }
 
@@ -35,7 +32,6 @@ final readonly class BootstrapServer
             $this->userStore->save($admin);
         }
 
-        $keysChanged = false;
         foreach ($this->serverSettings->initialAdminKeys as $keyLine) {
             $sshKey = SshKey::parse($keyLine);
             $owner = $this->userStore->byFingerprint($sshKey->fingerprint);
@@ -43,15 +39,10 @@ final readonly class BootstrapServer
             if (null === $owner) {
                 $admin->addPublicKey($sshKey, $now);
                 $this->userStore->save($admin);
-                $keysChanged = true;
             } elseif (!$owner->isAdmin()) {
                 $owner->setAdmin(true, $now);
                 $this->userStore->save($owner);
             }
-        }
-
-        if ($keysChanged) {
-            $this->eventDispatcher->dispatch(new PublicKeysChanged($admin->id()));
         }
     }
 }

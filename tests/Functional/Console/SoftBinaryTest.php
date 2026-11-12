@@ -52,12 +52,8 @@ final class SoftBinaryTest extends TestCase
         self::assertContains('webhooks', $this->tables());
     }
 
-    public function testServeDryRunPreparesSshdForForcedCommandsWithoutStartingAnything(): void
+    public function testServeDryRunPreparesCodesSshWithoutStartingAnything(): void
     {
-        if (!is_executable('/usr/sbin/sshd') && null === (new \Symfony\Component\Process\ExecutableFinder())->find('sshd')) {
-            self::markTestSkipped('sshd is not installed');
-        }
-
         // OpenSSH wire format of a fresh Ed25519 public key.
         $blob = pack('N', 11).'ssh-ed25519'.pack('N', 32).sodium_crypto_sign_publickey(sodium_crypto_sign_keypair());
         $keyData = base64_encode($blob);
@@ -67,19 +63,18 @@ final class SoftBinaryTest extends TestCase
         ]);
 
         self::assertStringContainsString('Dry run: nothing started.', $output);
-        foreach (['sshd', 'http', 'worker'] as $process) {
+        foreach (['ssh', 'http', 'worker'] as $process) {
             self::assertMatchesRegularExpression('/^\s+'.$process.'\s+\S/m', $output, $process.' is planned');
         }
 
-        // sshd does not pass its environment to forced-command sessions: everything
-        // `bin/console soft:ssh:dispatch` needs must be in sshd_config as SetEnv.
-        $sshdConfig = (string) file_get_contents($this->work.'/data/ssh/sshd_config');
-        self::assertMatchesRegularExpression('/^SetEnv .*"DATABASE_URL=sqlite:\/\/\/'.preg_quote($this->work, '/').'\/db\.sqlite"/m', $sshdConfig);
-        self::assertMatchesRegularExpression('/^SetEnv .*"SOFT_SERVE_DATA_PATH='.preg_quote($this->work, '/').'\/data"/m', $sshdConfig);
-
-        $authorizedKeys = (string) file_get_contents($this->work.'/data/ssh/authorized_keys');
-        self::assertStringContainsString('soft:ssh:dispatch', $authorizedKeys);
-        self::assertStringContainsString($keyData, $authorizedKeys);
+        self::assertStringContainsString('bin/codes-ssh', $output);
+        self::assertStringContainsString('--listen=', $output);
+        self::assertStringContainsString('--host-key='.$this->work.'/data/ssh/soft_serve_host_ed25519', $output);
+        self::assertStringContainsString('--php=', $output);
+        self::assertStringContainsString('--console=', $output);
+        self::assertFileDoesNotExist($this->work.'/data/ssh/sshd_config');
+        self::assertFileDoesNotExist($this->work.'/data/ssh/authorized_keys');
+        self::assertFileExists($this->work.'/data/ssh/jwt_ed25519');
     }
 
     /**

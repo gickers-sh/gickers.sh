@@ -115,6 +115,24 @@ parameters:
 			path: tests/Functional/UI/Ssh/SshCliIsolationTest.php
 
 		-
+			message: '#^Parameter \#1 \$kernel of class Symfony\\Bundle\\FrameworkBundle\\Console\\Application constructor expects Symfony\\Component\\HttpKernel\\KernelInterface, Symfony\\Component\\HttpKernel\\KernelInterface\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Functional/UI/Ssh/SignupDispatchTest.php
+
+		-
+			message: '#^Service "test\.sign_up" is not registered in the container\.$#'
+			identifier: symfonyContainer.serviceNotFound
+			count: 1
+			path: tests/Integration/Identity/SignUpTest.php
+
+		-
+			message: '#^Property App\\Tests\\Integration\\Identity\\SignUpTest\:\:\$signUp \(App\\Identity\\Application\\SignUp\) does not accept object\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: tests/Integration/Identity/SignUpTest.php
+
+		-
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with int will always evaluate to true\.$#'
 			identifier: method.alreadyNarrowedType
 			count: 1
@@ -217,18 +235,6 @@ parameters:
 			path: tests/Integration/Identity/KeyManagementTest.php
 
 		-
-			message: '#^Property App\\Tests\\Integration\\Identity\\KeyManagementTest\:\:\$keysWriter \(App\\Identity\\Infrastructure\\Ssh\\AuthorizedKeysFileWriter\) does not accept object\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: tests/Integration/Identity/KeyManagementTest.php
-
-		-
-			message: '#^Property App\\Tests\\Integration\\Identity\\KeyManagementTest\:\:\$keysWriter is never read, only written\.$#'
-			identifier: property.onlyWritten
-			count: 1
-			path: tests/Integration/Identity/KeyManagementTest.php
-
-		-
 			message: '#^Property App\\Tests\\Integration\\Identity\\KeyManagementTest\:\:\$removePublicKey \(App\\Identity\\Application\\RemovePublicKey\) does not accept object\.$#'
 			identifier: assign.propertyType
 			count: 1
@@ -246,11 +252,6 @@ parameters:
 			count: 1
 			path: tests/Integration/Identity/KeyManagementTest.php
 
-		-
-			message: '#^Service "test\.authorized_keys_writer" is not registered in the container\.$#'
-			identifier: symfonyContainer.serviceNotFound
-			count: 1
-			path: tests/Integration/Identity/KeyManagementTest.php
 
 		-
 			message: '#^Service "test\.bootstrap_server" is not registered in the container\.$#'

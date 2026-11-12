@@ -3,6 +3,7 @@ SHELL := /bin/sh
 # PHP CLI & Composer
 PHP ?= php
 COMPOSER ?= composer
+GO ?= go
 
 # Directories & Configuration (exported to bin/soft; see .env for every SOFT_SERVE_* variable)
 DATA_DIR ?= .data
@@ -31,20 +32,32 @@ UPSTREAM_URL ?= https://github.com/charmbracelet/soft-serve.git
 UPSTREAM_REMOTE ?= upstream
 UPSTREAM_BRANCH ?= main
 
-.PHONY: all build setup install run serve debug e2e browse publish migrate rollback sync-hooks test test-render lint cs cs-check stan deptrac clean clean-all help upstream-setup upstream-fetch upstream-status upstream-sync
+# Preflight tooling checks (run before `make run` / `make debug`)
+REQUIRED_BINS ?= $(PHP) $(COMPOSER) git
+OPTIONAL_BINS ?= git-lfs gpg bore
+REQUIRED_PHP_EXTS ?= ffi mbstring pcntl posix
+
+.PHONY: all build setup preflight install run serve debug e2e browse publish migrate rollback sync-hooks test test-render lint cs cs-check stan deptrac clean clean-all help upstream-setup upstream-fetch upstream-status upstream-sync
 
 all: build
 
-## build: Make CLI entry points executable (bin/soft, bin/console)
+## build: Build bin/codes-ssh and make CLI entry points executable (bin/soft, bin/console)
 build:
 	@chmod +x bin/soft bin/console
+	cd cmd/codes-ssh && $(GO) build -o ../../bin/codes-ssh .
 
-## setup: Install / check system tools (php, composer)
+## setup: Install / check system tools (php, composer, git, go >= 1.22)
 setup:
 	@echo "==> Verification des outils d'environnement..."
 	@which $(PHP) >/dev/null 2>&1 || { echo "!! php introuvable"; exit 1; }
 	@which $(COMPOSER) >/dev/null 2>&1 || { echo "!! composer introuvable"; exit 1; }
 	@which git >/dev/null 2>&1 || { echo "!! git introuvable"; exit 1; }
+	@which $(GO) >/dev/null 2>&1 || { echo "!! go (>= 1.22) introuvable"; exit 1; }
+	@go_ver=$$($(GO) version | sed -n 's/.*go\([0-9]*\.[0-9]*\).*/\1/p'); \
+		go_major=$$(echo "$$go_ver" | cut -d. -f1); go_minor=$$(echo "$$go_ver" | cut -d. -f2); \
+		if [ "$${go_major:-0}" -lt 1 ] || { [ "$${go_major:-0}" -eq 1 ] && [ "$${go_minor:-0}" -lt 22 ]; }; then \
+			echo "!! go >= 1.22 requis (trouve: go$$go_ver)"; exit 1; \
+		fi
 	@echo "==> Verification de bore (tunneling public codes.sh)..."
 	@if ! which bore >/dev/null 2>&1; then \
 		if which brew >/dev/null 2>&1; then \
@@ -61,18 +74,51 @@ setup:
 install:
 	$(COMPOSER) install
 
-## run: Run codes.sh (sshd :2223, HTTP :23232, Messenger worker)
-run: build
+## preflight: Verify required tools, PHP extensions, deps and migrations before running
+preflight: build
+	@echo "==> Preflight codes.sh..."
+	@missing=""; \
+	for bin in $(REQUIRED_BINS); do \
+		command -v $$bin >/dev/null 2>&1 || missing="$$missing $$bin"; \
+	done; \
+	if [ -n "$$missing" ]; then \
+		echo "!! outils requis introuvables:$$missing"; \
+		echo "   installez-les puis relancez."; exit 1; \
+	fi; \
+	echo "   outils requis OK ($(REQUIRED_BINS))"
+	@test -x bin/codes-ssh || { echo "!! bin/codes-ssh introuvable (lancez make build)"; exit 1; }
+	@for bin in $(OPTIONAL_BINS); do \
+		command -v $$bin >/dev/null 2>&1 || echo "   (optionnel) $$bin absent"; \
+	done
+	@missing_ext=""; \
+	for ext in $(REQUIRED_PHP_EXTS); do \
+		$(PHP) -m 2>/dev/null | grep -qi "^$$ext$$" || missing_ext="$$missing_ext $$ext"; \
+	done; \
+	if [ -n "$$missing_ext" ]; then \
+		echo "!! extensions PHP manquantes:$$missing_ext"; exit 1; \
+	fi; \
+	echo "   extensions PHP OK ($(REQUIRED_PHP_EXTS))"
+	@if [ ! -f vendor/autoload.php ]; then \
+		echo "==> dependances composer absentes, installation..."; \
+		$(COMPOSER) install --no-interaction; \
+	else \
+		echo "   dependances composer OK"; \
+	fi
+	@echo "==> Migrations (idempotent, sans effacement des donnees)..."
+	@SOFT_SERVE_DATA_PATH="$(SOFT_SERVE_DATA_PATH)" ./bin/soft doctrine:migrations:migrate --allow-no-migration --no-interaction
+
+## run: Run codes.sh (codes-ssh :2223, HTTP :23232, Messenger worker)
+run: preflight
 	$(SERVE_ENV) SOFT_SERVE_SSH_PUBLIC_URL="$(SSH_PUBLIC_URL)" ./bin/soft serve
 
 ## serve: Alias of run
 serve: run
 
 ## debug: Run the server with verbose output (process command lines, debug logs)
-debug: build
+debug: preflight
 	$(SERVE_ENV) SOFT_SERVE_SSH_PUBLIC_URL="$(SSH_PUBLIC_URL)" LOG_LEVEL=debug ./bin/soft serve -vv
 
-## e2e: End-to-end run on throwaway ports/data: ssh repo create, git push over SSH, clone over HTTP and git://
+## e2e: End-to-end run on throwaway ports/data: ssh signup, repo create, git push over SSH, clone over HTTP
 e2e: build
 	./tests/e2e/run.sh
 
@@ -116,8 +162,9 @@ rollback: build
 sync-hooks: build
 	SOFT_SERVE_DATA_PATH="$(SOFT_SERVE_DATA_PATH)" ./bin/soft admin sync-hooks
 
-## test: Run PHPUnit test suite
+## test: Run Go and PHPUnit test suites
 test:
+	cd cmd/codes-ssh && $(GO) test ./...
 	./vendor/bin/phpunit
 
 ## lint: Run every static check (cs-check, stan, deptrac, container/yaml lint)
@@ -148,7 +195,7 @@ test-render: build
 
 ## clean: Remove build artifacts and temporary cache
 clean:
-	@rm -rf /tmp/bore-publish.log
+	@rm -rf bin/codes-ssh /tmp/bore-publish.log
 
 ## clean-all: Remove temporary cache AND local database / repositories (.data/)
 clean-all: clean

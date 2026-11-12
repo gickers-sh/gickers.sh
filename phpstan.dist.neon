@@ -11,7 +11,7 @@ parameters:
         containerXmlPath: var/cache/dev/App_KernelDevDebugContainer.xml
     doctrine:
         objectManagerLoader: tests/object-manager.php
-    # Configuration comes from ServerSettings (.env); only the sshd contract reads the environment.
+    # Configuration comes from ServerSettings (.env); only the codes-ssh dispatch contract reads the environment.
     disallowedFunctionCalls:
         -
             function: ['getenv()', 'putenv()']

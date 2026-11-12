@@ -54,6 +54,9 @@ when@test:
         test.set_password:
             alias: App\Identity\Application\SetPassword
             public: true
+        test.sign_up:
+            alias: App\Identity\Application\SignUp
+            public: true
         test.issue_access_token:
             alias: App\Identity\Application\IssueAccessToken
             public: true
@@ -68,7 +71,4 @@ when@test:
             public: true
         test.bootstrap_server:
             alias: App\Identity\Application\BootstrapServer
-            public: true
-        test.authorized_keys_writer:
-            alias: App\Identity\Infrastructure\Ssh\AuthorizedKeysFileWriter
             public: true
