@@ -10,34 +10,28 @@
 </head>
 <body>
 <main>
-    <div class="repo-breadcrumb">
-        <a href="/" class="breadcrumb-link">{{ serverName }}</a>
-        <span class="breadcrumb-sep">/</span>
-        <span class="breadcrumb-current">{{ repository }}</span>
-        <div class="breadcrumb-nav">
-            <a href="/docs" class="breadcrumb-link">CLI Docs</a>
-            {% if currentUsername %}
-                <a href="/@{{ currentUsername }}" class="breadcrumb-link">@{{ currentUsername }}</a>
-                <a href="/logout" class="breadcrumb-link" title="Sign out of web session">Log out</a>
-            {% endif %}
-        </div>
-    </div>
-
-    <header class="repo-head">
+    <header class="repo-head home-header">
         <div class="identity">
+            <div class="repo-breadcrumb">
+                <a href="/" class="breadcrumb-link"><span class="cli-prompt">&gt;_</span> {{ serverName }}</a>
+                <span class="breadcrumb-sep">/</span>
+                <span class="breadcrumb-current">{{ repository }}</span>
+            </div>
             <h1>{{ repository }}</h1>
             {% if description is not empty %}<p class="description">{{ description }}</p>{% endif %}
         </div>
-        {% if cloneCommand is not empty %}
-            <div class="clone">
-                <span class="clone-label">Clone</span>
-                <div class="clone-box" title="Click to copy clone command">
-                    <code class="clone-code">{{ cloneCommand }}</code>
-                    {{ ui.copy_btn(cloneCommand, 'Copy', 'copy-btn-sm', 'Copy clone command', 'Copy clone command') }}
-                </div>
-            </div>
-        {% endif %}
+        {{ ui.user_nav(currentUsername, sshPrefix, 'repo') }}
     </header>
+
+    {% if cloneCommand is not empty %}
+        <div class="repo-clone-bar">
+            <span class="clone-label">Clone</span>
+            <div class="clone-box" title="Click to copy clone command">
+                <code class="clone-code">{{ cloneCommand }}</code>
+                {{ ui.copy_btn(cloneCommand, 'Copy', 'copy-btn-sm', 'Copy clone command', 'Copy clone command') }}
+            </div>
+        </div>
+    {% endif %}
     {% if empty %}
         <p class="notice">This repository is empty.</p>
     {% else %}
@@ -63,7 +57,13 @@
                             {% if canWrite %}<button type="button" class="cli-tab" data-filter="write">Write</button>{% endif %}
                             {% if isAdmin %}<button type="button" class="cli-tab" data-filter="admin">Admin</button>{% endif %}
                         </div>
-                        <input type="search" class="cli-search" placeholder="Filter commands (tree, grep, diff)..." aria-label="Filter commands">
+                        <div class="cli-filter-actions">
+                            <input type="search" class="cli-search" placeholder="Filter commands (tree, grep, diff)..." aria-label="Filter commands">
+                            <div class="cli-view-toggle" role="group" aria-label="View layout">
+                                <button type="button" class="cli-view-btn active" data-view="grid" title="Cards layout">Cards</button>
+                                <button type="button" class="cli-view-btn" data-view="list" title="Compact list layout">List</button>
+                            </div>
+                        </div>
                     </div>
                     <div class="cli-command-grid" data-prefix="{{ sshPrefix }}">
                         {% for item in cliCommands %}

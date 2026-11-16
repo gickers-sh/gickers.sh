@@ -151,6 +151,34 @@
     }
   };
 
+  const initCliViewToggle = () => {
+    const grids = document.querySelectorAll('.cli-command-grid');
+    if (!grids.length) return;
+    const viewBtns = document.querySelectorAll('.cli-view-btn');
+    if (!viewBtns.length) return;
+
+    const setView = (mode) => {
+      viewBtns.forEach((btn) => btn.classList.toggle('active', btn.getAttribute('data-view') === mode));
+      grids.forEach((grid) => {
+        if (mode === 'list') {
+          grid.classList.add('cli-view-list');
+        } else {
+          grid.classList.remove('cli-view-list');
+        }
+      });
+      try { localStorage.setItem('codes_cli_view', mode); } catch (_) {}
+    };
+
+    const saved = (() => {
+      try { return localStorage.getItem('codes_cli_view'); } catch (_) { return null; }
+    })();
+    if (saved === 'list') setView('list');
+
+    viewBtns.forEach((btn) => {
+      btn.addEventListener('click', () => setView(btn.getAttribute('data-view')));
+    });
+  };
+
   // Expandable command cards: edit arguments/options and rebuild the command,
   // Expandable command cards: edit arguments/options and rebuild the command
   // and the copy payload live.
@@ -287,12 +315,14 @@
     document.addEventListener('DOMContentLoaded', () => {
       initCopyButtons();
       initCliPalette();
+      initCliViewToggle();
       initCliEditors();
       initViewTabs();
     });
   } else {
     initCopyButtons();
     initCliPalette();
+    initCliViewToggle();
     initCliEditors();
     initViewTabs();
   }

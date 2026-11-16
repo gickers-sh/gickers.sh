@@ -15,22 +15,7 @@
             <h1 class="home-title"><a href="/" style="text-decoration: none; color: inherit;"><span class="cli-prompt">&gt;_</span> {{ serverName }}</a> <span class="cli-host">/ docs</span></h1>
             <p class="description">Command line reference and documentation for SSH CLI and web administration.</p>
         </div>
-        <div class="home-user-nav">
-            <a href="/" class="home-btn">&larr; Repositories</a>
-            {% if currentUsername %}
-                <div class="user-pill">
-                    <span class="user-pill-label">Signed in as</span>
-                    <a href="/@{{ currentUsername }}" class="user-pill-name">@{{ currentUsername }}</a>
-                </div>
-                <a href="/logout" class="home-btn home-btn-subtle" title="Sign out of web session">Log out</a>
-            {% else %}
-                <div class="user-pill user-pill-anon">
-                    <span class="user-pill-label">Terminal login</span>
-                    <code>{{ sshPrefix }} web login</code>
-                    {{ ui.copy_btn(sshPrefix ~ ' web login', null, 'copy-btn-sm', 'Copy login command') }}
-                </div>
-            {% endif %}
-        </div>
+        {{ ui.user_nav(currentUsername, sshPrefix, 'docs') }}
     </header>
 
     <section class="section cli-palette-section" id="commands" aria-label="CLI Command Reference">
@@ -56,7 +41,13 @@
                         <button type="button" class="cli-tab" data-filter="settings">Server Settings</button>
                     {% endif %}
                 </div>
-                <input type="search" class="cli-search" placeholder="Filter commands (e.g. branch, pubkey, token)..." aria-label="Filter commands">
+                <div class="cli-filter-actions">
+                    <input type="search" class="cli-search" placeholder="Filter commands (e.g. branch, pubkey, token)..." aria-label="Filter commands">
+                    <div class="cli-view-toggle" role="group" aria-label="View layout">
+                        <button type="button" class="cli-view-btn active" data-view="grid" title="Cards layout">Cards</button>
+                        <button type="button" class="cli-view-btn" data-view="list" title="Compact list layout">List</button>
+                    </div>
+                </div>
             </div>
 
             <div class="cli-command-grid" data-prefix="{{ sshPrefix }}">
@@ -74,19 +65,19 @@
                         </div>
                         <div class="cli-card-detail" hidden>
                             {% if cmd.long is not empty %}
-                                <div style="margin-bottom: 0.75rem; white-space: pre-wrap; font-size: 0.82rem; line-height: 1.45; color: var(--fg-dim);">{{ cmd.long }}</div>
+                                <div class="cli-detail-desc">{{ cmd.long }}</div>
                             {% endif %}
 
                             {% if cmd.flags is not empty %}
-                                <div style="margin: 0.5rem 0;">
-                                    <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);">Flags:</span>
-                                    <ul style="margin: 0.25rem 0 0.5rem 1.25rem; font-size: 0.8rem; color: var(--fg-dim);">
+                                <div class="cli-detail-section">
+                                    <span class="cli-detail-heading">Flags</span>
+                                    <ul class="cli-flag-list">
                                         {% for flag in cmd.flags %}
-                                            <li>
-                                                <code style="color: var(--orange, #e0af68);">{% if flag.shorthand %}-{{ flag.shorthand }}, {% endif %}--{{ flag.name }}</code>
-                                                {% if flag.varname %}<span style="color: var(--teal, #73daca);"> {{ flag.varname }}</span>{% endif %}:
-                                                {{ flag.usage }}
-                                                {% if flag.default %}<span style="color: var(--muted);">(default {{ flag.default }})</span>{% endif %}
+                                            <li class="cli-flag-item">
+                                                <code class="cli-flag-token">{% if flag.shorthand %}-{{ flag.shorthand }}, {% endif %}--{{ flag.name }}</code>
+                                                {% if flag.varname %}<span class="cli-flag-type">{{ flag.varname }}</span>{% endif %}:
+                                                <span>{{ flag.usage }}</span>
+                                                {% if flag.default %}<span class="cli-flag-default">(default {{ flag.default }})</span>{% endif %}
                                             </li>
                                         {% endfor %}
                                     </ul>
@@ -94,9 +85,9 @@
                             {% endif %}
 
                             {% if cmd.example is not empty %}
-                                <div style="margin-top: 0.5rem;">
-                                    <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);">Example:</span>
-                                    <pre style="margin: 0.25rem 0; padding: 0.5rem; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; overflow-x: auto; font-size: 0.78rem;"><code>{{ cmd.example }}</code></pre>
+                                <div class="cli-detail-section cli-detail-example">
+                                    <span class="cli-detail-heading">Example</span>
+                                    <pre><code>{{ cmd.example }}</code></pre>
                                 </div>
                             {% endif %}
                         </div>

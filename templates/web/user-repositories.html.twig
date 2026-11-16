@@ -10,41 +10,36 @@
 </head>
 <body>
 <main>
-    <div class="repo-breadcrumb">
-        <a href="/" class="breadcrumb-link">{{ serverName }}</a>
-        <span class="breadcrumb-sep">/</span>
-        <span class="breadcrumb-current">{% if targetUsername %}@{{ targetUsername }}{% else %}My Repositories{% endif %}</span>
-        <div class="breadcrumb-nav">
-            <a href="/docs" class="breadcrumb-link">CLI Docs</a>
-            {% if currentUsername %}
-                <a href="/logout" class="breadcrumb-link" title="Sign out of web session">Log out</a>
-            {% endif %}
-        </div>
-    </div>
-
-    <header class="repo-head">
+    <header class="repo-head home-header">
         <div class="identity">
-            {% if isOwner %}
-                <h1>My Repositories</h1>
-                <p class="description">Signed in as <strong>@{{ targetUsername }}</strong> on {{ serverName }}. (<a href="/logout" class="logout-link" title="Sign out of web session">Log out</a>)</p>
-            {% elseif targetUsername %}
-                <h1>@{{ targetUsername }}</h1>
-                <p class="description">Repositories on {{ serverName }}.</p>
-            {% else %}
-                <h1>My Repositories</h1>
-                <p class="description">{{ serverName }}</p>
-            {% endif %}
-        </div>
-        {% if isOwner %}
-            <div class="clone">
-                <span class="clone-label">New Repo</span>
-                <div class="clone-box" title="Click to copy command">
-                    <code class="clone-code">{{ sshPrefix }} repo create &lt;name&gt;</code>
-                    {{ ui.copy_btn(sshPrefix ~ ' repo create ', 'Copy', 'copy-btn-sm', 'Copy repo create command') }}
-                </div>
+            <div class="repo-breadcrumb">
+                <a href="/" class="breadcrumb-link"><span class="cli-prompt">&gt;_</span> {{ serverName }}</a>
+                <span class="breadcrumb-sep">/</span>
+                <span class="breadcrumb-current">{% if isOwner %}My Repositories{% elseif targetUsername %}@{{ targetUsername }}{% else %}repositories{% endif %}</span>
             </div>
-        {% endif %}
+            <h1>{% if isOwner %}My Repositories{% elseif targetUsername %}@{{ targetUsername }}{% else %}My Repositories{% endif %}</h1>
+            <p class="description">
+                {% if isOwner %}
+                    Signed in as <strong>@{{ targetUsername }}</strong> on {{ serverName }}.
+                {% elseif targetUsername %}
+                    Repositories on {{ serverName }}.
+                {% else %}
+                    {{ serverName }}
+                {% endif %}
+            </p>
+        </div>
+        {{ ui.user_nav(currentUsername, sshPrefix, 'user_repos') }}
     </header>
+
+    {% if isOwner %}
+        <div class="repo-clone-bar">
+            <span class="clone-label">New Repo</span>
+            <div class="clone-box" title="Click to copy command">
+                <code class="clone-code">{{ sshPrefix }} repo create &lt;name&gt;</code>
+                {{ ui.copy_btn(sshPrefix ~ ' repo create ', 'Copy', 'copy-btn-sm', 'Copy repo create command') }}
+            </div>
+        </div>
+    {% endif %}
 
     {% if targetUsername is null and currentUsername is null %}
         <section class="section active">

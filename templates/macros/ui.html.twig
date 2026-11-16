@@ -6,3 +6,30 @@
         {% if label %}<span class="copy-label">{{ label }}</span>{% endif %}
     </button>
 {% endmacro %}
+
+{% macro user_nav(currentUsername, sshPrefix, page = 'home') %}
+    <div class="home-user-nav">
+        {% if page != 'docs' %}
+            <a href="/docs" class="home-btn" title="View complete CLI documentation">CLI Docs</a>
+        {% endif %}
+        {% if page != 'home' %}
+            <a href="/" class="home-btn" title="Back to repositories list">&larr; Repositories</a>
+        {% endif %}
+        {% if currentUsername %}
+            <div class="user-pill">
+                <span class="user-pill-label">Signed in as</span>
+                <a href="/@{{ currentUsername }}" class="user-pill-name">@{{ currentUsername }}</a>
+            </div>
+            {% if page != 'user_repos' %}
+                <a href="/@{{ currentUsername }}" class="home-btn">My Repositories &rarr;</a>
+            {% endif %}
+            <a href="/logout" class="home-btn home-btn-subtle" title="Sign out of web session">Log out</a>
+        {% else %}
+            <div class="user-pill user-pill-anon">
+                <span class="user-pill-label">Terminal login</span>
+                <code>{{ sshPrefix }} web login</code>
+                {{ _self.copy_btn(sshPrefix ~ ' web login', null, 'copy-btn-sm', 'Copy login command') }}
+            </div>
+        {% endif %}
+    </div>
+{% endmacro %}
