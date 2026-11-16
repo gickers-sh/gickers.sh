@@ -1,0 +1,120 @@
+{% import 'macros/ui.html.twig' as ui %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ serverName }} - CLI Command Reference</title>
+    <link rel="stylesheet" href="/css/repo-web.css">
+    <script src="/js/repo-web.js" defer></script>
+</head>
+<body>
+<main>
+    <header class="repo-head home-header">
+        <div class="identity">
+            <h1 class="home-title"><a href="/" style="text-decoration: none; color: inherit;"><span class="cli-prompt">&gt;_</span> {{ serverName }}</a> <span class="cli-host">/ docs</span></h1>
+            <p class="description">Command line reference and documentation for SSH CLI and web administration.</p>
+        </div>
+        <div class="home-user-nav">
+            <a href="/" class="home-btn">&larr; Repositories</a>
+            {% if currentUsername %}
+                <div class="user-pill">
+                    <span class="user-pill-label">Signed in as</span>
+                    <a href="/@{{ currentUsername }}" class="user-pill-name">@{{ currentUsername }}</a>
+                </div>
+                <a href="/logout" class="home-btn home-btn-subtle" title="Sign out of web session">Log out</a>
+            {% else %}
+                <div class="user-pill user-pill-anon">
+                    <span class="user-pill-label">Terminal login</span>
+                    <code>{{ sshPrefix }} web login</code>
+                    {{ ui.copy_btn(sshPrefix ~ ' web login', null, 'copy-btn-sm', 'Copy login command') }}
+                </div>
+            {% endif %}
+        </div>
+    </header>
+
+    <section class="section cli-palette-section" id="commands" aria-label="CLI Command Reference">
+        <div class="cli-drawer-header">
+            <span class="cli-drawer-title">
+                <span class="cli-prompt">&gt;_</span> Command Catalog
+                <span class="cli-host">({{ sshPrefix }})</span>
+            </span>
+            <span class="cli-drawer-hint">
+                {{ commands|length }} commands · {% if isAdmin %}Admin access{% else %}Public & User scope{% endif %}
+            </span>
+        </div>
+        <div class="cli-drawer-body">
+            <div class="cli-filter-bar">
+                <div class="cli-tabs" role="tablist">
+                    <button type="button" class="cli-tab active" data-filter="all">All</button>
+                    <button type="button" class="cli-tab" data-filter="explore">Explore</button>
+                    <button type="button" class="cli-tab" data-filter="repo">Repositories</button>
+                    <button type="button" class="cli-tab" data-filter="keys">Keys &amp; Tokens</button>
+                    <button type="button" class="cli-tab" data-filter="identity">Identity</button>
+                    {% if isAdmin %}
+                        <button type="button" class="cli-tab" data-filter="admin">User Admin</button>
+                        <button type="button" class="cli-tab" data-filter="settings">Server Settings</button>
+                    {% endif %}
+                </div>
+                <input type="search" class="cli-search" placeholder="Filter commands (e.g. branch, pubkey, token)..." aria-label="Filter commands">
+            </div>
+
+            <div class="cli-command-grid" data-prefix="{{ sshPrefix }}">
+                {% for cmd in commands %}
+                    <div class="cli-command-card has-detail" data-category="{{ cmd.category }}" data-base="{{ cmd.path }}">
+                        <div class="cli-card-info" role="button" tabindex="0" aria-expanded="false" title="Click to view details and options">
+                            <span class="cli-card-title">
+                                <code>{{ cmd.path }}</code>
+                                {% if cmd.tier != 'read' %}
+                                    <span class="cli-tier cli-tier-{{ cmd.tier }}">{{ cmd.tier }}</span>
+                                {% endif %}
+                                <span class="cli-card-caret" aria-hidden="true">▸</span>
+                            </span>
+                            <span class="cli-card-desc">{{ cmd.short }}</span>
+                        </div>
+                        <div class="cli-card-detail" hidden>
+                            {% if cmd.long is not empty %}
+                                <div style="margin-bottom: 0.75rem; white-space: pre-wrap; font-size: 0.82rem; line-height: 1.45; color: var(--fg-dim);">{{ cmd.long }}</div>
+                            {% endif %}
+
+                            {% if cmd.flags is not empty %}
+                                <div style="margin: 0.5rem 0;">
+                                    <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);">Flags:</span>
+                                    <ul style="margin: 0.25rem 0 0.5rem 1.25rem; font-size: 0.8rem; color: var(--fg-dim);">
+                                        {% for flag in cmd.flags %}
+                                            <li>
+                                                <code style="color: var(--orange, #e0af68);">{% if flag.shorthand %}-{{ flag.shorthand }}, {% endif %}--{{ flag.name }}</code>
+                                                {% if flag.varname %}<span style="color: var(--teal, #73daca);"> {{ flag.varname }}</span>{% endif %}:
+                                                {{ flag.usage }}
+                                                {% if flag.default %}<span style="color: var(--muted);">(default {{ flag.default }})</span>{% endif %}
+                                            </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            {% endif %}
+
+                            {% if cmd.example is not empty %}
+                                <div style="margin-top: 0.5rem;">
+                                    <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);">Example:</span>
+                                    <pre style="margin: 0.25rem 0; padding: 0.5rem; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; overflow-x: auto; font-size: 0.78rem;"><code>{{ cmd.example }}</code></pre>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="cli-card-action" title="Click to copy command">
+                            <code class="cli-code">{{ cmd.synopsis }}</code>
+                            {{ ui.copy_btn(cmd.synopsis, 'Copy', 'copy-btn-sm', 'Copy command to clipboard') }}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <footer class="status">
+        <span class="status-name">{{ serverName }}</span>
+        <span class="status-summary">Interactive Command Reference</span>
+        <span class="status-meta">Centralized Catalog</span>
+    </footer>
+</main>
+</body>
+</html>

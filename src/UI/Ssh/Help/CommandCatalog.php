@@ -131,6 +131,8 @@ DESC;
   {ssh} token create "ci-pipeline" --expires-in 30d
 EX;
         $root = new CommandSpec('', '', '', $rootLong, [], [], false, false, $rootExample);
+        $root->addUi(new CommandUiSpec('explore', 'read', 'TUI Interactive', 'Open the repository in the interactive terminal TUI', '-t {repo}', [], 'repo', 1));
+        $root->addUi(new CommandUiSpec('explore', 'read', 'Terminal TUI', 'Explore repositories interactively with the terminal TUI', '', [], 'global', 1));
 
         $root->addChild($this->hiddenLeaf('git-upload-pack REPO', 'Git upload pack'));
         $root->addChild($this->hiddenLeaf('git-upload-archive REPO', 'Git upload archive'));
@@ -153,7 +155,16 @@ DESC;
 EX;
         $root->addChild($this->leaf('about', 'Show the server README (About)', $aboutLong, [], [
             new FlagSpec('w', 'width', 'int', 'terminal width in columns (0 = auto-detect)'),
-        ], $aboutExample));
+        ], $aboutExample)->withUi(
+            category: 'explore',
+            title: 'About Server',
+            tier: 'read',
+            description: 'Show the server README (About)',
+            baseTemplate: 'about',
+            fields: [FieldSpec::opt('width', 'Terminal width', '-w', '80')],
+            scope: 'global',
+            order: 2,
+        ));
 
         $helpLong = <<<'DESC'
 Help provides contextual guidance and usage manuals for any codes.sh command, command group, or nested subcommand.
@@ -175,7 +186,16 @@ DESC;
   {ssh} help repo branch protect
   {ssh} repo branch protect --help
 EX;
-        $root->addChild($this->leaf('help [command]', 'Help about any command', $helpLong, [], [], $helpExample));
+        $root->addChild($this->leaf('help [command]', 'Help about any command', $helpLong, [], [], $helpExample)->withUi(
+            category: 'explore',
+            title: 'Help',
+            tier: 'read',
+            description: 'Help about any command',
+            baseTemplate: 'help',
+            fields: [FieldSpec::arg('command', 'Command path', 'repo branch')],
+            scope: 'global',
+            order: 3,
+        ));
 
         $infoLong = <<<'DESC'
 Displays identity information for the currently connected SSH session: username, global server administrator status, and all registered OpenSSH public keys.
@@ -190,7 +210,16 @@ DESC;
   # Check your account profile and keys
   {ssh} info
 EX;
-        $root->addChild($this->leaf('info', 'Show your info', $infoLong, [], [], $infoExample));
+        $root->addChild($this->leaf('info', 'Show your info', $infoLong, [], [], $infoExample)->withUi(
+            category: 'explore',
+            title: 'User Info',
+            tier: 'read',
+            description: 'Display username, administrator status, and public keys',
+            baseTemplate: 'info',
+            fields: [],
+            scope: 'global',
+            order: 4,
+        ));
 
         $jwtLong = <<<'DESC'
 Generates an Ed25519 JSON Web Token (JWT) valid for 1 hour to authenticate Git Large File Storage (LFS) operations over HTTP/HTTPS.
@@ -211,7 +240,16 @@ DESC;
   # Generate an LFS token valid for multiple repositories
   {ssh} jwt repo1 repo2 repo3
 EX;
-        $root->addChild($this->leaf('jwt [repository1 repository2...]', 'Generate a JSON Web Token', $jwtLong, [], [], $jwtExample));
+        $root->addChild($this->leaf('jwt [repository1 repository2...]', 'Generate a JSON Web Token', $jwtLong, [], [], $jwtExample)->withUi(
+            category: 'tokens',
+            title: 'Generate LFS JWT',
+            tier: 'read',
+            description: 'Generate an Ed25519 JSON Web Token (JWT) for Git LFS',
+            baseTemplate: 'jwt',
+            fields: [FieldSpec::arg('repository', 'Repository', 'my-repo', true)],
+            scope: 'global',
+            order: 5,
+        ));
 
         $root->addChild($this->pubkey());
         $root->addChild($this->repo());
@@ -233,7 +271,16 @@ DESC;
   # Change your account username
   {ssh} set-username alice
 EX;
-        $root->addChild($this->leaf('set-username USERNAME', 'Set your username', $setUsernameLong, [], [], $setUsernameExample));
+        $root->addChild($this->leaf('set-username USERNAME', 'Set your username', $setUsernameLong, [], [], $setUsernameExample)->withUi(
+            category: 'identity',
+            title: 'Set Username',
+            tier: 'read',
+            description: 'Updates the username of your authenticated account',
+            baseTemplate: 'set-username',
+            fields: [FieldSpec::arg('username', 'New username', 'alice', true)],
+            scope: 'global',
+            order: 6,
+        ));
 
         $root->addChild($this->signupSpec());
         if ($includeAdmin) {
@@ -265,8 +312,26 @@ DESC;
   {ssh} web logout
 EX;
         $web = $this->group('web', 'Authenticate the web interface', [], $webLong, $webExample);
-        $web->addChild($this->leaf('login', 'Log your browser in and open the web interface'));
-        $web->addChild($this->leaf('logout', 'Sign out of every active browser session'));
+        $web->addChild($this->leaf('login', 'Log your browser in and open the web interface')->withUi(
+            category: 'identity',
+            title: 'SSH Web Login',
+            tier: 'read',
+            description: 'Zero password authentication. Mint a magic link with your SSH key to sign in.',
+            baseTemplate: 'web login',
+            fields: [],
+            scope: 'global',
+            order: 10,
+        ));
+        $web->addChild($this->leaf('logout', 'Sign out of every active browser session')->withUi(
+            category: 'identity',
+            title: 'SSH Web Logout',
+            tier: 'read',
+            description: 'Sign out of every active browser session',
+            baseTemplate: 'web logout',
+            fields: [],
+            scope: 'global',
+            order: 11,
+        ));
 
         return $web;
     }
@@ -295,7 +360,16 @@ EX;
 
         return $this->leaf('signup USERNAME', 'Register yourself as a new user with your SSH key', $signupLong, [], [
             new FlagSpec('k', 'key', 'string', 'public key to register instead of the one you connected with'),
-        ], $signupExample);
+        ], $signupExample)->withUi(
+            category: 'identity',
+            title: 'Sign Up',
+            tier: 'read',
+            description: 'Register yourself as a new user with your SSH key',
+            baseTemplate: 'signup',
+            fields: [FieldSpec::arg('username', 'Desired username', 'alice', true)],
+            scope: 'global',
+            order: 12,
+        );
     }
 
     private function pubkey(): CommandSpec
@@ -337,7 +411,16 @@ DESC;
   # Add an RSA public key
   {ssh} pubkey add "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ... laptop"
 EX;
-        $pubkey->addChild($this->leaf('add AUTHORIZED_KEY', 'Add a public key', $addLong, [], [], $addExample));
+        $pubkey->addChild($this->leaf('add AUTHORIZED_KEY', 'Add a public key', $addLong, [], [], $addExample)->withUi(
+            category: 'keys',
+            title: 'Add Public Key',
+            tier: 'read',
+            description: 'Add a public key to your account',
+            baseTemplate: 'pubkey add',
+            fields: [FieldSpec::arg('key', 'Public Key', 'ssh-ed25519 AAA...', true)],
+            scope: 'global',
+            order: 21,
+        ));
 
         $listLong = <<<'DESC'
 Displays all OpenSSH public keys registered under your user account, including key algorithm, base64 payload, and optional comment.
@@ -349,7 +432,16 @@ DESC;
   # List all your authorized keys
   {ssh} pubkey list
 EX;
-        $pubkey->addChild($this->leaf('list', 'List public keys', $listLong, ['ls'], [], $listExample));
+        $pubkey->addChild($this->leaf('list', 'List public keys', $listLong, ['ls'], [], $listExample)->withUi(
+            category: 'keys',
+            title: 'List Public Keys',
+            tier: 'read',
+            description: 'List your registered public keys',
+            baseTemplate: 'pubkey list',
+            fields: [],
+            scope: 'global',
+            order: 20,
+        ));
 
         $removeLong = <<<'DESC'
 Unlinks an existing OpenSSH public key from your account.
@@ -367,7 +459,16 @@ DESC;
   # Remove a key by its full public key line
   {ssh} pubkey remove "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG... user@desktop"
 EX;
-        $pubkey->addChild($this->leaf('remove AUTHORIZED_KEY', 'Remove a public key', $removeLong, [], [], $removeExample));
+        $pubkey->addChild($this->leaf('remove AUTHORIZED_KEY', 'Remove a public key', $removeLong, [], [], $removeExample)->withUi(
+            category: 'keys',
+            title: 'Remove Public Key',
+            tier: 'read',
+            description: 'Remove a public key from your account',
+            baseTemplate: 'pubkey remove',
+            fields: [FieldSpec::arg('key', 'Public Key', 'ssh-ed25519 AAA...', true)],
+            scope: 'global',
+            order: 22,
+        ));
 
         return $pubkey;
     }
@@ -401,7 +502,16 @@ DESC;
   # Disable keyless access
   {ssh} settings allow-keyless false
 EX;
-        $settings->addChild($this->leaf('allow-keyless [true|false]', 'Set or get allow keyless access to repositories', $allowKeylessLong, [], [], $allowKeylessExample));
+        $settings->addChild($this->leaf('allow-keyless [true|false]', 'Set or get allow keyless access to repositories', $allowKeylessLong, [], [], $allowKeylessExample)->withUi(
+            category: 'settings',
+            title: 'Allow Keyless Toggle',
+            tier: 'admin',
+            description: 'Set or get allow keyless access to repositories',
+            baseTemplate: 'settings allow-keyless',
+            fields: [FieldSpec::choiceArg('value', 'Enabled', ['true', 'false'], 'true')],
+            scope: 'global',
+            order: 40,
+        ));
 
         $allowSignupLong = <<<'DESC'
 Gets or sets whether unknown SSH keys connecting to the server are permitted to self-register via 'ssh codes.sh signup USERNAME'.
@@ -422,7 +532,16 @@ DESC;
   # Close self-service signup
   {ssh} settings allow-signup false
 EX;
-        $settings->addChild($this->leaf('allow-signup [true|false]', 'Set or get whether unregistered keys may self-register', $allowSignupLong, [], [], $allowSignupExample));
+        $settings->addChild($this->leaf('allow-signup [true|false]', 'Set or get whether unregistered keys may self-register', $allowSignupLong, [], [], $allowSignupExample)->withUi(
+            category: 'settings',
+            title: 'Allow Signup Toggle',
+            tier: 'admin',
+            description: 'Set or get whether unregistered keys may self-register',
+            baseTemplate: 'settings allow-signup',
+            fields: [FieldSpec::choiceArg('value', 'Enabled', ['true', 'false'], 'true')],
+            scope: 'global',
+            order: 41,
+        ));
 
         $anonAccessLong = <<<'DESC'
 Gets or sets the default access level granted to anonymous (unauthenticated) users on public repositories.
@@ -443,7 +562,16 @@ DESC;
   # Completely forbid anonymous access
   {ssh} settings anon-access no-access
 EX;
-        $settings->addChild($this->leaf('anon-access [ACCESS_LEVEL]', 'Set or get the default access level for anonymous users', $anonAccessLong, [], [], $anonAccessExample));
+        $settings->addChild($this->leaf('anon-access [ACCESS_LEVEL]', 'Set or get the default access level for anonymous users', $anonAccessLong, [], [], $anonAccessExample)->withUi(
+            category: 'settings',
+            title: 'Anonymous Access Level',
+            tier: 'admin',
+            description: 'Set or get the default access level for anonymous users',
+            baseTemplate: 'settings anon-access',
+            fields: [FieldSpec::choiceArg('level', 'Access level', ['no-access', 'read-only', 'read-write', 'admin-access'], 'read-only')],
+            scope: 'global',
+            order: 42,
+        ));
 
         return $settings;
     }
@@ -485,7 +613,16 @@ DESC;
 EX;
         $token->addChild($this->leaf('create NAME', 'Create a new access token', $createLong, [], [
             new FlagSpec(null, 'expires-in', 'string', 'Token expiration time (e.g. 1y, 3mo, 2w, 5d4h, 1h30m)'),
-        ], $createExample));
+        ], $createExample)->withUi(
+            category: 'tokens',
+            title: 'Create Access Token',
+            tier: 'read',
+            description: 'Create a new access token',
+            baseTemplate: 'token create',
+            fields: [FieldSpec::arg('name', 'Token name', 'ci-bot', true), FieldSpec::opt('expires-in', 'Expiration', '--expires-in', '30d')],
+            scope: 'global',
+            order: 31,
+        ));
 
         $deleteLong = <<<'DESC'
 Permanently revokes a personal access token by its numeric identifier. Any future request using this token is denied immediately.
@@ -500,7 +637,16 @@ DESC;
   # Revoke access token #42
   {ssh} token delete 42
 EX;
-        $token->addChild($this->leaf('delete ID', 'Delete an access token', $deleteLong, ['rm', 'remove'], [], $deleteExample));
+        $token->addChild($this->leaf('delete ID', 'Delete an access token', $deleteLong, ['rm', 'remove'], [], $deleteExample)->withUi(
+            category: 'tokens',
+            title: 'Delete Access Token',
+            tier: 'read',
+            description: 'Delete an access token',
+            baseTemplate: 'token delete',
+            fields: [FieldSpec::arg('token-id', 'Token ID', '1', true)],
+            scope: 'global',
+            order: 32,
+        ));
 
         $listLong = <<<'DESC'
 Displays all active personal access tokens for your account, listing numeric token ID, label name, creation timestamp, and expiration date.
@@ -512,7 +658,16 @@ DESC;
   # List all your access tokens
   {ssh} token list
 EX;
-        $token->addChild($this->leaf('list', 'List access tokens', $listLong, ['ls'], [], $listExample));
+        $token->addChild($this->leaf('list', 'List access tokens', $listLong, ['ls'], [], $listExample)->withUi(
+            category: 'tokens',
+            title: 'List Access Tokens',
+            tier: 'read',
+            description: 'List access tokens',
+            baseTemplate: 'token list',
+            fields: [],
+            scope: 'global',
+            order: 30,
+        ));
 
         return $token;
     }
@@ -541,7 +696,16 @@ DESC;
   # Add a public key to alice's account
   {ssh} user add-pubkey alice "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... alice@laptop"
 EX;
-        $user->addChild($this->leaf('add-pubkey USERNAME AUTHORIZED_KEY', 'Add a public key to a user', $addPubkeyLong, [], [], $addPubkeyExample));
+        $user->addChild($this->leaf('add-pubkey USERNAME AUTHORIZED_KEY', 'Add a public key to a user', $addPubkeyLong, [], [], $addPubkeyExample)->withUi(
+            category: 'admin',
+            title: 'Add User Public Key',
+            tier: 'admin',
+            description: 'Add an OpenSSH public key to a specified user account',
+            baseTemplate: 'user add-pubkey',
+            fields: [FieldSpec::arg('username', 'Target username', 'alice', true), FieldSpec::arg('key', 'Public Key', 'ssh-ed25519 AAA...', true)],
+            scope: 'global',
+            order: 55,
+        ));
 
         $createLong = <<<'DESC'
 Creates a new user account with optional server administrator status and an initial SSH public key.
@@ -566,7 +730,16 @@ EX;
         $user->addChild($this->leaf('create USERNAME', 'Create a new user', $createLong, [], [
             new FlagSpec('a', 'admin', '', 'make the user an admin'),
             new FlagSpec('k', 'key', 'string', 'add a public key to the user'),
-        ], $createExample));
+        ], $createExample)->withUi(
+            category: 'admin',
+            title: 'Create User',
+            tier: 'admin',
+            description: 'Create a new user account',
+            baseTemplate: 'user create',
+            fields: [FieldSpec::arg('username', 'Username', 'bob', true), FieldSpec::opt('key', 'Public key', '-k', 'ssh-ed25519 ...'), FieldSpec::boolOpt('admin', 'Administrator', '-a', false)],
+            scope: 'global',
+            order: 52,
+        ));
 
         $deleteLong = <<<'DESC'
 Permanently deletes a user account, along with their registered public keys and access tokens.
@@ -581,7 +754,16 @@ DESC;
   # Delete a user account
   {ssh} user delete alice
 EX;
-        $user->addChild($this->leaf('delete USERNAME', 'Delete a user', $deleteLong, [], [], $deleteExample));
+        $user->addChild($this->leaf('delete USERNAME', 'Delete a user', $deleteLong, [], [], $deleteExample)->withUi(
+            category: 'admin',
+            title: 'Delete User',
+            tier: 'admin',
+            description: 'Delete a user account',
+            baseTemplate: 'user delete',
+            fields: [FieldSpec::arg('username', 'Username', 'bob', true)],
+            scope: 'global',
+            order: 53,
+        ));
 
         $infoLong = <<<'DESC'
 Displays detailed information about a user: username, administrator status, and all registered public keys.
@@ -596,7 +778,16 @@ DESC;
   # Inspect account details for user alice
   {ssh} user info alice
 EX;
-        $user->addChild($this->leaf('info USERNAME', 'Show information about a user', $infoLong, [], [], $infoExample));
+        $user->addChild($this->leaf('info USERNAME', 'Show information about a user', $infoLong, [], [], $infoExample)->withUi(
+            category: 'admin',
+            title: 'User Info',
+            tier: 'admin',
+            description: 'Show user info',
+            baseTemplate: 'user info',
+            fields: [FieldSpec::arg('username', 'Username', 'alice', true)],
+            scope: 'global',
+            order: 51,
+        ));
 
         $listLong = <<<'DESC'
 Displays all registered user accounts on the server, showing administrator status and count of registered public keys.
@@ -608,7 +799,16 @@ DESC;
   # List all server users
   {ssh} user list
 EX;
-        $user->addChild($this->leaf('list', 'List users', $listLong, ['ls'], [], $listExample));
+        $user->addChild($this->leaf('list', 'List users', $listLong, ['ls'], [], $listExample)->withUi(
+            category: 'admin',
+            title: 'List Users',
+            tier: 'admin',
+            description: 'List user accounts',
+            baseTemplate: 'user list',
+            fields: [],
+            scope: 'global',
+            order: 50,
+        ));
 
         $removePubkeyLong = <<<'DESC'
 Removes a registered OpenSSH public key from a specified user account.
@@ -624,7 +824,16 @@ DESC;
   # Remove a public key from alice's account
   {ssh} user remove-pubkey alice "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... alice@laptop"
 EX;
-        $user->addChild($this->leaf('remove-pubkey USERNAME AUTHORIZED_KEY', 'Remove a public key from a user', $removePubkeyLong, [], [], $removePubkeyExample));
+        $user->addChild($this->leaf('remove-pubkey USERNAME AUTHORIZED_KEY', 'Remove a public key from a user', $removePubkeyLong, [], [], $removePubkeyExample)->withUi(
+            category: 'admin',
+            title: 'Remove User Public Key',
+            tier: 'admin',
+            description: 'Remove a public key from a user account',
+            baseTemplate: 'user remove-pubkey',
+            fields: [FieldSpec::arg('username', 'Target username', 'alice', true), FieldSpec::arg('key', 'Public Key', 'ssh-ed25519 AAA...', true)],
+            scope: 'global',
+            order: 56,
+        ));
 
         $setAdminLong = <<<'DESC'
 Promotes a user to server administrator, or revokes administrator privileges.
@@ -643,7 +852,16 @@ DESC;
   # Demote user to standard account
   {ssh} user set-admin alice false
 EX;
-        $user->addChild($this->leaf('set-admin USERNAME [true|false]', 'Make a user an admin', $setAdminLong, [], [], $setAdminExample));
+        $user->addChild($this->leaf('set-admin USERNAME [true|false]', 'Make a user an admin', $setAdminLong, [], [], $setAdminExample)->withUi(
+            category: 'admin',
+            title: 'Set Admin Status',
+            tier: 'admin',
+            description: 'Make a user an admin or revoke admin privileges',
+            baseTemplate: 'user set-admin',
+            fields: [FieldSpec::arg('username', 'Username', 'bob', true), FieldSpec::choiceArg('admin', 'Admin', ['true', 'false'], 'true')],
+            scope: 'global',
+            order: 54,
+        ));
 
         $setUsernameLong = <<<'DESC'
 Changes the username of an existing user account. Updates personal repository namespaces and paths.
@@ -659,7 +877,16 @@ DESC;
   # Rename a user account
   {ssh} user set-username alice alice-new
 EX;
-        $user->addChild($this->leaf('set-username USERNAME NEW_USERNAME', "Change a user's username", $setUsernameLong, [], [], $setUsernameExample));
+        $user->addChild($this->leaf('set-username USERNAME NEW_USERNAME', "Change a user's username", $setUsernameLong, [], [], $setUsernameExample)->withUi(
+            category: 'admin',
+            title: 'Change Username',
+            tier: 'admin',
+            description: "Change a user's username",
+            baseTemplate: 'user set-username',
+            fields: [FieldSpec::arg('username', 'Target username', 'alice', true), FieldSpec::arg('new-username', 'New username', 'alice-new', true)],
+            scope: 'global',
+            order: 57,
+        ));
 
         return $user;
     }
@@ -714,7 +941,21 @@ EX;
             new FlagSpec('c', 'color', '', 'Colorize output'),
             new FlagSpec('l', 'linenumber', '', 'Print line numbers'),
             new FlagSpec('r', 'raw', '', 'Print raw contents'),
-        ], $blobExample));
+        ], $blobExample)->withUi(
+            category: 'files',
+            title: 'Inspect File (Blob)',
+            tier: 'read',
+            description: 'Print file contents with optional highlighting and line numbers',
+            baseTemplate: 'repo blob {repo}',
+            fields: [
+                FieldSpec::arg('reference', 'Reference', 'HEAD'),
+                FieldSpec::arg('path', 'Path', 'README.md', true),
+                FieldSpec::boolOpt('color', 'Syntax highlight', '-c', true),
+                FieldSpec::boolOpt('lines', 'Line numbers', '-l', true),
+            ],
+            scope: 'repo',
+            order: 5,
+        ));
 
         $branchLong = <<<'DESC'
 List, delete, configure the default branch, and enforce branch protection rules in a repository.
@@ -751,7 +992,16 @@ DESC;
   # Set default branch to main
   {ssh} repo branch default my-app main
 EX;
-        $branch->addChild($this->leaf('default REPOSITORY [BRANCH]', 'Set or get the default branch', $branchDefaultLong, [], [], $branchDefaultExample));
+        $branch->addChild($this->leaf('default REPOSITORY [BRANCH]', 'Set or get the default branch', $branchDefaultLong, [], [], $branchDefaultExample)->withUi(
+            category: 'admin',
+            title: 'Default Branch',
+            tier: 'admin',
+            description: 'Set the default branch',
+            baseTemplate: 'repo branch default {repo}',
+            fields: [FieldSpec::arg('branch', 'Branch', 'main', true)],
+            scope: 'repo',
+            order: 25,
+        ));
 
         $branchDeleteLong = <<<'DESC'
 Deletes a remote branch ref. Rejects deletion if the branch is currently the default branch or if a branch protection rule prohibits deletion.
@@ -767,7 +1017,16 @@ DESC;
   # Delete a merged feature branch
   {ssh} repo branch delete my-app feature-old
 EX;
-        $branch->addChild($this->leaf('delete REPOSITORY BRANCH', 'Delete a branch', $branchDeleteLong, ['remove', 'rm', 'del'], [], $branchDeleteExample));
+        $branch->addChild($this->leaf('delete REPOSITORY BRANCH', 'Delete a branch', $branchDeleteLong, ['remove', 'rm', 'del'], [], $branchDeleteExample)->withUi(
+            category: 'admin',
+            title: 'Delete Branch',
+            tier: 'admin',
+            description: 'Delete a branch',
+            baseTemplate: 'repo branch delete {repo}',
+            fields: [FieldSpec::arg('branch', 'Branch', 'feature/x', true)],
+            scope: 'repo',
+            order: 28,
+        ));
 
         $branchListLong = <<<'DESC'
 Displays all branch refs in the repository, marking the current default branch (HEAD).
@@ -782,7 +1041,16 @@ DESC;
   # List all branches in a repository
   {ssh} repo branch list my-app
 EX;
-        $branch->addChild($this->leaf('list REPOSITORY', 'List repository branches', $branchListLong, [], [], $branchListExample));
+        $branch->addChild($this->leaf('list REPOSITORY', 'List repository branches', $branchListLong, [], [], $branchListExample)->withUi(
+            category: 'git',
+            title: 'List Branches',
+            tier: 'read',
+            description: 'List all repository branches',
+            baseTemplate: 'repo branch list {repo}',
+            fields: [],
+            scope: 'repo',
+            order: 9,
+        ));
 
         $branchProtectLong = <<<'DESC'
 Enforces push safeguards on branches matching a glob pattern via the server pre-receive hook. Protects production branches against accidental force-pushes or deletion.
@@ -813,7 +1081,21 @@ EX;
             new FlagSpec(null, 'no-force', '', 'reject non-fast-forward (force) updates'),
             new FlagSpec(null, 'no-delete', '', 'reject deletion of matching refs'),
             new FlagSpec(null, 'admins-only', '', 'only administrators may update matching refs'),
-        ], $branchProtectExample));
+        ], $branchProtectExample)->withUi(
+            category: 'admin',
+            title: 'Protect Branch',
+            tier: 'admin',
+            description: 'Add or update a branch protection rule',
+            baseTemplate: 'repo branch protect {repo}',
+            fields: [
+                FieldSpec::arg('pattern', 'Pattern', 'main', true),
+                FieldSpec::boolOpt('no-force', 'Block force-push', '--no-force', false),
+                FieldSpec::boolOpt('no-delete', 'Block deletion', '--no-delete', false),
+                FieldSpec::boolOpt('admins-only', 'Admins only', '--admins-only', false),
+            ],
+            scope: 'repo',
+            order: 26,
+        ));
 
         $branchUnprotectLong = <<<'DESC'
 Removes a previously configured branch protection rule matching PATTERN.
@@ -829,7 +1111,16 @@ DESC;
   # Remove protection from release branches
   {ssh} repo branch unprotect my-app "release/*"
 EX;
-        $branch->addChild($this->leaf('unprotect REPOSITORY PATTERN', 'Remove a branch protection rule', $branchUnprotectLong, [], [], $branchUnprotectExample));
+        $branch->addChild($this->leaf('unprotect REPOSITORY PATTERN', 'Remove a branch protection rule', $branchUnprotectLong, [], [], $branchUnprotectExample)->withUi(
+            category: 'admin',
+            title: 'Unprotect Branch',
+            tier: 'admin',
+            description: 'Remove a branch protection rule',
+            baseTemplate: 'repo branch unprotect {repo}',
+            fields: [FieldSpec::arg('pattern', 'Pattern', 'main', true)],
+            scope: 'repo',
+            order: 27,
+        ));
         $repo->addChild($branch);
 
         $collabLong = <<<'DESC'
@@ -884,6 +1175,18 @@ EX;
             [],
             [],
             $collabAddExample,
+        )->withUi(
+            category: 'admin',
+            title: 'Add Collaborator',
+            tier: 'admin',
+            description: 'Grant read, write, or admin access to a user',
+            baseTemplate: 'repo collab add {repo}',
+            fields: [
+                FieldSpec::arg('username', 'Username', 'alice', true),
+                FieldSpec::choiceArg('level', 'Access level', ['read-only', 'read-write', 'admin-access'], 'read-write'),
+            ],
+            scope: 'repo',
+            order: 23,
         ));
 
         $collabListLong = <<<'DESC'
@@ -899,7 +1202,16 @@ DESC;
   # List all collaborators on a repository
   {ssh} repo collab list my-app
 EX;
-        $collab->addChild($this->leaf('list REPOSITORY', 'List collaborators for a repo', $collabListLong, [], [], $collabListExample));
+        $collab->addChild($this->leaf('list REPOSITORY', 'List collaborators for a repo', $collabListLong, [], [], $collabListExample)->withUi(
+            category: 'admin',
+            title: 'List Collaborators',
+            tier: 'admin',
+            description: 'List users with access to this repository',
+            baseTemplate: 'repo collab list {repo}',
+            fields: [],
+            scope: 'repo',
+            order: 22,
+        ));
 
         $collabRemoveLong = <<<'DESC'
 Removes explicit collaboration permissions for a user from the repository.
@@ -915,7 +1227,16 @@ DESC;
   # Remove a collaborator
   {ssh} repo collab remove my-app bob
 EX;
-        $collab->addChild($this->leaf('remove REPOSITORY USERNAME', 'Remove a collaborator from a repo', $collabRemoveLong, [], [], $collabRemoveExample));
+        $collab->addChild($this->leaf('remove REPOSITORY USERNAME', 'Remove a collaborator from a repo', $collabRemoveLong, [], [], $collabRemoveExample)->withUi(
+            category: 'admin',
+            title: 'Remove Collaborator',
+            tier: 'admin',
+            description: "Revoke a user's access",
+            baseTemplate: 'repo collab remove {repo}',
+            fields: [FieldSpec::arg('username', 'Username', 'alice', true)],
+            scope: 'repo',
+            order: 24,
+        ));
         $repo->addChild($collab);
 
         $commitLong = <<<'DESC'
@@ -945,7 +1266,16 @@ EX;
         $repo->addChild($this->leaf('commit repo SHA', 'Print out the contents of a diff', $commitLong, [], [
             new FlagSpec('c', 'color', '', 'Colorize output'),
             new FlagSpec('p', 'patch', '', 'Output patch only'),
-        ], $commitExample));
+        ], $commitExample)->withUi(
+            category: 'git',
+            title: 'Commit Log',
+            tier: 'read',
+            description: 'View commit history and authors',
+            baseTemplate: 'repo commit {repo}',
+            fields: [FieldSpec::arg('ref', 'Commit / ref', 'HEAD')],
+            scope: 'repo',
+            order: 7,
+        ));
 
         $createLong = <<<'DESC'
 Initializes a new bare Git repository on codes.sh. The authenticated creator automatically becomes the repository owner with full admin permissions.
@@ -975,7 +1305,20 @@ DESC;
   # Create a hidden repository
   {ssh} repo create secret-tool --private --hidden
 EX;
-        $repo->addChild($this->leaf('create REPOSITORY', 'Create a new repository', $createLong, [], $this->repoWriteFlags(), $createExample));
+        $repo->addChild($this->leaf('create REPOSITORY', 'Create a new repository', $createLong, [], $this->repoWriteFlags(), $createExample)->withUi(
+            category: 'repos',
+            title: 'Create Repository',
+            tier: 'write',
+            description: 'Create a new repository',
+            baseTemplate: 'repo create',
+            fields: [
+                FieldSpec::arg('name', 'Repository name', 'my-repo', true),
+                FieldSpec::boolOpt('private', 'Private repository', '-p', false),
+                FieldSpec::opt('description', 'Description', '-d', 'A short summary'),
+            ],
+            scope: 'global',
+            order: 1,
+        ));
 
         $deleteLong = <<<'DESC'
 Permanently deletes a bare Git repository from disk, including all branches, tags, collaborator permissions, branch protection rules, and webhooks. Irreversible.
@@ -990,7 +1333,16 @@ DESC;
   # Delete a repository
   {ssh} repo delete obsolete-project
 EX;
-        $repo->addChild($this->leaf('delete REPOSITORY', 'Delete a repository', $deleteLong, ['del', 'remove', 'rm'], [], $deleteExample));
+        $repo->addChild($this->leaf('delete REPOSITORY', 'Delete a repository', $deleteLong, ['del', 'remove', 'rm'], [], $deleteExample)->withUi(
+            category: 'admin',
+            title: 'Delete Repository',
+            tier: 'admin',
+            description: 'Permanently delete this repository',
+            baseTemplate: 'repo delete {repo}',
+            fields: [],
+            scope: 'repo',
+            order: 21,
+        ));
 
         $descriptionLong = <<<'DESC'
 Gets the repository description, or updates it if DESCRIPTION is provided.
@@ -1009,7 +1361,16 @@ DESC;
   # Set new description
   {ssh} repo description my-app "High-performance distributed storage engine"
 EX;
-        $repo->addChild($this->leaf('description REPOSITORY [DESCRIPTION]', 'Set or get the description for a repository', $descriptionLong, ['desc'], [], $descriptionExample));
+        $repo->addChild($this->leaf('description REPOSITORY [DESCRIPTION]', 'Set or get the description for a repository', $descriptionLong, ['desc'], [], $descriptionExample)->withUi(
+            category: 'admin',
+            title: 'Set Description',
+            tier: 'admin',
+            description: 'Set the repository description',
+            baseTemplate: 'repo description {repo}',
+            fields: [FieldSpec::arg('text', 'Description', 'A short summary', true)],
+            scope: 'repo',
+            order: 14,
+        ));
 
         $diffLong = <<<'DESC'
 Generates a unified diff comparing two Git commits, branches, or tags. If TO is omitted, displays the changeset introduced by commit FROM relative to its parent.
@@ -1032,7 +1393,19 @@ DESC;
   # View changes introduced by a specific commit
   {ssh} repo diff my-app HEAD~1
 EX;
-        $repo->addChild($this->leaf('diff REPOSITORY FROM [TO]', 'Print the diff between two references', $diffLong, [], [], $diffExample));
+        $repo->addChild($this->leaf('diff REPOSITORY FROM [TO]', 'Print the diff between two references', $diffLong, [], [], $diffExample)->withUi(
+            category: 'git',
+            title: 'Inspect Diff',
+            tier: 'read',
+            description: 'Inspect changes between two references',
+            baseTemplate: 'repo diff {repo}',
+            fields: [
+                FieldSpec::arg('from', 'From', 'HEAD~1', true, 'HEAD~1'),
+                FieldSpec::arg('to', 'To', 'HEAD', false, 'HEAD'),
+            ],
+            scope: 'repo',
+            order: 8,
+        ));
 
         $forkLong = <<<'DESC'
 Creates a server-side fork of an existing Git repository. You become the owner and administrator of the newly created fork.
@@ -1057,7 +1430,16 @@ DESC;
   # Fork into a custom repository name and make it private
   {ssh} repo fork upstream-project my-custom-fork --private
 EX;
-        $repo->addChild($this->leaf('fork SOURCE [NEW_NAME]', 'Fork an existing repository', $forkLong, [], $this->repoWriteFlags(), $forkExample));
+        $repo->addChild($this->leaf('fork SOURCE [NEW_NAME]', 'Fork an existing repository', $forkLong, [], $this->repoWriteFlags(), $forkExample)->withUi(
+            category: 'write',
+            title: 'Fork Repository',
+            tier: 'write',
+            description: 'Create a personal fork of this repository',
+            baseTemplate: 'repo fork {repo}',
+            fields: [FieldSpec::arg('new-name', 'New name', 'my-fork')],
+            scope: 'repo',
+            order: 12,
+        ));
 
         $grepLong = <<<'DESC'
 Searches tracked repository files using Git regular expressions at the specified Git reference.
@@ -1080,7 +1462,19 @@ DESC;
   # Search using a regex pattern on a release tag
   {ssh} repo grep my-app "class [A-Z][a-zA-Z]+" v2.0.0
 EX;
-        $repo->addChild($this->leaf('grep REPOSITORY PATTERN [REFERENCE]', 'Search repository contents', $grepLong, ['search'], [], $grepExample));
+        $repo->addChild($this->leaf('grep REPOSITORY PATTERN [REFERENCE]', 'Search repository contents', $grepLong, ['search'], [], $grepExample)->withUi(
+            category: 'files',
+            title: 'Code Search (Grep)',
+            tier: 'read',
+            description: 'Search a regex pattern across repository files',
+            baseTemplate: 'repo grep {repo}',
+            fields: [
+                FieldSpec::arg('pattern', 'Pattern', 'TODO|FIXME', true),
+                FieldSpec::arg('reference', 'Reference', 'HEAD'),
+            ],
+            scope: 'repo',
+            order: 6,
+        ));
 
         $hiddenLong = <<<'DESC'
 Gets or sets whether the repository is hidden from the interactive TUI repository list and public web catalog. Does not alter Git clone or push permissions.
@@ -1102,7 +1496,16 @@ DESC;
   # Unhide repository
   {ssh} repo hidden my-app false
 EX;
-        $repo->addChild($this->leaf('hidden REPOSITORY [TRUE|FALSE]', 'Hide or unhide a repository', $hiddenLong, ['hide'], [], $hiddenExample));
+        $repo->addChild($this->leaf('hidden REPOSITORY [TRUE|FALSE]', 'Hide or unhide a repository', $hiddenLong, ['hide'], [], $hiddenExample)->withUi(
+            category: 'admin',
+            title: 'Hidden Toggle',
+            tier: 'admin',
+            description: 'Hide or unhide the repository from listings',
+            baseTemplate: 'repo hidden {repo}',
+            fields: [FieldSpec::choiceArg('value', 'Hidden', ['true', 'false'], 'true')],
+            scope: 'repo',
+            order: 18,
+        ));
 
         $importLong = <<<'DESC'
 Imports an external Git repository from a remote URL over HTTP, HTTPS, or Git protocols. Can configure full mirror synchronization and download Git LFS objects.
@@ -1141,7 +1544,16 @@ EX;
             new FlagSpec('d', 'description', 'string', 'set the repository description'),
             new FlagSpec('n', 'name', 'string', 'set the project name'),
             new FlagSpec('H', 'hidden', '', 'hide the repository from the UI'),
-        ], $importExample));
+        ], $importExample)->withUi(
+            category: 'write',
+            title: 'Import Mirror',
+            tier: 'write',
+            description: 'Import or refresh this repository from a remote',
+            baseTemplate: 'repo import {repo}',
+            fields: [FieldSpec::arg('remote', 'Remote URL', 'https://github.com/owner/repo.git', true)],
+            scope: 'repo',
+            order: 13,
+        ));
 
         $infoRepoLong = <<<'DESC'
 Displays detailed metadata and statistics for a repository: visibility (public/private), hidden state, default branch, commit count, branch count, tag count, and clone URLs.
@@ -1156,7 +1568,16 @@ DESC;
   # Show metadata for a repository
   {ssh} repo info my-app
 EX;
-        $repo->addChild($this->leaf('info REPOSITORY', 'Get information about a repository', $infoRepoLong, [], [], $infoRepoExample));
+        $repo->addChild($this->leaf('info REPOSITORY', 'Get information about a repository', $infoRepoLong, [], [], $infoRepoExample)->withUi(
+            category: 'explore',
+            title: 'Repository Info',
+            tier: 'read',
+            description: 'Display metadata, default branch, disk usage and statistics',
+            baseTemplate: 'repo info {repo}',
+            fields: [],
+            scope: 'repo',
+            order: 2,
+        ));
 
         $listRepoLong = <<<'DESC'
 Lists repositories available on the server. Non-admin users see public repositories and private repositories where they are collaborators. Server administrators with --all see all repositories.
@@ -1176,7 +1597,16 @@ DESC;
 EX;
         $repo->addChild($this->leaf('list', 'List repositories', $listRepoLong, ['ls'], [
             new FlagSpec('a', 'all', '', 'List all repositories'),
-        ], $listRepoExample));
+        ], $listRepoExample)->withUi(
+            category: 'repos',
+            title: 'List Repositories',
+            tier: 'read',
+            description: 'List accessible repositories',
+            baseTemplate: 'repo list',
+            fields: [FieldSpec::boolOpt('all', 'All repositories (admin)', '-a', false)],
+            scope: 'global',
+            order: 1,
+        ));
 
         $mirrorLong = <<<'DESC'
 Gets or sets whether the repository acts as an exact Git mirror of an upstream remote.
@@ -1195,7 +1625,16 @@ DESC;
   # Enable mirror property
   {ssh} repo mirror my-app true
 EX;
-        $repo->addChild($this->leaf('mirror REPOSITORY [true|false]', 'Set or get a repository mirror property', $mirrorLong, [], [], $mirrorExample));
+        $repo->addChild($this->leaf('mirror REPOSITORY [true|false]', 'Set or get a repository mirror property', $mirrorLong, [], [], $mirrorExample)->withUi(
+            category: 'admin',
+            title: 'Mirror Toggle',
+            tier: 'admin',
+            description: 'Set or get the mirror property',
+            baseTemplate: 'repo mirror {repo}',
+            fields: [FieldSpec::choiceArg('value', 'Mirror', ['true', 'false'], 'true')],
+            scope: 'repo',
+            order: 19,
+        ));
 
         $privateLong = <<<'DESC'
 Gets or sets whether the repository is private. Private repositories are hidden from public listings and can only be cloned or pushed by collaborators and server admins.
@@ -1217,7 +1656,16 @@ DESC;
   # Make repository public
   {ssh} repo private my-app false
 EX;
-        $repo->addChild($this->leaf('private REPOSITORY [true|false]', 'Set or get a repository private property', $privateLong, [], [], $privateExample));
+        $repo->addChild($this->leaf('private REPOSITORY [true|false]', 'Set or get a repository private property', $privateLong, [], [], $privateExample)->withUi(
+            category: 'admin',
+            title: 'Private Toggle',
+            tier: 'admin',
+            description: 'Make the repository private or public',
+            baseTemplate: 'repo private {repo}',
+            fields: [FieldSpec::choiceArg('value', 'Private', ['true', 'false'], 'true')],
+            scope: 'repo',
+            order: 17,
+        ));
 
         $projectNameLong = <<<'DESC'
 Gets the human-readable project title, or updates it if NAME is provided. Displayed in TUI and web interface headers.
@@ -1236,7 +1684,16 @@ DESC;
   # Set display title
   {ssh} repo project-name my-app "Storage Engine"
 EX;
-        $repo->addChild($this->leaf('project-name REPOSITORY [NAME]', 'Set or get the project name for a repository', $projectNameLong, ['project'], [], $projectNameExample));
+        $repo->addChild($this->leaf('project-name REPOSITORY [NAME]', 'Set or get the project name for a repository', $projectNameLong, ['project'], [], $projectNameExample)->withUi(
+            category: 'admin',
+            title: 'Set Project Name',
+            tier: 'admin',
+            description: 'Set the human-friendly project name',
+            baseTemplate: 'repo project-name {repo}',
+            fields: [FieldSpec::arg('name', 'Project name', 'My Project', true)],
+            scope: 'repo',
+            order: 15,
+        ));
 
         $readmeLong = <<<'DESC'
 Locates and prints the repository README file (e.g. README.md, README.org, README.txt) at the specified Git reference.
@@ -1258,7 +1715,16 @@ DESC;
   # Print README from a release tag
   {ssh} repo readme my-app v1.0.0
 EX;
-        $repo->addChild($this->leaf('readme REPOSITORY [REFERENCE]', 'Print the repository README', $readmeLong, [], [], $readmeExample));
+        $repo->addChild($this->leaf('readme REPOSITORY [REFERENCE]', 'Print the repository README', $readmeLong, [], [], $readmeExample)->withUi(
+            category: 'explore',
+            title: 'View README',
+            tier: 'read',
+            description: 'Print the repository README in the terminal',
+            baseTemplate: 'repo readme {repo}',
+            fields: [FieldSpec::arg('reference', 'Reference', 'HEAD')],
+            scope: 'repo',
+            order: 3,
+        ));
 
         $renameLong = <<<'DESC'
 Renames a repository and moves its bare Git directory on disk. SSH and HTTP clone URLs are immediately updated to the new name.
@@ -1277,7 +1743,16 @@ DESC;
   # Rename a repository
   {ssh} repo rename old-project new-project
 EX;
-        $repo->addChild($this->leaf('rename REPOSITORY NEW_NAME', 'Rename an existing repository', $renameLong, ['mv', 'move'], [], $renameExample));
+        $repo->addChild($this->leaf('rename REPOSITORY NEW_NAME', 'Rename an existing repository', $renameLong, ['mv', 'move'], [], $renameExample)->withUi(
+            category: 'admin',
+            title: 'Rename Repository',
+            tier: 'admin',
+            description: 'Rename this repository',
+            baseTemplate: 'repo rename {repo}',
+            fields: [FieldSpec::arg('new-name', 'New name', 'new-name', true)],
+            scope: 'repo',
+            order: 16,
+        ));
 
         $tagLong = <<<'DESC'
 List and delete Git release and annotated tags in a repository.
@@ -1308,7 +1783,16 @@ DESC;
   # Delete a tag
   {ssh} repo tag delete my-app v1.0.0-rc1
 EX;
-        $tag->addChild($this->leaf('delete REPOSITORY TAG', 'Delete a tag', $tagDeleteLong, ['remove', 'rm', 'del'], [], $tagDeleteExample));
+        $tag->addChild($this->leaf('delete REPOSITORY TAG', 'Delete a tag', $tagDeleteLong, ['remove', 'rm', 'del'], [], $tagDeleteExample)->withUi(
+            category: 'admin',
+            title: 'Delete Tag',
+            tier: 'admin',
+            description: 'Delete a tag',
+            baseTemplate: 'repo tag delete {repo}',
+            fields: [FieldSpec::arg('tag', 'Tag', 'v1.0.0', true)],
+            scope: 'repo',
+            order: 29,
+        ));
 
         $tagListLong = <<<'DESC'
 Displays all Git tags (lightweight and annotated) existing in the repository.
@@ -1323,7 +1807,16 @@ DESC;
   # List all tags
   {ssh} repo tag list my-app
 EX;
-        $tag->addChild($this->leaf('list REPOSITORY', 'List repository tags', $tagListLong, ['ls'], [], $tagListExample));
+        $tag->addChild($this->leaf('list REPOSITORY', 'List repository tags', $tagListLong, ['ls'], [], $tagListExample)->withUi(
+            category: 'git',
+            title: 'List Tags',
+            tier: 'read',
+            description: 'List all repository tags',
+            baseTemplate: 'repo tag list {repo}',
+            fields: [],
+            scope: 'repo',
+            order: 10,
+        ));
         $repo->addChild($tag);
 
         $treeLong = <<<'DESC'
@@ -1347,7 +1840,19 @@ DESC;
   # List tree at specific commit
   {ssh} repo tree my-app 8a3f12c config/
 EX;
-        $repo->addChild($this->leaf('tree REPOSITORY [REFERENCE] [PATH]', 'Print repository tree at path', $treeLong, [], [], $treeExample));
+        $repo->addChild($this->leaf('tree REPOSITORY [REFERENCE] [PATH]', 'Print repository tree at path', $treeLong, [], [], $treeExample)->withUi(
+            category: 'files',
+            title: 'File Tree',
+            tier: 'read',
+            description: 'Browse repository files and directory tree',
+            baseTemplate: 'repo tree {repo}',
+            fields: [
+                FieldSpec::arg('reference', 'Reference', 'HEAD'),
+                FieldSpec::arg('path', 'Path', 'src/'),
+            ],
+            scope: 'repo',
+            order: 4,
+        ));
 
         $signaturesLong = <<<'DESC'
 Enforces that all commits pushed to the repository must carry valid, cryptographically verified GPG or SSH signatures. Non-signed commits are rejected by the pre-receive server hook.
@@ -1369,7 +1874,28 @@ DESC;
   # Allow unsigned commits
   {ssh} repo signatures my-app false
 EX;
-        $repo->addChild($this->leaf('signatures REPOSITORY [true|false]', 'Require or check verified signed commits on push', $signaturesLong, [], [], $signaturesExample));
+        $signaturesLeaf = $this->leaf('signatures REPOSITORY [true|false]', 'Require or check verified signed commits on push', $signaturesLong, [], [], $signaturesExample);
+        $signaturesLeaf->addUi(new CommandUiSpec(
+            category: 'git',
+            tier: 'read',
+            title: 'Commit Signatures',
+            description: 'Show the signed-commit enforcement status',
+            baseTemplate: 'repo signatures {repo}',
+            fields: [],
+            scope: 'repo',
+            order: 11,
+        ));
+        $signaturesLeaf->addUi(new CommandUiSpec(
+            category: 'admin',
+            tier: 'admin',
+            title: 'Require Signatures',
+            description: 'Require verified signed commits on push',
+            baseTemplate: 'repo signatures {repo}',
+            fields: [FieldSpec::choiceArg('value', 'Required', ['true', 'false'], 'true')],
+            scope: 'repo',
+            order: 20,
+        ));
+        $repo->addChild($signaturesLeaf);
 
         $repo->addChild($this->webhook());
 
@@ -1441,7 +1967,22 @@ EX;
             new FlagSpec('c', 'content-type', 'json', 'content type of the webhook payload, can be either json or `form`', '"json"'),
             new FlagSpec('e', 'events', 'strings', $events),
             new FlagSpec('s', 'secret', 'string', 'secret to sign the webhook payload'),
-        ], $createExample));
+        ], $createExample)->withUi(
+            category: 'admin',
+            title: 'Create Webhook',
+            tier: 'admin',
+            description: 'Register an HTTP webhook endpoint',
+            baseTemplate: 'repo webhook create {repo}',
+            fields: [
+                FieldSpec::arg('url', 'Payload URL', 'https://example.com/hook', true),
+                FieldSpec::opt('events', 'Events', '-e', 'push,pull_request', 'push'),
+                FieldSpec::opt('secret', 'Secret', '-s', 'shared-secret'),
+                FieldSpec::choiceOpt('content-type', 'Content type', '-c', ['json', 'form'], 'json'),
+                FieldSpec::choiceOpt('active', 'Active', '-a', ['true', 'false'], 'true'),
+            ],
+            scope: 'repo',
+            order: 31,
+        ));
 
         $deleteLong = <<<'DESC'
 Permanently deletes a repository webhook by its numeric identifier.
@@ -1457,7 +1998,16 @@ DESC;
   # Delete webhook #2
   {ssh} repo webhook delete my-app 2
 EX;
-        $webhook->addChild($this->leaf('delete REPOSITORY WEBHOOK_ID', 'Delete a repository webhook', $deleteLong, [], [], $deleteExample));
+        $webhook->addChild($this->leaf('delete REPOSITORY WEBHOOK_ID', 'Delete a repository webhook', $deleteLong, [], [], $deleteExample)->withUi(
+            category: 'admin',
+            title: 'Delete Webhook',
+            tier: 'admin',
+            description: 'Remove a webhook by id',
+            baseTemplate: 'repo webhook delete {repo}',
+            fields: [FieldSpec::arg('webhook-id', 'Webhook id', '42', true)],
+            scope: 'repo',
+            order: 32,
+        ));
 
         $listLong = <<<'DESC'
 Displays all configured webhooks for a repository, including webhook ID, target URL, subscribed events, payload format, and active status.
@@ -1472,7 +2022,16 @@ DESC;
   # List all webhooks for a repository
   {ssh} repo webhook list my-app
 EX;
-        $webhook->addChild($this->leaf('list REPOSITORY', 'List repository webhooks', $listLong, [], [], $listExample));
+        $webhook->addChild($this->leaf('list REPOSITORY', 'List repository webhooks', $listLong, [], [], $listExample)->withUi(
+            category: 'admin',
+            title: 'List Webhooks',
+            tier: 'admin',
+            description: 'List configured HTTP webhook endpoints',
+            baseTemplate: 'repo webhook list {repo}',
+            fields: [],
+            scope: 'repo',
+            order: 30,
+        ));
 
         return $webhook;
     }

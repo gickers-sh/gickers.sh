@@ -18,14 +18,18 @@ final class CommandSpec
     /** @var list<CommandSpec> */
     public array $children = [];
 
+    /** @var list<CommandUiSpec> */
+    public array $uiSpecs = [];
+
     /**
-     * @param string         $name     command name (first word of Use)
-     * @param string         $use      full cobra Use string, e.g. "create REPOSITORY"
-     * @param list<string>   $aliases  aliases excluding the name itself
-     * @param list<FlagSpec> $flags    declared flags, excluding the implicit --help
-     * @param bool           $runnable whether the command has a run action (leaf) vs. being a pure group
-     * @param bool           $hidden   whether the command is hidden from help and listings
-     * @param string         $example  example usage text (supports {ssh} substitution)
+     * @param string              $name     command name (first word of Use)
+     * @param string              $use      full cobra Use string, e.g. "create REPOSITORY"
+     * @param list<string>        $aliases  aliases excluding the name itself
+     * @param list<FlagSpec>      $flags    declared flags, excluding the implicit --help
+     * @param bool                $runnable whether the command has a run action (leaf) vs. being a pure group
+     * @param bool                $hidden   whether the command is hidden from help and listings
+     * @param string              $example  example usage text (supports {ssh} substitution)
+     * @param list<CommandUiSpec> $uiSpecs  optional web/interactive presentation definitions
      */
     public function __construct(
         public string $name,
@@ -37,7 +41,38 @@ final class CommandSpec
         public bool $runnable = false,
         public bool $hidden = false,
         public string $example = '',
-    ) {}
+        array $uiSpecs = [],
+    ) {
+        $this->uiSpecs = $uiSpecs;
+    }
+
+    public function addUi(CommandUiSpec $ui): self
+    {
+        $this->uiSpecs[] = $ui;
+
+        return $this;
+    }
+
+    /**
+     * @param list<FieldSpec> $fields
+     */
+    public function withUi(
+        string $category,
+        string $title,
+        string $tier = 'read',
+        string $description = '',
+        ?string $baseTemplate = null,
+        array $fields = [],
+        string $scope = 'repo',
+        int $order = 0,
+    ): self {
+        $desc = '' !== $description ? $description : $this->short;
+        $base = $baseTemplate ?? trim($this->commandPath());
+
+        $this->uiSpecs[] = new CommandUiSpec($category, $tier, $title, $desc, $base, $fields, $scope, $order);
+
+        return $this;
+    }
 
     public function addChild(self $child): self
     {
