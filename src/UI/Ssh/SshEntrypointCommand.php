@@ -175,7 +175,7 @@ final class SshEntrypointCommand extends Command
             // Help routing: `help [path…]`, a trailing `--help`/`-h`, or a bare
             // command group all render cobra-style usage, matching upstream.
             $isAdmin = null !== $user && $user->isAdmin();
-            $helpOutput = $this->renderHelp($tokens, $firstToken, $unknownKey, $isAdmin);
+            $helpOutput = $this->renderHelp($tokens, $firstToken, $unknownKey, $isAdmin, $output);
             if (null !== $helpOutput) {
                 $output->write($helpOutput, false, OutputInterface::OUTPUT_RAW);
 
@@ -183,7 +183,7 @@ final class SshEntrypointCommand extends Command
             }
 
             // CLI application routing
-            return $this->cliApplication->runWithTokens($tokens, $output);
+            return $this->cliApplication->runWithTokens($tokens, $output, $input);
         } catch (\Throwable $e) {
             return $this->exceptionRenderer->render($e, $output);
         }
@@ -198,18 +198,26 @@ final class SshEntrypointCommand extends Command
      *
      * @param list<string> $tokens
      */
-    private function renderHelp(array $tokens, string $firstToken, bool $unknownKey, bool $isAdmin): ?string
+    private function renderHelp(array $tokens, string $firstToken, bool $unknownKey, bool $isAdmin, OutputInterface $output): ?string
     {
-        $wantsHelpFlag = in_array('--help', $tokens, true) || in_array('-h', $tokens, true);
+        $decorated = $this->shouldDecorateHelp($tokens, $output);
 
-        if ('help' !== $firstToken && !$wantsHelpFlag) {
+        $cleanTokens = array_values(array_filter(
+            $tokens,
+            static fn (string $t): bool => !in_array($t, ['--color', '--color=always', '--color=never', '--no-color'], true)
+        ));
+
+        $cleanFirstToken = $cleanTokens[0] ?? '';
+        $wantsHelpFlag = in_array('--help', $cleanTokens, true) || in_array('-h', $cleanTokens, true);
+
+        if ('help' !== $cleanFirstToken && !$wantsHelpFlag) {
             // A bare command group (no subcommand, no args) prints its help.
-            [$node, $consumed] = $this->commandCatalog->resolvePrefix($tokens, $isAdmin);
-            if ($consumed !== count($tokens) || $node->runnable || !$node->hasChildren()) {
+            [$node, $consumed] = $this->commandCatalog->resolvePrefix($cleanTokens, $isAdmin);
+            if ($consumed !== count($cleanTokens) || $node->runnable || !$node->hasChildren()) {
                 return null;
             }
-        } elseif ('help' === $firstToken) {
-            $helpTokens = array_slice($tokens, 1);
+        } elseif ('help' === $cleanFirstToken) {
+            $helpTokens = array_slice($cleanTokens, 1);
             if ([] !== $helpTokens) {
                 // If target command does not exist in the user's visible catalog, reject it
                 if (null === $this->commandCatalog->resolve($helpTokens, $isAdmin)) {
@@ -220,11 +228,11 @@ final class SshEntrypointCommand extends Command
         } else {
             // e.g. `<command> --help`
             // Verify that the command prefix itself exists in the user's catalog
-            $cmdTokens = array_values(array_filter($tokens, static fn(string $t): bool => !str_starts_with($t, '-')));
+            $cmdTokens = array_values(array_filter($cleanTokens, static fn (string $t): bool => !str_starts_with($t, '-')));
             if ([] !== $cmdTokens && null === $this->commandCatalog->resolve($cmdTokens, $isAdmin)) {
                 throw new InvalidInput('Unknown command');
             }
-            [$node] = $this->commandCatalog->resolvePrefix($tokens, $isAdmin);
+            [$node] = $this->commandCatalog->resolvePrefix($cleanTokens, $isAdmin);
         }
 
         if ($unknownKey && $node === $this->commandCatalog->root($isAdmin)) {
@@ -233,7 +241,46 @@ final class SshEntrypointCommand extends Command
 
         $sshCommand = Help\HelpRenderer::sshCommandFromPublicUrl($this->serverSettings->sshPublicUrl);
 
-        return $this->helpRenderer->render($node, $sshCommand);
+        return $this->helpRenderer->render($node, $sshCommand, $decorated);
+    }
+
+    /**
+     * @param list<string> $tokens
+     */
+    private function shouldDecorateHelp(array $tokens, OutputInterface $output): bool
+    {
+        if (in_array('--color', $tokens, true) || in_array('--color=always', $tokens, true)) {
+            return true;
+        }
+        if (in_array('--no-color', $tokens, true) || in_array('--color=never', $tokens, true)) {
+            return false;
+        }
+
+        $noColor = $_SERVER['NO_COLOR'] ?? $_ENV['NO_COLOR'] ?? getenv('NO_COLOR');
+        if (false !== $noColor && '' !== $noColor) {
+            return false;
+        }
+
+        $term = $_SERVER['TERM'] ?? $_ENV['TERM'] ?? getenv('TERM');
+        if ('dumb' === $term) {
+            return false;
+        }
+
+        $cliColorForce = $_SERVER['CLICOLOR_FORCE'] ?? $_ENV['CLICOLOR_FORCE'] ?? getenv('CLICOLOR_FORCE');
+        if (false !== $cliColorForce && '' !== $cliColorForce && '0' !== $cliColorForce) {
+            return true;
+        }
+
+        $sshTty = $_SERVER['SSH_TTY'] ?? $_ENV['SSH_TTY'] ?? getenv('SSH_TTY');
+        if (false !== $sshTty && '' !== $sshTty) {
+            return true;
+        }
+
+        if ($output->isDecorated()) {
+            return true;
+        }
+
+        return @posix_isatty(\STDOUT);
     }
 
     /**
@@ -249,10 +296,15 @@ final class SshEntrypointCommand extends Command
             return true;
         }
 
-        return ['help'] === $tokens
-            || ['help', 'signup'] === $tokens
-            || ['-h'] === $tokens
-            || ['--help'] === $tokens;
+        $filtered = array_values(array_filter(
+            $tokens,
+            static fn (string $t): bool => !in_array($t, ['--color', '--color=always', '--color=never', '--no-color'], true)
+        ));
+
+        return ['help'] === $filtered
+            || ['help', 'signup'] === $filtered
+            || ['-h'] === $filtered
+            || ['--help'] === $filtered;
     }
 
     private function resolveFingerprint(InputInterface $input): ?string
@@ -316,7 +368,7 @@ final class SshEntrypointCommand extends Command
         }
 
         if ('test' === ($app instanceof \Symfony\Bundle\FrameworkBundle\Console\Application ? $app->getKernel()->getEnvironment() : '') || !@posix_isatty(\STDIN)) {
-            $output->writeln(sprintf('Launch TUI%s', null !== $initialRepo ? ' for ' . $initialRepo : ''), OutputInterface::OUTPUT_RAW);
+            $output->writeln(sprintf('Launch TUI%s', null !== $initialRepo ? ' for '.$initialRepo : ''), OutputInterface::OUTPUT_RAW);
 
             return Command::SUCCESS;
         }

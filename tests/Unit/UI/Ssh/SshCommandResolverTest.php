@@ -39,6 +39,7 @@ final class SshCommandResolverTest extends TestCase
             'pubkey:list',
             'token:list',
             'info',
+            'about',
         ];
 
         $aliases = [
@@ -54,6 +55,19 @@ final class SshCommandResolverTest extends TestCase
         ];
 
         $this->resolver = new SshCommandResolver($canonical, $aliases);
+    }
+
+    public function testResolveAboutCommand(): void
+    {
+        $res = $this->resolver->resolve(['about']);
+        $this->assertNotNull($res);
+        $this->assertSame('about', $res->name);
+        $this->assertSame([], $res->arguments);
+
+        $resWithArgs = $this->resolver->resolve(['about', '--width', '100']);
+        $this->assertNotNull($resWithArgs);
+        $this->assertSame('about', $resWithArgs->name);
+        $this->assertSame(['--width', '100'], $resWithArgs->arguments);
     }
 
     public function testLongestPrefixMatching(): void

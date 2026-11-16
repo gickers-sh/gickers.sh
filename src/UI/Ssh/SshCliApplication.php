@@ -9,6 +9,8 @@ use Psr\Container\ContainerInterface;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\CommandLoader\ContainerCommandLoader;
 use Symfony\Component\Console\Input\ArgvInput;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\StreamableInputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\DependencyInjection\Attribute\AutowireLocator;
 use Symfony\Contracts\Service\ServiceProviderInterface;
@@ -63,7 +65,7 @@ class SshCliApplication extends Application
         return $this->resolver;
     }
 
-    protected function configureIO(\Symfony\Component\Console\Input\InputInterface $input, OutputInterface $output): void
+    protected function configureIO(InputInterface $input, OutputInterface $output): void
     {
         $output->setVerbosity(OutputInterface::VERBOSITY_NORMAL);
         if ($input->hasParameterOption(['--quiet', '-q'], true)) {
@@ -84,7 +86,7 @@ class SshCliApplication extends Application
     /**
      * @param list<string> $tokens
      */
-    public function runWithTokens(array $tokens, OutputInterface $output): int
+    public function runWithTokens(array $tokens, OutputInterface $output, ?InputInterface $parentInput = null): int
     {
         $resolved = $this->resolver->resolve($tokens);
         if (null === $resolved) {
@@ -93,6 +95,9 @@ class SshCliApplication extends Application
 
         $argv = ['ssh', $resolved->name, ...$resolved->arguments];
         $input = new ArgvInput($argv);
+        if ($parentInput instanceof StreamableInputInterface && null !== $parentInput->getStream()) {
+            $input->setStream($parentInput->getStream());
+        }
 
         return $this->run($input, $output);
     }

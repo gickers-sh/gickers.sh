@@ -47,5 +47,6 @@ final class SshCliIsolationTest extends KernelTestCase
 
         // Must contain repo:create, etc.
         $this->assertArrayHasKey('repo:create', $sshApp->all());
+        $this->assertArrayHasKey('about', $sshApp->all());
     }
 }

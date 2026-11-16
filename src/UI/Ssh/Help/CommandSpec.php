@@ -24,6 +24,8 @@ final class CommandSpec
      * @param list<string>   $aliases  aliases excluding the name itself
      * @param list<FlagSpec> $flags    declared flags, excluding the implicit --help
      * @param bool           $runnable whether the command has a run action (leaf) vs. being a pure group
+     * @param bool           $hidden   whether the command is hidden from help and listings
+     * @param string         $example  example usage text (supports {ssh} substitution)
      */
     public function __construct(
         public string $name,
@@ -34,8 +36,8 @@ final class CommandSpec
         public array $flags = [],
         public bool $runnable = false,
         public bool $hidden = false,
-    ) {
-    }
+        public string $example = '',
+    ) {}
 
     public function addChild(self $child): self
     {
@@ -55,7 +57,7 @@ final class CommandSpec
      */
     public function visibleChildren(): array
     {
-        return array_values(array_filter($this->children, static fn (self $c): bool => !$c->hidden));
+        return array_values(array_filter($this->children, static fn(self $c): bool => !$c->hidden));
     }
 
     /**

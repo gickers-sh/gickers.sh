@@ -257,6 +257,14 @@ final class SshEntrypointCommandTest extends KernelTestCase
 
         $output = $this->dispatch('repo blob fixtureblob HEAD README.md', $this->adminFp);
         $this->assertStringContainsString('Hello from SSH dispatcher', $this->getOutputText($output));
+        $this->assertStringNotContainsString("\e[", $this->getOutputText($output));
+
+        $numbered = $this->dispatch('repo blob fixtureblob HEAD README.md --linenumber', $this->adminFp);
+        $this->assertSame("1  Hello from SSH dispatcher\n", $this->getOutputText($numbered));
+
+        $coloredNumbered = $this->dispatch('repo blob fixtureblob HEAD README.md -c -l', $this->adminFp);
+        $this->assertStringContainsString("\e[2m1\e[0m  ", $this->getOutputText($coloredNumbered));
+        $this->assertStringContainsString('Hello from SSH dispatcher', $this->getOutputText($coloredNumbered));
     }
 
     public function testExecuteCliRepoBranch(): void
@@ -388,8 +396,14 @@ final class SshEntrypointCommandTest extends KernelTestCase
         @unlink($tmpIdx);
 
         $commitOut = $this->dispatch(sprintf('repo commit commitrepo %s', $sha), $this->adminFp);
-        $this->assertStringContainsString('initial commit message', $this->getOutputText($commitOut));
+        $plainCommitText = $this->getOutputText($commitOut);
+        $this->assertStringContainsString('initial commit message', $plainCommitText);
+        $this->assertStringNotContainsString("\e[", $plainCommitText);
 
+        $colorCommitOut = $this->dispatch(sprintf('repo commit commitrepo %s --color', $sha), $this->adminFp);
+        $colorCommitText = $this->getOutputText($colorCommitOut);
+        $this->assertStringContainsString('initial commit message', $colorCommitText);
+        $this->assertStringContainsString("\e[", $colorCommitText);
         $infoOut = $this->dispatch('repo info commitrepo', $this->adminFp);
         $this->assertStringContainsString('Repository: commitrepo', $this->getOutputText($infoOut));
     }
@@ -530,6 +544,35 @@ final class SshEntrypointCommandTest extends KernelTestCase
         $helpSettingsKeyless = $this->dispatch('settings allow-keyless --help', $this->aliceFp);
         $this->assertSame(1, $helpSettingsKeyless->getStatusCode());
         $this->assertStringContainsString('Error: Unknown command', $this->getOutputText($helpSettingsKeyless));
+    }
+
+    public function testHelpColorFlagTogglesDecoration(): void
+    {
+        // Default non-interactive dispatch must be uncolored (pipe-safe)
+        $defaultHelp = $this->dispatch('help', $this->aliceFp);
+        $this->assertSame(0, $defaultHelp->getStatusCode());
+        $defaultOut = $this->getOutputText($defaultHelp);
+        $this->assertStringNotContainsString("\e[", $defaultOut);
+        $this->assertStringContainsString('Usage:', $defaultOut);
+
+        // Explicit --color forces TokyoNight ANSI styling
+        $coloredHelp = $this->dispatch('help --color', $this->aliceFp);
+        $this->assertSame(0, $coloredHelp->getStatusCode());
+        $coloredOut = $this->getOutputText($coloredHelp);
+        $this->assertStringContainsString("\e[38;2;122;162;247m\e[1mUsage:\e[0m", $coloredOut);
+
+        // Explicit --no-color forces uncolored raw output
+        $noColorHelp = $this->dispatch('help --no-color', $this->aliceFp);
+        $this->assertSame(0, $noColorHelp->getStatusCode());
+        $noColorOut = $this->getOutputText($noColorHelp);
+        $this->assertStringNotContainsString("\e[", $noColorOut);
+        $this->assertSame($defaultOut, $noColorOut);
+
+        // Subcommand with --help --color
+        $subcommandColored = $this->dispatch('repo --help --color', $this->aliceFp);
+        $this->assertSame(0, $subcommandColored->getStatusCode());
+        $subcommandOut = $this->getOutputText($subcommandColored);
+        $this->assertStringContainsString("\e[38;2;122;162;247m\e[1mUsage:\e[0m", $subcommandOut);
     }
 
     public function testDenyReadSemantics(): void
