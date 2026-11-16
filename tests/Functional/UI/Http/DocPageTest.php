@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Tests\Functional\UI\Http;
 
-use App\Identity\Application\CreateUser;
 use App\Identity\Application\IssueAccessToken;
 use App\Identity\Domain\Model\User;
 use App\Identity\Domain\UserStore;
@@ -14,7 +13,6 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class DocPageTest extends KernelTestCase
 {
-    private CreateUser $createUser;
     private IssueAccessToken $issueToken;
     private User $admin;
     private User $user;
@@ -23,10 +21,6 @@ final class DocPageTest extends KernelTestCase
     {
         self::bootKernel();
         $container = static::getContainer();
-
-        /** @var CreateUser $createUser */
-        $createUser = $container->get(CreateUser::class);
-        $this->createUser = $createUser;
 
         /** @var IssueAccessToken $issueToken */
         $issueToken = $container->get(IssueAccessToken::class);
@@ -55,7 +49,12 @@ final class DocPageTest extends KernelTestCase
 
     private function secret(User $user): string
     {
-        [, $secret] = ($this->issueToken)($user, 'doc-token');
+        $container = static::getContainer();
+        /** @var UserStore $userStore */
+        $userStore = $container->get(UserStore::class);
+        $freshUser = $userStore->byUsername($user->username()) ?? $user;
+
+        [, $secret] = ($this->issueToken)($freshUser, 'doc-token-' . bin2hex(random_bytes(2)));
 
         return $secret;
     }
@@ -110,5 +109,73 @@ final class DocPageTest extends KernelTestCase
         $this->assertStringContainsString('user set-admin', $html);
         $this->assertStringContainsString('settings allow-signup', $html);
         $this->assertStringContainsString('settings anon-access', $html);
+    }
+
+    public function testDocsIndexLinksToIndividualCommandPages(): void
+    {
+        $response = $this->get('/docs');
+        $html = (string) $response->getContent();
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertStringContainsString('href="/docs/repo/tree"', $html);
+        $this->assertStringContainsString('href="/docs/repo/branch/protect"', $html);
+        $this->assertStringContainsString('href="/docs/pubkey/add"', $html);
+        $this->assertStringNotContainsString('cli-card-caret', $html);
+        $this->assertStringNotContainsString('cli-card-detail', $html);
+    }
+
+    public function testIndividualCommandPageRendersDetailsBreadcrumbsAndFlags(): void
+    {
+        foreach (['/docs/repo/branch/protect', '/help/repo/branch/protect'] as $uri) {
+            $response = $this->get($uri);
+            $this->assertSame(200, $response->getStatusCode(), "Failed asserting 200 for {$uri}");
+            $html = (string) $response->getContent();
+
+            $this->assertStringContainsString('repo branch protect', $html);
+            $this->assertStringContainsString('docs', $html);
+            $this->assertStringContainsString('Synopsis', $html);
+            $this->assertStringContainsString('repo branch protect', $html);
+            $this->assertStringContainsString('Flags &amp; Options', $html);
+            $this->assertStringContainsString('--no-force', $html);
+            $this->assertStringContainsString('Back to', $html);
+            $this->assertStringContainsString('copy-btn', $html);
+        }
+    }
+
+    public function testCommandGroupPageRendersSubcommands(): void
+    {
+        $response = $this->get('/docs/repo');
+        $this->assertSame(200, $response->getStatusCode());
+        $html = (string) $response->getContent();
+
+        $this->assertStringContainsString('Subcommands', $html);
+        $this->assertStringContainsString('/docs/repo/tree', $html);
+        $this->assertStringContainsString('/docs/repo/branch', $html);
+        $this->assertStringContainsString('/docs/repo/create', $html);
+    }
+
+    public function testIndividualCommandPageReturns404ForNonexistentCommand(): void
+    {
+        $response = $this->get('/docs/nonexistent-cmd-xyz');
+        $this->assertSame(404, $response->getStatusCode());
+    }
+
+    public function testIndividualAdminCommandPageIsProtected(): void
+    {
+        // Anon user gets 404
+        $anonResponse = $this->get('/docs/user/set-admin');
+        $this->assertSame(404, $anonResponse->getStatusCode());
+
+        // Regular user gets 404
+        $userToken = $this->secret($this->user);
+        $userResponse = $this->get('/docs/user/set-admin', $userToken);
+        $this->assertSame(404, $userResponse->getStatusCode());
+
+        // Admin user gets 200
+        $adminToken = $this->secret($this->admin);
+        $adminResponse = $this->get('/docs/user/set-admin', $adminToken);
+        $this->assertSame(200, $adminResponse->getStatusCode());
+        $adminHtml = (string) $adminResponse->getContent();
+        $this->assertStringContainsString('user set-admin', $adminHtml);
     }
 }

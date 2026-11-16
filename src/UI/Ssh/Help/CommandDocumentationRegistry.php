@@ -73,16 +73,24 @@ final readonly class CommandDocumentationRegistry
      * @return list<array{
      *     name: string,
      *     path: string,
+     *     slug: string,
+     *     url: string,
+     *     parentPath: ?string,
+     *     parentUrl: ?string,
      *     short: string,
      *     long: string,
      *     example: string,
      *     synopsis: string,
+     *     use: string,
+     *     formalUse: string,
      *     flags: list<array{name: string, shorthand: ?string, varname: string, usage: string, default: ?string}>,
      *     ui: list<array{category: string, tier: string, title: string, description: string, base: string, fields: list<array{kind: string, key: string, label: string, placeholder: string, required: bool, default: string, flag: string, choices: list<string>}>}>,
      *     category: string,
      *     tier: string,
      *     scope: string,
      *     isGroup: bool,
+     *     subcommands: list<array{name: string, path: string, slug: string, url: string, short: string, tier: string}>,
+     *     breadcrumbs: list<array{label: string, url: ?string}>,
      * }>
      */
     public function allCommands(bool $isAdmin, string $sshPrefix): array
@@ -97,49 +105,178 @@ final readonly class CommandDocumentationRegistry
                 continue;
             }
 
-            $flags = array_map(static fn(FlagSpec $f): array => [
-                'name' => $f->name,
-                'shorthand' => $f->shorthand,
-                'varname' => $f->varname,
-                'usage' => $f->usage,
-                'default' => $f->defaultText,
-            ], $node->flags);
-
-            $uiList = array_map(fn(CommandUiSpec $u): array => [
-                'category' => $u->category,
-                'tier' => $u->tier,
-                'title' => $u->title,
-                'description' => $u->description,
-                'base' => str_replace('{repo}', '<repo>', $u->baseTemplate),
-                'fields' => array_map(static fn(FieldSpec $f): array => $f->toArray(), $u->fields),
-            ], $node->uiSpecs);
-
-            $primaryUi = $node->uiSpecs[0] ?? null;
-            $category = $primaryUi?->category ?? $this->inferCategory($node);
-            $tier = $primaryUi?->tier ?? 'read';
-            $scope = $primaryUi?->scope ?? 'global';
-
-            $cmdPath = trim($node->commandPath());
-            $example = str_replace('{ssh}', $sshPrefix, $node->example);
-            $synopsis = trim($sshPrefix . ' ' . $cmdPath);
-
-            $result[] = [
-                'name' => $node->name,
-                'path' => $cmdPath,
-                'short' => $node->short,
-                'long' => $node->long,
-                'example' => $example,
-                'synopsis' => $synopsis,
-                'flags' => $flags,
-                'ui' => $uiList,
-                'category' => $category,
-                'tier' => $tier,
-                'scope' => $scope,
-                'isGroup' => $node->hasChildren() && !$node->runnable,
-            ];
+            $result[] = $this->formatCommand($node, $sshPrefix);
         }
 
         return $result;
+    }
+
+    /**
+     * Find a command by path tokens (e.g. "repo/branch/protect" or "repo branch protect").
+     * Returns null if not found or unauthorized for the given admin level.
+     *
+     * @return array{
+     *     name: string,
+     *     path: string,
+     *     slug: string,
+     *     url: string,
+     *     parentPath: ?string,
+     *     parentUrl: ?string,
+     *     short: string,
+     *     long: string,
+     *     example: string,
+     *     synopsis: string,
+     *     use: string,
+     *     formalUse: string,
+     *     flags: list<array{name: string, shorthand: ?string, varname: string, usage: string, default: ?string}>,
+     *     ui: list<array{category: string, tier: string, title: string, description: string, base: string, fields: list<array{kind: string, key: string, label: string, placeholder: string, required: bool, default: string, flag: string, choices: list<string>}>}>,
+     *     category: string,
+     *     tier: string,
+     *     scope: string,
+     *     isGroup: bool,
+     *     subcommands: list<array{name: string, path: string, slug: string, url: string, short: string, tier: string}>,
+     *     breadcrumbs: list<array{label: string, url: ?string}>,
+     * }|null
+     */
+    public function findCommand(string $pathOrSlug, bool $isAdmin, string $sshPrefix): ?array
+    {
+        $clean = trim($pathOrSlug, " \t\n\r\0\x0B/");
+        if ('' === $clean) {
+            return null;
+        }
+
+        $tokens = array_values(array_filter(preg_split('#[/ ]+#', $clean)));
+        if ([] === $tokens) {
+            return null;
+        }
+
+        $root = $this->catalog->root($isAdmin);
+        $node = $root->find($tokens);
+        if (null !== $node && !$node->hidden && '' !== trim($node->commandPath())) {
+            return $this->formatCommand($node, $sshPrefix);
+        }
+
+        // Fallback matching by slug or dashed representation
+        foreach ($this->allCommands($isAdmin, $sshPrefix) as $cmd) {
+            if ($cmd['slug'] === $clean || $cmd['path'] === $clean || str_replace(' ', '-', $cmd['path']) === $clean) {
+                $matchedTokens = array_values(array_filter(explode(' ', $cmd['path'])));
+                $matchedNode = $root->find($matchedTokens);
+                if (null !== $matchedNode) {
+                    return $this->formatCommand($matchedNode, $sshPrefix);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{
+     *     name: string,
+     *     path: string,
+     *     slug: string,
+     *     url: string,
+     *     parentPath: ?string,
+     *     parentUrl: ?string,
+     *     short: string,
+     *     long: string,
+     *     example: string,
+     *     synopsis: string,
+     *     use: string,
+     *     formalUse: string,
+     *     flags: list<array{name: string, shorthand: ?string, varname: string, usage: string, default: ?string}>,
+     *     ui: list<array{category: string, tier: string, title: string, description: string, base: string, fields: list<array{kind: string, key: string, label: string, placeholder: string, required: bool, default: string, flag: string, choices: list<string>}>}>,
+     *     category: string,
+     *     tier: string,
+     *     scope: string,
+     *     isGroup: bool,
+     *     subcommands: list<array{name: string, path: string, slug: string, url: string, short: string, tier: string}>,
+     *     breadcrumbs: list<array{label: string, url: ?string}>,
+     * }
+     */
+    public function formatCommand(CommandSpec $node, string $sshPrefix): array
+    {
+        $flags = array_map(static fn(FlagSpec $f): array => [
+            'name' => $f->name,
+            'shorthand' => $f->shorthand,
+            'varname' => $f->varname,
+            'usage' => $f->usage,
+            'default' => $f->defaultText,
+        ], $node->flags);
+
+        $uiList = array_map(fn(CommandUiSpec $u): array => [
+            'category' => $u->category,
+            'tier' => $u->tier,
+            'title' => $u->title,
+            'description' => $u->description,
+            'base' => str_replace('{repo}', '<repo>', $u->baseTemplate),
+            'fields' => array_map(static fn(FieldSpec $f): array => $f->toArray(), $u->fields),
+        ], $node->uiSpecs);
+
+        $primaryUi = $node->uiSpecs[0] ?? null;
+        $category = $primaryUi?->category ?? $this->inferCategory($node);
+        $tier = $primaryUi?->tier ?? 'read';
+        $scope = $primaryUi?->scope ?? 'global';
+
+        $cmdPath = trim($node->commandPath());
+        $slug = str_replace(' ', '/', $cmdPath);
+        $example = str_replace('{ssh}', $sshPrefix, $node->example);
+        $synopsis = trim($sshPrefix . ' ' . $cmdPath);
+
+        $parentPath = ($node->parent && '' !== trim($node->parent->commandPath())) ? trim($node->parent->commandPath()) : null;
+        $parentUrl = null !== $parentPath ? '/docs/' . str_replace(' ', '/', $parentPath) : '/docs';
+
+        $use = $node->use;
+        $formalUse = trim($sshPrefix . ' ' . ($parentPath ? $parentPath . ' ' : '') . $use);
+
+        $tokens = array_values(array_filter(explode(' ', $cmdPath)));
+        $breadcrumbs = [];
+        $accum = [];
+        foreach ($tokens as $idx => $token) {
+            $accum[] = $token;
+            $isLast = $idx === count($tokens) - 1;
+            $breadcrumbs[] = [
+                'label' => $token,
+                'url' => $isLast ? null : '/docs/' . implode('/', $accum),
+            ];
+        }
+
+        $subcommands = [];
+        foreach ($node->visibleChildren() as $child) {
+            $childPath = trim($child->commandPath());
+            $childUi = $child->uiSpecs[0] ?? null;
+            $subcommands[] = [
+                'name' => $child->name,
+                'path' => $childPath,
+                'slug' => str_replace(' ', '/', $childPath),
+                'url' => '/docs/' . str_replace(' ', '/', $childPath),
+                'short' => $child->short,
+                'tier' => $childUi?->tier ?? 'read',
+            ];
+        }
+
+        return [
+            'name' => $node->name,
+            'path' => $cmdPath,
+            'slug' => $slug,
+            'url' => '/docs/' . $slug,
+            'parentPath' => $parentPath,
+            'parentUrl' => $parentUrl,
+            'short' => $node->short,
+            'long' => $node->long,
+            'example' => $example,
+            'synopsis' => $synopsis,
+            'use' => $use,
+            'formalUse' => $formalUse,
+            'flags' => $flags,
+            'ui' => $uiList,
+            'category' => $category,
+            'tier' => $tier,
+            'scope' => $scope,
+            'isGroup' => $node->hasChildren() && !$node->runnable,
+            'subcommands' => $subcommands,
+            'breadcrumbs' => $breadcrumbs,
+        ];
     }
 
     /**

@@ -1,0 +1,144 @@
+{% import 'macros/ui.html.twig' as ui %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ cmd.path }} - {{ serverName }} CLI Reference</title>
+    <link rel="stylesheet" href="/css/repo-web.css">
+    <script src="/js/repo-web.js" defer></script>
+</head>
+<body>
+<main>
+    <header class="repo-head home-header">
+        <div class="identity">
+            <nav class="repo-breadcrumb" aria-label="Breadcrumbs">
+                <a href="/" class="breadcrumb-link"><span class="cli-prompt">&gt;_</span> {{ serverName }}</a>
+                <span class="breadcrumb-sep">/</span>
+                <a href="/docs" class="breadcrumb-link">docs</a>
+                {% for crumb in cmd.breadcrumbs %}
+                    <span class="breadcrumb-sep">/</span>
+                    {% if crumb.url %}
+                        <a href="{{ crumb.url }}" class="breadcrumb-link">{{ crumb.label }}</a>
+                    {% else %}
+                        <span class="breadcrumb-current">{{ crumb.label }}</span>
+                    {% endif %}
+                {% endfor %}
+            </nav>
+            <h1 class="home-title" style="margin-top: 0.35rem;">
+                <code>{{ cmd.path }}</code>
+                {% if cmd.tier != 'read' %}
+                    <span class="cli-tier cli-tier-{{ cmd.tier }}">{{ cmd.tier }}</span>
+                {% endif %}
+                <span class="section-count" style="font-size: 0.72rem; vertical-align: middle;">{{ cmd.category }}</span>
+                {% if cmd.isGroup %}
+                    <span class="cli-tier" style="color: var(--blue);">command group</span>
+                {% endif %}
+            </h1>
+            <p class="description">{{ cmd.short }}</p>
+        </div>
+        {{ ui.user_nav(currentUsername, sshPrefix, 'docs') }}
+    </header>
+
+    <div style="margin: 1.25rem 0 0.5rem;">
+        <a href="{{ cmd.parentUrl ?: '/docs' }}" class="breadcrumb-link" style="display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.82rem;">
+            <span>&larr;</span> Back to {% if cmd.parentPath %}<code>{{ cmd.parentPath }}</code>{% else %}all commands{% endif %}
+        </a>
+    </div>
+
+    {% if cmd.long is not empty and cmd.long != cmd.short %}
+        <section class="section" aria-label="Command details">
+            <div class="cli-detail-desc" style="background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 1rem 1.2rem; margin-bottom: 0;">
+                {{ cmd.long }}
+            </div>
+        </section>
+    {% endif %}
+
+    <section class="section" aria-label="Usage and Synopsis">
+        <div class="section-header">
+            <h2>Synopsis</h2>
+        </div>
+        <div class="cli-card-action" style="padding: 0.85rem 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+            <code class="cli-code" style="font-size: 0.95rem; color: var(--accent); user-select: all;">{{ cmd.synopsis }}</code>
+            {{ ui.copy_btn(cmd.synopsis, 'Copy command', '', 'Copy command to clipboard') }}
+        </div>
+        {% if cmd.formalUse is not empty and cmd.formalUse != cmd.synopsis %}
+            <div style="margin-top: 0.55rem; padding: 0.5rem 0.85rem; background: var(--gutter); border: 1px solid var(--line); border-radius: 4px; font-size: 0.78rem; color: var(--fg-dim);">
+                <span style="color: var(--muted); text-transform: uppercase; font-size: 0.7rem; font-weight: 600; margin-right: 0.5rem;">Syntax</span>
+                <code style="color: var(--cyan);">{{ cmd.formalUse }}</code>
+            </div>
+        {% endif %}
+    </section>
+
+    {% if cmd.subcommands is not empty %}
+        <section class="section" aria-label="Subcommands">
+            <div class="section-header">
+                <h2>Subcommands</h2>
+                <span class="section-count">{{ cmd.subcommands|length }}</span>
+            </div>
+            <div class="cli-command-grid">
+                {% for sub in cmd.subcommands %}
+                    <div class="cli-command-card">
+                        <a href="{{ sub.url }}" class="cli-card-info cli-card-link" title="View {{ sub.path }} command details">
+                            <span class="cli-card-title">
+                                <code>{{ sub.name }}</code>
+                                {% if sub.tier != 'read' %}
+                                    <span class="cli-tier cli-tier-{{ sub.tier }}">{{ sub.tier }}</span>
+                                {% endif %}
+                                <span class="cli-card-arrow" aria-hidden="true">&rarr;</span>
+                            </span>
+                            <span class="cli-card-desc">{{ sub.short }}</span>
+                        </a>
+                        <div class="cli-card-action">
+                            <code class="cli-code">{{ sshPrefix }} {{ sub.path }}</code>
+                            {{ ui.copy_btn(sshPrefix ~ ' ' ~ sub.path, 'Copy', 'copy-btn-sm', 'Copy command') }}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+    {% endif %}
+
+    {% if cmd.flags is not empty %}
+        <section class="section" aria-label="Flags and options">
+            <div class="section-header">
+                <h2>Flags &amp; Options</h2>
+                <span class="section-count">{{ cmd.flags|length }}</span>
+            </div>
+            <div style="background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 0.85rem 1.15rem;">
+                <ul class="cli-flag-list" style="gap: 0.65rem;">
+                    {% for flag in cmd.flags %}
+                        <li class="cli-flag-item" style="font-size: 0.82rem;">
+                            <code class="cli-flag-token">{% if flag.shorthand %}-{{ flag.shorthand }}, {% endif %}--{{ flag.name }}</code>
+                            {% if flag.varname %}<span class="cli-flag-type">&lt;{{ flag.varname }}&gt;</span>{% endif %}
+                            <span style="color: var(--fg);">{{ flag.usage }}</span>
+                            {% if flag.default %}<span class="cli-flag-default">(default: {{ flag.default }})</span>{% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </section>
+    {% endif %}
+
+    {% if cmd.example is not empty %}
+        <section class="section" aria-label="Usage example">
+            <div class="section-header">
+                <h2>Example</h2>
+            </div>
+            <div class="cli-detail-example" style="position: relative;">
+                <pre style="padding: 0.85rem 1rem; border-radius: 6px;"><code>{{ cmd.example }}</code></pre>
+                <div style="position: absolute; top: 0.5rem; right: 0.5rem;">
+                    {{ ui.copy_btn(cmd.example, 'Copy example', 'copy-btn-sm', 'Copy example to clipboard') }}
+                </div>
+            </div>
+        </section>
+    {% endif %}
+
+    <footer class="status" style="margin-top: 2rem;">
+        <span class="status-name">{{ serverName }}</span>
+        <span class="status-summary">{{ cmd.path }} reference</span>
+        <span class="status-meta">Centralized Catalog</span>
+    </footer>
+</main>
+</body>
+</html>

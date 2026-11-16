@@ -52,45 +52,17 @@
 
             <div class="cli-command-grid" data-prefix="{{ sshPrefix }}">
                 {% for cmd in commands %}
-                    <div class="cli-command-card has-detail" data-category="{{ cmd.category }}" data-base="{{ cmd.path }}">
-                        <div class="cli-card-info" role="button" tabindex="0" aria-expanded="false" title="Click to view details and options">
+                    <div class="cli-command-card" data-category="{{ cmd.category }}" data-base="{{ cmd.path }}">
+                        <a href="{{ cmd.url }}" class="cli-card-info cli-card-link" title="View documentation for {{ cmd.path }}">
                             <span class="cli-card-title">
                                 <code>{{ cmd.path }}</code>
                                 {% if cmd.tier != 'read' %}
                                     <span class="cli-tier cli-tier-{{ cmd.tier }}">{{ cmd.tier }}</span>
                                 {% endif %}
-                                <span class="cli-card-caret" aria-hidden="true">▸</span>
+                                <span class="cli-card-arrow" aria-hidden="true">&rarr;</span>
                             </span>
                             <span class="cli-card-desc">{{ cmd.short }}</span>
-                        </div>
-                        <div class="cli-card-detail" hidden>
-                            {% if cmd.long is not empty %}
-                                <div class="cli-detail-desc">{{ cmd.long }}</div>
-                            {% endif %}
-
-                            {% if cmd.flags is not empty %}
-                                <div class="cli-detail-section">
-                                    <span class="cli-detail-heading">Flags</span>
-                                    <ul class="cli-flag-list">
-                                        {% for flag in cmd.flags %}
-                                            <li class="cli-flag-item">
-                                                <code class="cli-flag-token">{% if flag.shorthand %}-{{ flag.shorthand }}, {% endif %}--{{ flag.name }}</code>
-                                                {% if flag.varname %}<span class="cli-flag-type">{{ flag.varname }}</span>{% endif %}:
-                                                <span>{{ flag.usage }}</span>
-                                                {% if flag.default %}<span class="cli-flag-default">(default {{ flag.default }})</span>{% endif %}
-                                            </li>
-                                        {% endfor %}
-                                    </ul>
-                                </div>
-                            {% endif %}
-
-                            {% if cmd.example is not empty %}
-                                <div class="cli-detail-section cli-detail-example">
-                                    <span class="cli-detail-heading">Example</span>
-                                    <pre><code>{{ cmd.example }}</code></pre>
-                                </div>
-                            {% endif %}
-                        </div>
+                        </a>
                         <div class="cli-card-action" title="Click to copy command">
                             <code class="cli-code">{{ cmd.synopsis }}</code>
                             {{ ui.copy_btn(cmd.synopsis, 'Copy', 'copy-btn-sm', 'Copy command to clipboard') }}

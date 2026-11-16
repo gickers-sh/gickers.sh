@@ -10,6 +10,7 @@ use App\Shared\Infrastructure\Config\ServerSettings;
 use App\UI\Ssh\Help\CommandDocumentationRegistry;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -26,7 +27,7 @@ final readonly class DocController
         private \Twig\Environment $twig,
     ) {}
 
-    #[Route('/docs', methods: ['GET'])]
+    #[Route('/docs', name: 'app_docs_index', methods: ['GET'])]
     #[Route('/help', methods: ['GET'])]
     public function __invoke(): Response
     {
@@ -42,6 +43,38 @@ final readonly class DocController
             'isAdmin' => $isAdmin,
             'sshPrefix' => $sshPrefix,
             'commands' => $commands,
+        ]);
+
+        return new Response(
+            $html,
+            Response::HTTP_OK,
+            [
+                'Content-Type' => 'text/html; charset=utf-8',
+                'Content-Security-Policy' => "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+                'X-Content-Type-Options' => 'nosniff',
+            ],
+        );
+    }
+
+    #[Route('/docs/{path}', name: 'app_docs_show', requirements: ['path' => '.+'], methods: ['GET'])]
+    #[Route('/help/{path}', requirements: ['path' => '.+'], methods: ['GET'])]
+    public function show(string $path): Response
+    {
+        $user = $this->domainUser();
+        $isAdmin = $user?->isAdmin() ?? false;
+        $sshPrefix = $this->sshPrefix();
+
+        $cmd = $this->docRegistry->findCommand($path, $isAdmin, $sshPrefix);
+        if (null === $cmd) {
+            throw new NotFoundHttpException(sprintf('Command "%s" not found.', $path));
+        }
+
+        $html = $this->twig->render('web/doc_command.html.twig', [
+            'serverName' => $this->settings->name ?: 'codes.sh',
+            'currentUsername' => $user?->username(),
+            'isAdmin' => $isAdmin,
+            'sshPrefix' => $sshPrefix,
+            'cmd' => $cmd,
         ]);
 
         return new Response(
