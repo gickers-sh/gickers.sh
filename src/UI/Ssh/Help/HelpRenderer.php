@@ -355,10 +355,10 @@ final class HelpRenderer
     }
 
     /**
-     * Derives the "ssh [-p PORT] HOST" prefix from the SSH public URL, exactly
+     * Derives the "ssh [-p PORT] [USER@]HOST" prefix from the SSH public URL, exactly
      * like upstream Soft Serve's UsageFunc.
      */
-    public static function sshCommandFromPublicUrl(string $publicUrl): string
+    public static function sshCommandFromPublicUrl(string $publicUrl, ?string $user = null): string
     {
         $hostname = 'localhost';
         $port = '23231';
@@ -374,6 +374,8 @@ final class HelpRenderer
             $sshCommand .= ' -p ' . $port;
         }
 
-        return $sshCommand . ' ' . $hostname;
+        $target = null !== $user && '' !== trim($user) ? trim($user) . '@' . $hostname : $hostname;
+
+        return $sshCommand . ' ' . $target;
     }
 }

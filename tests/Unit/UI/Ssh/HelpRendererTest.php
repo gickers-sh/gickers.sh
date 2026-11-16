@@ -74,6 +74,8 @@ final class HelpRendererTest extends TestCase
         self::assertSame('ssh -p 2223 localhost', HelpRenderer::sshCommandFromPublicUrl('ssh://localhost:2223'));
         self::assertSame('ssh -p 2222 codes.sh', HelpRenderer::sshCommandFromPublicUrl('ssh://codes.sh:2222'));
         self::assertSame('ssh git.example.com', HelpRenderer::sshCommandFromPublicUrl('ssh://git.example.com:22'));
+        self::assertSame('ssh -p 2222 alice@codes.sh', HelpRenderer::sshCommandFromPublicUrl('ssh://codes.sh:2222', 'alice'));
+        self::assertSame('ssh alice@git.example.com', HelpRenderer::sshCommandFromPublicUrl('ssh://git.example.com:22', 'alice'));
     }
 
     public function testNonAdminCatalogHidesAdminCommands(): void

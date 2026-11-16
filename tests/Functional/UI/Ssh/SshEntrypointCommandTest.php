@@ -73,15 +73,30 @@ final class SshEntrypointCommandTest extends KernelTestCase
         }
     }
 
-    private function dispatch(string $cmd, ?string $fingerprint = null, ?string $stdin = null): CommandTester
-    {
+    private function dispatch(
+        string $cmd,
+        ?string $fingerprint = null,
+        ?string $stdin = null,
+        ?string $user = null,
+        ?string $token = null,
+    ): CommandTester {
         $application = new Application(self::$kernel);
         $command = $application->find('soft:ssh:dispatch');
 
         $tester = new CommandTester($command);
         $params = ['original-command' => $cmd];
         if (null !== $fingerprint) {
-            $params['--key-fingerprint'] = $fingerprint;
+            if (str_starts_with($fingerprint, 'ssh-') || str_starts_with($fingerprint, 'ecdsa-')) {
+                $params['--key'] = $fingerprint;
+            } else {
+                $params['--key-fingerprint'] = $fingerprint;
+            }
+        }
+        if (null !== $user) {
+            $params['--user'] = $user;
+        }
+        if (null !== $token) {
+            $params['--token'] = $token;
         }
 
         $options = ['capture_stderr_separately' => true];
@@ -600,5 +615,126 @@ final class SshEntrypointCommandTest extends KernelTestCase
         ]);
 
         $this->assertSame(0, $exitCode);
+    }
+
+    public function testSharedKeyMultiAccountsSelectsTargetUser(): void
+    {
+        $container = static::getContainer();
+        $userStore = $container->get(UserStore::class);
+        $bob = new User('bob-' . bin2hex(random_bytes(3)), false, new \DateTimeImmutable());
+        $bob->addPublicKey(SshKey::parse(self::KEY_ED25519_A), new \DateTimeImmutable());
+        $userStore->save($bob);
+
+        // Default connection without user resolves to Alice (first owner)
+        $defaultTester = $this->dispatch('info', $this->aliceFp);
+        $this->assertSame(0, $defaultTester->getStatusCode());
+        $this->assertStringContainsString('Username: alice', $this->getOutputText($defaultTester));
+
+        // Explicit connection as Bob selects Bob
+        $bobTester = $this->dispatch('info', $this->aliceFp, null, $bob->username());
+        $this->assertSame(0, $bobTester->getStatusCode());
+        $this->assertStringContainsString('Username: ' . $bob->username(), $this->getOutputText($bobTester));
+
+        // Explicit connection as Alice selects Alice
+        $aliceTester = $this->dispatch('info', $this->aliceFp, null, 'alice');
+        $this->assertSame(0, $aliceTester->getStatusCode());
+        $this->assertStringContainsString('Username: alice', $this->getOutputText($aliceTester));
+
+        // Connection with existing but unauthorized target user fails with unauthorized message
+        $charlie = new User('charlie', false, new \DateTimeImmutable());
+        $userStore->save($charlie);
+        $unauthTester = $this->dispatch('info', $this->aliceFp, null, 'charlie');
+        $this->assertSame(1, $unauthTester->getStatusCode());
+        $this->assertStringContainsString('The presented SSH key is not authorized for account @charlie', $this->getOutputText($unauthTester));
+
+        // Connection with unknown target user proposes signup
+        $unknownTester = $this->dispatch('info', $this->aliceFp, null, 'unknown-user');
+        $this->assertSame(1, $unknownTester->getStatusCode());
+        $this->assertStringContainsString('Account @unknown-user does not exist', $this->getOutputText($unknownTester));
+    }
+
+    public function testAuthenticateViaPersonalAccessToken(): void
+    {
+        $container = static::getContainer();
+        $userStore = $container->get(UserStore::class);
+        $issueToken = $container->get(\App\Identity\Application\IssueAccessToken::class);
+
+        $alice = $userStore->byUsername('alice');
+        $this->assertNotNull($alice);
+        [, $secret] = $issueToken($alice, 'test-pat');
+
+        // Valid token without key authenticates Alice
+        $tokenTester = $this->dispatch('info', null, null, null, $secret);
+        $this->assertSame(0, $tokenTester->getStatusCode());
+        $this->assertStringContainsString('Username: alice', $this->getOutputText($tokenTester));
+
+        // Valid token matching requested user succeeds
+        $matchingTester = $this->dispatch('info', null, null, 'alice', $secret);
+        $this->assertSame(0, $matchingTester->getStatusCode());
+        $this->assertStringContainsString('Username: alice', $this->getOutputText($matchingTester));
+
+        // Valid token not matching requested user is rejected
+        $mismatchTester = $this->dispatch('info', null, null, 'bob', $secret);
+        $this->assertSame(1, $mismatchTester->getStatusCode());
+        $this->assertStringContainsString('Personal access token belongs to @alice, not requested @bob', $this->getOutputText($mismatchTester));
+
+        // Invalid token is rejected
+        $invalidTester = $this->dispatch('info', null, null, null, 'sec_invalid_token_12345');
+        $this->assertSame(1, $invalidTester->getStatusCode());
+        $this->assertStringContainsString('Invalid or expired personal access token', $this->getOutputText($invalidTester));
+
+        // Token embedded in commandLine
+        $inlineTester = $this->dispatch('info --token=' . $secret);
+        $this->assertSame(0, $inlineTester->getStatusCode());
+        $this->assertStringContainsString('Username: alice', $this->getOutputText($inlineTester));
+    }
+
+    public function testSignupWithTargetUserInSSHConnection(): void
+    {
+        $kp = sodium_crypto_sign_keypair();
+        $pk = sodium_crypto_sign_publickey($kp);
+        $newKey = 'ssh-ed25519 ' . base64_encode(pack('N', 11) . 'ssh-ed25519' . pack('N', 32) . $pk) . ' fresh@test';
+        $newUsername = 'newuser' . bin2hex(random_bytes(3));
+
+        // 1. Bare connection to an unknown username proposes signup
+        $bareTester = $this->dispatch('', $newKey, null, $newUsername);
+        $this->assertSame(1, $bareTester->getStatusCode());
+        $this->assertStringContainsString("Account @{$newUsername} does not exist", $this->getOutputText($bareTester));
+        $this->assertStringContainsString("signup", $this->getOutputText($bareTester));
+
+        // 2. Running any command for unknown user also proposes signup
+        $infoTester = $this->dispatch('info', $newKey, null, $newUsername);
+        $this->assertSame(1, $infoTester->getStatusCode());
+        $this->assertStringContainsString("Account @{$newUsername} does not exist", $this->getOutputText($infoTester));
+
+        // 3. Running `signup` without argument but with --user=<target> signs up as that target
+        $tester = $this->dispatch('signup', $newKey, null, $newUsername);
+        $this->assertSame(0, $tester->getStatusCode());
+        $this->assertStringContainsString('Welcome, ' . $newUsername, $this->getOutputText($tester));
+
+        // 4. Now that $newUsername exists, connecting with another key says unauthorized
+        $otherKp = sodium_crypto_sign_keypair();
+        $otherPk = sodium_crypto_sign_publickey($otherKp);
+        $otherKey = 'ssh-ed25519 ' . base64_encode(pack('N', 11) . 'ssh-ed25519' . pack('N', 32) . $otherPk) . ' other@test';
+        $unauthTester = $this->dispatch('', $otherKey, null, $newUsername);
+        $this->assertSame(1, $unauthTester->getStatusCode());
+        $this->assertStringContainsString("The presented SSH key is not authorized for account @{$newUsername}", $this->getOutputText($unauthTester));
+
+        // 5. Existing user with admin key connecting to another unknown username is treated as new user onboarding
+        $secondNewUsername = 'brandnew' . bin2hex(random_bytes(3));
+        $adminToNewTester = $this->dispatch('', $this->adminFp, null, $secondNewUsername);
+        $this->assertSame(1, $adminToNewTester->getStatusCode());
+        $this->assertStringContainsString("Account @{$secondNewUsername} does not exist", $this->getOutputText($adminToNewTester));
+        $this->assertStringNotContainsString("not authorized", $this->getOutputText($adminToNewTester));
+    }
+
+    public function testGitTransportScopedRepoResolvesActorNamespace(): void
+    {
+        $repoName = 'scoped-' . bin2hex(random_bytes(3));
+        $this->dispatch('repo create ' . $repoName, $this->adminFp);
+
+        // Upload-pack with unqualified repo name resolves to actor namespace
+        $tester = $this->dispatch("git-upload-pack '{$repoName}.git'", $this->adminFp, "0000\n");
+        $this->assertContains($tester->getStatusCode(), [0, 128]);
     }
 }

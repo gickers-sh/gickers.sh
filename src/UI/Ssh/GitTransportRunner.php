@@ -47,6 +47,12 @@ final readonly class GitTransportRunner
         }
 
         $repoName = RepoName::fromInput($rawRepo);
+        if (null !== $actor && !str_contains($repoName->value, '/') && null === $this->repoStore->byName($repoName)) {
+            $scopedName = RepoName::fromInput($actor->username() . '/' . $repoName->value);
+            if (null !== $this->repoStore->byName($scopedName)) {
+                $repoName = $scopedName;
+            }
+        }
 
         if ('git-receive-pack' === $command) {
             $existing = $this->repoStore->byName($repoName);

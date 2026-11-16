@@ -727,3 +727,30 @@ func TestSessionConcurrencyLimit(t *testing.T) {
 	cancel()
 	wg.Wait()
 }
+
+func TestBuildChildEnvIncludesSSHUser(t *testing.T) {
+	base := []string{"PATH=/usr/bin", "SSH_USER=spoofed"}
+	sessionEnv := map[string]string{"TERM": "xterm-256color"}
+	remoteAddr, _ := net.ResolveTCPAddr("tcp", "127.0.0.1:12345")
+	localAddr, _ := net.ResolveTCPAddr("tcp", "127.0.0.1:2223")
+
+	env := buildChildEnv(base, sessionEnv, remoteAddr, localAddr, "xterm-256color", "/dev/pts/1", true, "whoami", "alice")
+
+	hasUser := false
+	hasSpoofed := false
+	for _, e := range env {
+		if e == "SSH_USER=alice" {
+			hasUser = true
+		}
+		if e == "SSH_USER=spoofed" {
+			hasSpoofed = true
+		}
+	}
+
+	if !hasUser {
+		t.Errorf("expected SSH_USER=alice in env, got: %v", env)
+	}
+	if hasSpoofed {
+		t.Errorf("expected spoofed SSH_USER to be replaced, got: %v", env)
+	}
+}

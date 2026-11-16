@@ -574,8 +574,12 @@ func (s *server) runPTYSession(
 	})
 
 	ttyName := tty.Name()
-	cmd := exec.Command(s.phpBin, s.consoleBin, "soft:ssh:dispatch", "--key="+pubkey)
-	cmd.Env = buildChildEnv(os.Environ(), state.env, sshConn.RemoteAddr(), sshConn.LocalAddr(), state.ptyTerm, ttyName, isExec, execCmd)
+	args := []string{s.consoleBin, "soft:ssh:dispatch", "--key=" + pubkey}
+	if u := strings.TrimSpace(sshConn.User()); u != "" {
+		args = append(args, "--user="+u)
+	}
+	cmd := exec.Command(s.phpBin, args...)
+	cmd.Env = buildChildEnv(os.Environ(), state.env, sshConn.RemoteAddr(), sshConn.LocalAddr(), state.ptyTerm, ttyName, isExec, execCmd, sshConn.User())
 	cmd.Stdin = tty
 	cmd.Stdout = tty
 	cmd.Stderr = tty
@@ -660,8 +664,12 @@ func (s *server) runPipeSession(
 	isExec bool,
 	execCmd string,
 ) {
-	cmd := exec.Command(s.phpBin, s.consoleBin, "soft:ssh:dispatch", "--key="+pubkey)
-	cmd.Env = buildChildEnv(os.Environ(), state.env, sshConn.RemoteAddr(), sshConn.LocalAddr(), "", "", isExec, execCmd)
+	args := []string{s.consoleBin, "soft:ssh:dispatch", "--key=" + pubkey}
+	if u := strings.TrimSpace(sshConn.User()); u != "" {
+		args = append(args, "--user="+u)
+	}
+	cmd := exec.Command(s.phpBin, args...)
+	cmd.Env = buildChildEnv(os.Environ(), state.env, sshConn.RemoteAddr(), sshConn.LocalAddr(), "", "", isExec, execCmd, sshConn.User())
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
 	}
@@ -841,8 +849,9 @@ func buildChildEnv(
 	ttyName string,
 	isExec bool,
 	execCmd string,
+	sshUser string,
 ) []string {
-	overrides := make(map[string]string, len(sessionEnv)+5)
+	overrides := make(map[string]string, len(sessionEnv)+6)
 	for k, v := range sessionEnv {
 		overrides[k] = v
 	}
@@ -855,6 +864,9 @@ func buildChildEnv(
 	if isExec {
 		overrides["SSH_ORIGINAL_COMMAND"] = execCmd
 	}
+	if u := strings.TrimSpace(sshUser); u != "" {
+		overrides["SSH_USER"] = u
+	}
 
 	clientIP, clientPort := splitHostPort(remoteAddr)
 	serverIP, serverPort := splitHostPort(localAddr)
@@ -866,6 +878,7 @@ func buildChildEnv(
 		"SSH_CONNECTION":       true,
 		"SSH_CLIENT":           true,
 		"SSH_TTY":              true,
+		"SSH_USER":             true,
 	}
 
 	out := make([]string, 0, len(base)+len(overrides))
