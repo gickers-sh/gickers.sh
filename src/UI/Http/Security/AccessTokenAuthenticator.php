@@ -7,6 +7,7 @@ namespace App\UI\Http\Security;
 use App\Identity\Application\AuthenticateAccessToken;
 use App\Identity\Domain\UserStore;
 use App\Identity\Infrastructure\Security\SecurityUser;
+use App\Identity\Infrastructure\WebAuth\WebSessionTokens;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
@@ -32,8 +33,8 @@ final class AccessTokenAuthenticator extends AbstractAuthenticator
         private readonly UserStore $userStore,
         private readonly AuthenticateAccessToken $authenticateAccessToken,
         private readonly UserPasswordHasherInterface $passwordHasher,
-    ) {
-    }
+        private readonly WebSessionTokens $webSessionTokens,
+    ) {}
 
     public function supports(Request $request): bool
     {
@@ -45,12 +46,27 @@ final class AccessTokenAuthenticator extends AbstractAuthenticator
             }
         }
 
-        return null !== $request->getUser() || null !== $request->headers->get('php-auth-user');
+        if (null !== $request->getUser() || null !== $request->headers->get('php-auth-user')) {
+            return true;
+        }
+
+        // Browser page views carry no Authorization header; identity rides in the
+        // `web login` session cookie instead.
+        return $request->cookies->has(WebSessionTokens::COOKIE_NAME);
     }
 
     public function authenticate(Request $request): Passport
     {
         $auth = $request->headers->get('Authorization');
+
+        // Cookie-only browser request (no Basic/Token credentials): authenticate the
+        // `web login` session. Invalid cookies fall through to anonymous via onAuthenticationFailure.
+        $hasHeaderCreds = null !== $auth
+            || null !== $request->getUser()
+            || null !== $request->headers->get('php-auth-user');
+        if (!$hasHeaderCreds) {
+            return $this->authenticateSessionCookie($request);
+        }
 
         if (null !== $auth && str_starts_with(strtolower($auth), 'token ')) {
             $secret = trim(substr($auth, 6));
@@ -59,7 +75,7 @@ final class AccessTokenAuthenticator extends AbstractAuthenticator
                 throw new BadCredentialsException('Invalid access token.');
             }
 
-            return new SelfValidatingPassport(new UserBadge($user->username(), static fn () => new SecurityUser($user)));
+            return new SelfValidatingPassport(new UserBadge($user->username(), static fn() => new SecurityUser($user)));
         }
 
         // Basic auth
@@ -82,13 +98,13 @@ final class AccessTokenAuthenticator extends AbstractAuthenticator
             $user = $this->userStore->byUsername($username);
             if (null !== $user) {
                 if ($this->passwordHasher->isPasswordValid(new SecurityUser($user), $password)) {
-                    return new SelfValidatingPassport(new UserBadge($user->username(), static fn () => new SecurityUser($user)));
+                    return new SelfValidatingPassport(new UserBadge($user->username(), static fn() => new SecurityUser($user)));
                 }
 
                 // Check if password is an access token for this or another user
                 $tokenUser = ($this->authenticateAccessToken)($password);
                 if (null !== $tokenUser) {
-                    return new SelfValidatingPassport(new UserBadge($tokenUser->username(), static fn () => new SecurityUser($tokenUser)));
+                    return new SelfValidatingPassport(new UserBadge($tokenUser->username(), static fn() => new SecurityUser($tokenUser)));
                 }
 
                 throw new BadCredentialsException('Invalid password or token.');
@@ -97,7 +113,7 @@ final class AccessTokenAuthenticator extends AbstractAuthenticator
             // Username not found, check if password is an access token
             $tokenUser = ($this->authenticateAccessToken)($password);
             if (null !== $tokenUser) {
-                return new SelfValidatingPassport(new UserBadge($tokenUser->username(), static fn () => new SecurityUser($tokenUser)));
+                return new SelfValidatingPassport(new UserBadge($tokenUser->username(), static fn() => new SecurityUser($tokenUser)));
             }
 
             throw new BadCredentialsException('User not found and invalid token.');
@@ -107,13 +123,33 @@ final class AccessTokenAuthenticator extends AbstractAuthenticator
             // Try username as an access token
             $tokenUser = ($this->authenticateAccessToken)($username);
             if (null !== $tokenUser) {
-                return new SelfValidatingPassport(new UserBadge($tokenUser->username(), static fn () => new SecurityUser($tokenUser)));
+                return new SelfValidatingPassport(new UserBadge($tokenUser->username(), static fn() => new SecurityUser($tokenUser)));
             }
 
             throw new BadCredentialsException('Invalid access token.');
         }
 
         throw new BadCredentialsException('Missing credentials.');
+    }
+
+    /**
+     * Authenticate the `codes_session` cookie minted by the `web login` flow,
+     * rejecting it when the user's web_token_version has since been bumped
+     * (i.e. after `web logout`).
+     */
+    private function authenticateSessionCookie(Request $request): Passport
+    {
+        $cookie = $request->cookies->get(WebSessionTokens::COOKIE_NAME);
+        $session = \is_string($cookie) && '' !== $cookie ? $this->webSessionTokens->verifySession($cookie) : null;
+
+        if (null !== $session) {
+            $user = $this->userStore->byId($session['id']);
+            if (null !== $user && $user->webTokenVersion() === $session['version']) {
+                return new SelfValidatingPassport(new UserBadge($user->username(), static fn() => new SecurityUser($user)));
+            }
+        }
+
+        throw new BadCredentialsException('Invalid or revoked session cookie.');
     }
 
     public function onAuthenticationSuccess(Request $request, TokenInterface $token, string $firewallName): ?Response

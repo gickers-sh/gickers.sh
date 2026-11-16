@@ -24,6 +24,9 @@ class User
     #[ORM\Column(nullable: true)]
     private ?string $passwordHash = null;
 
+    #[ORM\Column(options: ['default' => 0])]
+    private int $webTokenVersion = 0;
+
     #[ORM\Column]
     private \DateTimeImmutable $updatedAt;
 
@@ -97,7 +100,7 @@ class User
     {
         // Sorted here: ORM 3.7 deprecates string directions in #[OrderBy] without a usable replacement.
         $keys = array_values($this->publicKeys->toArray());
-        usort($keys, static fn (PublicKey $a, PublicKey $b): int => ($a->id() ?? \PHP_INT_MAX) <=> ($b->id() ?? \PHP_INT_MAX));
+        usort($keys, static fn(PublicKey $a, PublicKey $b): int => ($a->id() ?? \PHP_INT_MAX) <=> ($b->id() ?? \PHP_INT_MAX));
 
         return $keys;
     }
@@ -117,6 +120,21 @@ class User
     public function changePasswordHash(?string $passwordHash, \DateTimeImmutable $now): void
     {
         $this->passwordHash = $passwordHash;
+        $this->updatedAt = $now;
+    }
+
+    public function webTokenVersion(): int
+    {
+        return $this->webTokenVersion;
+    }
+
+    /**
+     * Invalidates every outstanding web-session cookie by bumping the version
+     * carried in their JWT `wtv` claim (the `web logout` command).
+     */
+    public function revokeWebSessions(\DateTimeImmutable $now): void
+    {
+        ++$this->webTokenVersion;
         $this->updatedAt = $now;
     }
 
