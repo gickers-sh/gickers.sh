@@ -1,0 +1,88 @@
+{% import 'macros/ui.html.twig' as ui %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% if isOwner %}My Repositories - {{ serverName }}{% elseif targetUsername %}@{{ targetUsername }} - {{ serverName }}{% else %}My Repositories - {{ serverName }}{% endif %}</title>
+    <link rel="stylesheet" href="/css/repo-web.css">
+    <script src="/js/repo-web.js" defer></script>
+</head>
+<body>
+<main>
+    <div class="repo-breadcrumb">
+        <a href="/" class="breadcrumb-link">{{ serverName }}</a>
+        <span class="breadcrumb-sep">/</span>
+        <span class="breadcrumb-current">{% if targetUsername %}@{{ targetUsername }}{% else %}My Repositories{% endif %}</span>
+        <div class="breadcrumb-nav">
+            <a href="/docs" class="breadcrumb-link">CLI Docs</a>
+            {% if currentUsername %}
+                <a href="/logout" class="breadcrumb-link" title="Sign out of web session">Log out</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <header class="repo-head">
+        <div class="identity">
+            {% if isOwner %}
+                <h1>My Repositories</h1>
+                <p class="description">Signed in as <strong>@{{ targetUsername }}</strong> on {{ serverName }}. (<a href="/logout" class="logout-link" title="Sign out of web session">Log out</a>)</p>
+            {% elseif targetUsername %}
+                <h1>@{{ targetUsername }}</h1>
+                <p class="description">Repositories on {{ serverName }}.</p>
+            {% else %}
+                <h1>My Repositories</h1>
+                <p class="description">{{ serverName }}</p>
+            {% endif %}
+        </div>
+        {% if isOwner %}
+            <div class="clone">
+                <span class="clone-label">New Repo</span>
+                <div class="clone-box" title="Click to copy command">
+                    <code class="clone-code">{{ sshPrefix }} repo create &lt;name&gt;</code>
+                    {{ ui.copy_btn(sshPrefix ~ ' repo create ', 'Copy', 'copy-btn-sm', 'Copy repo create command') }}
+                </div>
+            </div>
+        {% endif %}
+    </header>
+
+    {% if targetUsername is null and currentUsername is null %}
+        <section class="section active">
+            <p class="notice">You are not signed in to this browser.</p>
+            <p class="cli-login-hint">Run <code>{{ sshPrefix }} web login</code> {{ ui.copy_btn(sshPrefix ~ ' web login', null, 'copy-btn-sm', 'Copy login command') }} over SSH, then open the link it prints to sign in. Your repositories will appear here.</p>
+        </section>
+    {% elseif repositories is empty %}
+        <section class="section active">
+            {% if isOwner %}
+                <p class="notice">You don't own or collaborate on any repositories yet.</p>
+                <p class="cli-login-hint">Create one with <code>{{ sshPrefix }} repo create &lt;name&gt;</code>.</p>
+            {% else %}
+                <p class="notice">No public repositories found for @{{ targetUsername }}.</p>
+            {% endif %}
+        </section>
+    {% else %}
+        <section class="section active" aria-label="Repositories list">
+            <ul class="repo-list">
+                {% for repo in repositories %}
+                    <li class="repo-list-item">
+                        <a class="repo-list-link" href="/{{ repo.name }}">{{ repo.name }}</a>
+                        <span class="repo-list-badges">
+                            {% if repo.role %}<span class="cli-tier cli-tier-role">{{ repo.role }}</span>{% endif %}
+                            {% if repo.private %}<span class="cli-tier cli-tier-admin">private</span>{% endif %}
+                            {% if repo.hidden %}<span class="cli-tier cli-tier-write">hidden</span>{% endif %}
+                        </span>
+                        {% if repo.description is not empty %}<span class="repo-list-desc">{{ repo.description }}</span>{% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </section>
+    {% endif %}
+
+    <footer class="status">
+        <span class="status-name">{% if targetUsername %}@{{ targetUsername }}{% else %}{{ serverName }}{% endif %}</span>
+        <span class="status-summary">{{ repositories|length }} repositor{{ repositories|length == 1 ? 'y' : 'ies' }}</span>
+        <span class="status-meta">HTTP · {{ serverName }}</span>
+    </footer>
+</main>
+</body>
+</html>

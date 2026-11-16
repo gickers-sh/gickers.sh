@@ -48,9 +48,9 @@ final readonly class WebLoginController
             ->withHttpOnly(true)
             ->withSameSite(Cookie::SAMESITE_LAX);
 
-        // 303 to the dashboard drops the one-time ticket from the address bar;
+        // 303 to the user's repositories dashboard drops the one-time ticket from the address bar;
         // no-referrer stops it leaking onward.
-        $response = new RedirectResponse('/', Response::HTTP_SEE_OTHER, ['Referrer-Policy' => 'no-referrer']);
+        $response = new RedirectResponse('/@' . $user->username(), Response::HTTP_SEE_OTHER, ['Referrer-Policy' => 'no-referrer']);
         $response->headers->setCookie($cookie);
 
         return $response;

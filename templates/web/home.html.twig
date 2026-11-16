@@ -1,0 +1,125 @@
+{% import 'macros/ui.html.twig' as ui %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ serverName }} - Git server for the command line</title>
+    <link rel="stylesheet" href="/css/repo-web.css">
+    <script src="/js/repo-web.js" defer></script>
+</head>
+<body>
+<main>
+    <header class="repo-head home-header">
+        <div class="identity">
+            <h1 class="home-title"><span class="cli-prompt">&gt;_</span> {{ serverName }}</h1>
+            <p class="description">A tasty, self-hostable Git server for the command line.</p>
+        </div>
+        <div class="home-user-nav">
+            <a href="/docs" class="home-btn" title="View complete CLI documentation">CLI Docs</a>
+            {% if currentUsername %}
+                <div class="user-pill">
+                    <span class="user-pill-label">Signed in as</span>
+                    <a href="/@{{ currentUsername }}" class="user-pill-name">@{{ currentUsername }}</a>
+                </div>
+                <a href="/@{{ currentUsername }}" class="home-btn">My Repositories &rarr;</a>
+                <a href="/logout" class="home-btn home-btn-subtle" title="Sign out of web session">Log out</a>
+            {% else %}
+                <div class="user-pill user-pill-anon">
+                    <span class="user-pill-label">Terminal login</span>
+                    <code>{{ sshPrefix }} web login</code>
+                    {{ ui.copy_btn(sshPrefix ~ ' web login', null, 'copy-btn-sm', 'Copy login command') }}
+                </div>
+            {% endif %}
+        </div>
+    </header>
+
+    <section class="home-hero">
+        <div class="hero-card">
+            <div class="hero-main">
+                <h2>Connect over SSH</h2>
+                <p class="hero-desc">Explore repositories interactively with our terminal TUI or manage them via the command line.</p>
+            </div>
+            <div class="hero-command-box">
+                <div class="clone-box hero-code-box" title="Click to copy SSH command">
+                    <code class="clone-code">{{ sshPrefix }}</code>
+                    {{ ui.copy_btn(sshPrefix, 'Copy', 'copy-btn-sm', 'Copy SSH command') }}
+                </div>
+            </div>
+        </div>
+
+        <div class="cli-command-grid">
+            <div class="cli-command-card">
+                <div class="cli-card-info">
+                    <span class="cli-card-title">💻 Terminal TUI</span>
+                    <span class="cli-card-desc">Interactive browser for branches, commits, files, and diffs right in your terminal.</span>
+                </div>
+                <div class="cli-card-action">
+                    <code class="cli-code">{{ sshPrefix }}</code>
+                </div>
+            </div>
+            <div class="cli-command-card">
+                <div class="cli-card-info">
+                    <span class="cli-card-title">🔑 SSH Web Login</span>
+                    <span class="cli-card-desc">Zero password authentication. Mint a magic link with your SSH key to sign in.</span>
+                </div>
+                <div class="cli-card-action">
+                    <code class="cli-code">{{ sshPrefix }} web login</code>
+                </div>
+            </div>
+            <div class="cli-command-card">
+                <div class="cli-card-info">
+                    <span class="cli-card-title">📦 Create Repos</span>
+                    <span class="cli-card-desc">Spin up new repositories instantly from your terminal or push on demand.</span>
+                </div>
+                <div class="cli-card-action">
+                    <code class="cli-code">{{ sshPrefix }} repo create &lt;name&gt;</code>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% if currentUsername is null %}
+        <section class="section home-auth-notice">
+            <p class="notice">You are not signed in to this browser.</p>
+            <p class="cli-login-hint">Run <code>{{ sshPrefix }} web login</code> {{ ui.copy_btn(sshPrefix ~ ' web login', null, 'copy-btn-sm', 'Copy login command') }} over SSH, then open the link it prints to sign in. Your repositories will appear here.</p>
+        </section>
+    {% endif %}
+
+    <section class="home-repos-section" aria-label="Public repositories">
+        <div class="section-header">
+            <h2>Public Repositories</h2>
+            <span class="section-count">{{ publicRepositories|length }}</span>
+        </div>
+
+        {% if publicRepositories is empty %}
+            <div class="notice">
+                <p>No public repositories published yet.</p>
+                <p class="cli-login-hint">Create your first repository with <code>{{ sshPrefix }} repo create &lt;name&gt;</code> or push via Git.</p>
+            </div>
+        {% else %}
+            <ul class="repo-list">
+                {% for repo in publicRepositories %}
+                    <li class="repo-list-item">
+                        <a class="repo-list-link" href="/{{ repo.name }}">{{ repo.name }}</a>
+                        <span class="repo-list-badges">
+                            {% if repo.owner %}
+                                <a href="/@{{ repo.owner }}" class="cli-tier cli-tier-owner" title="View @{{ repo.owner }}'s repositories">@{{ repo.owner }}</a>
+                            {% endif %}
+                            <span class="cli-tier cli-tier-public">public</span>
+                        </span>
+                        {% if repo.description is not empty %}<span class="repo-list-desc">{{ repo.description }}</span>{% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    </section>
+
+    <footer class="status">
+        <span class="status-name">{{ serverName }}</span>
+        <span class="status-summary">{{ publicRepositories|length }} public repositor{{ publicRepositories|length == 1 ? 'y' : 'ies' }}</span>
+        <span class="status-meta">HTTP · {{ serverName }}</span>
+    </footer>
+</main>
+</body>
+</html>

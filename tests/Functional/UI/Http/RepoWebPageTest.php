@@ -218,7 +218,7 @@ final class RepoWebPageTest extends KernelTestCase
 
         $stylesheet = file_get_contents(dirname(__DIR__, 4) . '/public/css/repo-web.css');
         $this->assertIsString($stylesheet);
-        $this->assertLessThan(15000, strlen($stylesheet));
+        $this->assertLessThan(16000, strlen($stylesheet));
 
         $script = file_get_contents(dirname(__DIR__, 4) . '/public/js/repo-web.js');
         $this->assertIsString($script);
@@ -242,12 +242,12 @@ final class RepoWebPageTest extends KernelTestCase
         $this->assertStringContainsString('repo commit', $html);
         $this->assertStringContainsString('repo diff', $html);
         $this->assertStringContainsString('copy-btn', $html);
-        // Expandable cards expose editable arguments/options and an ssh:// launcher.
+        // Expandable cards expose editable arguments/options to copy the exact CLI command.
         $this->assertStringContainsString('cli-command-card has-detail', $html);
         $this->assertStringContainsString('data-base="repo blob ' . $name . '"', $html);
         $this->assertStringContainsString('cli-field-input', $html);
-        $this->assertStringContainsString('data-ssh-base="ssh://', $html);
-        $this->assertMatchesRegularExpression('#<a class="cli-ssh-link" href="ssh://[^"]+"#', $html);
+        $this->assertStringNotContainsString('cli-ssh-link', $html);
+        $this->assertStringNotContainsString('href="ssh://', $html);
     }
 
     public function testEmptyRepositoryStillShowsCloneCommand(): void

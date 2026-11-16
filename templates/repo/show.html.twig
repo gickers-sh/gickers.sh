@@ -1,3 +1,4 @@
+{% import 'macros/ui.html.twig' as ui %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,6 +10,19 @@
 </head>
 <body>
 <main>
+    <div class="repo-breadcrumb">
+        <a href="/" class="breadcrumb-link">{{ serverName }}</a>
+        <span class="breadcrumb-sep">/</span>
+        <span class="breadcrumb-current">{{ repository }}</span>
+        <div class="breadcrumb-nav">
+            <a href="/docs" class="breadcrumb-link">CLI Docs</a>
+            {% if currentUsername %}
+                <a href="/@{{ currentUsername }}" class="breadcrumb-link">@{{ currentUsername }}</a>
+                <a href="/logout" class="breadcrumb-link" title="Sign out of web session">Log out</a>
+            {% endif %}
+        </div>
+    </div>
+
     <header class="repo-head">
         <div class="identity">
             <h1>{{ repository }}</h1>
@@ -19,11 +33,7 @@
                 <span class="clone-label">Clone</span>
                 <div class="clone-box" title="Click to copy clone command">
                     <code class="clone-code">{{ cloneCommand }}</code>
-                    <button type="button" class="copy-btn copy-btn-sm" data-copy="{{ cloneCommand }}" aria-label="Copy clone command" title="Copy clone command">
-                        <svg class="copy-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                        <svg class="check-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                        <span class="copy-label">Copy</span>
-                    </button>
+                    {{ ui.copy_btn(cloneCommand, 'Copy', 'copy-btn-sm', 'Copy clone command', 'Copy clone command') }}
                 </div>
             </div>
         {% endif %}
@@ -40,7 +50,7 @@
                         <span class="cli-host">({{ sshPrefix }})</span>
                     </span>
                     <span class="cli-drawer-hint">
-                        {% if isAdmin %}Admin access · full palette{% elseif canWrite %}Write access{% else %}Click any command to copy{% endif %}
+                        {% if isAdmin %}Admin access · full palette{% elseif canWrite %}Write access{% else %}Click any command to copy{% endif %} · <a href="/docs" style="color: inherit; text-decoration: underline;">Full Docs &rarr;</a>
                     </span>
                 </div>
                 <div class="cli-drawer-body">
@@ -55,7 +65,7 @@
                         </div>
                         <input type="search" class="cli-search" placeholder="Filter commands (tree, grep, diff)..." aria-label="Filter commands">
                     </div>
-                    <div class="cli-command-grid" data-prefix="{{ sshPrefix }}" data-ssh-base="{{ sshUrlBase }}">
+                    <div class="cli-command-grid" data-prefix="{{ sshPrefix }}">
                         {% for item in cliCommands %}
                             <div class="cli-command-card{% if item.fields is not empty %} has-detail{% endif %}" data-category="{{ item.category }}" data-base="{{ item.base }}">
                                 <div class="cli-card-info"{% if item.fields is not empty %} role="button" tabindex="0" aria-expanded="false" title="Click to edit arguments"{% endif %}>
@@ -82,18 +92,13 @@
                                 {% endif %}
                                 <div class="cli-card-action" title="Click to copy command">
                                     <code class="cli-code">{{ item.command }}</code>
-                                    {% if sshUrlBase is not empty %}<a class="cli-ssh-link" href="{{ sshUrlBase }}/{{ item.remote|url_encode }}" title="Open in your terminal (ssh://)" aria-label="Open {{ item.title }} in terminal">↗</a>{% endif %}
-                                    <button type="button" class="copy-btn" data-copy="{{ item.command }}" aria-label="Copy {{ item.title }} command" title="Copy to clipboard">
-                                        <svg class="copy-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                        <svg class="check-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                        <span class="copy-label">Copy</span>
-                                    </button>
+                                    {{ ui.copy_btn(item.command, 'Copy', '', 'Copy to clipboard', 'Copy ' ~ item.title ~ ' command') }}
                                 </div>
                             </div>
                         {% endfor %}
                     </div>
                     {% if not isAdmin %}
-                        <p class="cli-login-hint">Not seeing management commands? Run <a class="cli-login-link" href="{{ sshLoginUrl }}" title="Open in your terminal (ssh://)"><code>{{ sshPrefix }} web login</code></a> <button type="button" class="copy-btn copy-btn-sm" data-copy="{{ sshPrefix }} web login" aria-label="Copy login command" title="Copy to clipboard"><svg class="copy-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg class="check-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span class="copy-label">Copy</span></button> to authenticate this browser and unlock the actions you're allowed to run.</p>
+                        <p class="cli-login-hint">Not seeing management commands? Run <code>{{ sshPrefix }} web login</code> {{ ui.copy_btn(sshPrefix ~ ' web login', null, 'copy-btn-sm', 'Copy login command') }} to authenticate this browser and unlock the actions you're allowed to run.</p>
                     {% endif %}
                 </div>
             </div>
