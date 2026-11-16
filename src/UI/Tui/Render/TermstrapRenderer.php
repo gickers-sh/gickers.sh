@@ -20,12 +20,9 @@ CSS;
     private Termstrap $termstrap;
     private bool $termstrapAvailable = true;
 
-    private ?string $libraryPath;
-
-    public function __construct(?string $libraryPath = null)
+    public function __construct()
     {
-        $this->libraryPath = $libraryPath;
-        $this->termstrap = new Termstrap($libraryPath);
+        $this->termstrap = new Termstrap();
         $this->termstrapAvailable = true;
     }
 
@@ -69,7 +66,7 @@ CSS;
                 break;
         }
 
-        if (!$this->termstrapAvailable || null === $this->termstrap) {
+        if (!$this->termstrapAvailable) {
             return $this->fallbackRender($input, $width);
         }
 
@@ -117,11 +114,10 @@ CSS;
         $script = 'require $argv[1];'
             . '$payload = json_decode(stream_get_contents(STDIN), true);'
             . 'if (!is_array($payload)) { exit(1); }'
-            . '$r = new \App\UI\Tui\Render\TermstrapRenderer($payload["libraryPath"] ?? null);'
+            . '$r = new \App\UI\Tui\Render\TermstrapRenderer();'
             . 'fwrite(STDOUT, $r->renderDocument((string) $payload["filename"], (string) $payload["content"], (int) $payload["width"], (array) ($payload["options"] ?? [])));';
 
         $payload = json_encode([
-            'libraryPath' => $this->libraryPath,
             'filename' => $filename,
             'content' => $content,
             'width' => $width,
@@ -147,7 +143,7 @@ CSS;
         $script = 'require $argv[1];'
             . '$payload = json_decode(stream_get_contents(STDIN), true);'
             . 'if (!is_array($payload)) { exit(1); }'
-            . '$r = new \App\UI\Tui\Render\TermstrapRenderer($payload["libraryPath"] ?? null);'
+            . '$r = new \App\UI\Tui\Render\TermstrapRenderer();'
             . '$out = [];'
             . 'foreach (($payload["snippets"] ?? []) as $k => $line) {'
             . '    $out[$k] = $r->renderSnippet((string) $payload["filename"], (string) $line, (int) $payload["width"], (string) ($payload["docDefs"] ?? ""));'
@@ -155,7 +151,6 @@ CSS;
             . 'fwrite(STDOUT, json_encode($out, JSON_THROW_ON_ERROR));';
 
         $payload = json_encode([
-            'libraryPath' => $this->libraryPath,
             'filename' => $filename,
             'snippets' => $snippets,
             'width' => $width,
@@ -214,7 +209,7 @@ CSS;
             $width = 80;
         }
 
-        if (!$this->termstrapAvailable || null === $this->termstrap) {
+        if (!$this->termstrapAvailable) {
             return $leadIndent . $this->fallbackRender($input, $width);
         }
 

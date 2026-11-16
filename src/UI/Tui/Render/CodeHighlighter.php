@@ -206,14 +206,14 @@ final class CodeHighlighter implements TerminalTheme
         return match ($tokenType) {
             TokenTypeEnum::KEYWORD => Theme::HIGHLIGHT,
             TokenTypeEnum::OPERATOR => Theme::CYAN,
-            TokenTypeEnum::TYPE => '#2ac3de',
+            TokenTypeEnum::TYPE => Theme::TEAL,
             TokenTypeEnum::VALUE => Theme::GREEN,
             TokenTypeEnum::VARIABLE => Theme::FG,
-            TokenTypeEnum::PROPERTY => '#73daca',
+            TokenTypeEnum::PROPERTY => Theme::PROPERTY,
             TokenTypeEnum::ATTRIBUTE => Theme::HASH,
             TokenTypeEnum::GENERIC => Theme::BLUE,
-            TokenTypeEnum::NUMBER => '#ff9e64',
-            TokenTypeEnum::LITERAL => '#ff9e64',
+            TokenTypeEnum::NUMBER => Theme::ORANGE,
+            TokenTypeEnum::LITERAL => Theme::ORANGE,
             TokenTypeEnum::COMMENT => Theme::MUTED,
             default => match ($tokenType->getValue()) {
                 'diff-addition' => Theme::GREEN,

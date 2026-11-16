@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\UI\Tui\Format;
 
+use App\UI\Tui\Render\Theme;
+
 /**
- * Git diff syntax coloring.
+ * Git diff syntax coloring using the Tokyo Night palette.
  * Ported from {@see \App\UI\Tui\Page\Repo\AbstractRepoTab::colourDiff}.
  */
 final class Diff
@@ -19,13 +21,13 @@ final class Diff
     {
         return array_map(static function (string $line): string {
             if (str_starts_with($line, '+') && !str_starts_with($line, '+++')) {
-                return "\e[32m".$line."\e[0m";
+                return Theme::fg(Theme::GREEN).$line.Theme::RESET;
             }
             if (str_starts_with($line, '-') && !str_starts_with($line, '---')) {
-                return "\e[31m".$line."\e[0m";
+                return Theme::fg(Theme::SELECTOR).$line.Theme::RESET;
             }
             if (str_starts_with($line, '@@')) {
-                return "\e[36m".$line."\e[0m";
+                return Theme::fg(Theme::HASH).$line.Theme::RESET;
             }
 
             return $line;
