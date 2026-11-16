@@ -48,4 +48,17 @@ final class ImportRepoTest extends RepoUseCaseTestCase
         $this->expectException(AccessDenied::class);
         ($this->importRepoUseCase())(null, 'nobody/mirror', 'https://93.184.216.34/repo.git');
     }
+
+    public function testRejectsPrivateLfsEndpointUrl(): void
+    {
+        $alice = $this->user('alice');
+        $this->expectException(InvalidInput::class);
+        ($this->importRepoUseCase())(
+            $alice,
+            'alice/mirror-lfs',
+            'https://93.184.216.34/repo.git',
+            lfs: true,
+            lfsEndpoint: 'http://127.0.0.1/lfs',
+        );
+    }
 }

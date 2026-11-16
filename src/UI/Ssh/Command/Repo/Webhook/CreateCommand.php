@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\UI\Ssh\Command\Repo\Webhook;
 
 use App\UI\Ssh\Command\AbstractSshCommand;
+use App\Shared\Domain\Exception\InvalidInput;
 use App\UI\Ssh\SshSession;
 use App\Webhook\Application\CreateWebhook;
 use Symfony\Component\Console\Command\Command;
@@ -36,7 +37,7 @@ final class CreateCommand extends AbstractSshCommand
             ->addOption('secret', 's', InputOption::VALUE_REQUIRED, 'Secret to sign the webhook payload', '')
             ->addOption('events', 'e', InputOption::VALUE_REQUIRED, 'Comma-separated list of events to trigger the webhook', '')
             ->addOption('content-type', 'c', InputOption::VALUE_REQUIRED, 'Content type of payload (json or form)', 'json')
-            ->addOption('active', 'a', InputOption::VALUE_NONE, 'Whether the webhook is active');
+            ->addOption('active', 'a', InputOption::VALUE_OPTIONAL, 'Whether the webhook is active', 'true');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -51,8 +52,18 @@ final class CreateCommand extends AbstractSshCommand
             ? array_values(array_filter(array_map('trim', explode(',', $eventsStr))))
             : [];
 
-        // In Go, active is true by default. If flag -a is passed or defaulted:
-        $active = true;
+        $rawActive = $input->getOption('active');
+        if (null === $rawActive || true === $rawActive) {
+            $active = true;
+        } elseif (false === $rawActive) {
+            $active = false;
+        } else {
+            $parsedActive = filter_var($rawActive, \FILTER_VALIDATE_BOOL, \FILTER_NULL_ON_FAILURE);
+            if (null === $parsedActive) {
+                throw new InvalidInput(sprintf('invalid boolean value "%s"', is_scalar($rawActive) ? (string) $rawActive : ''));
+            }
+            $active = $parsedActive;
+        }
 
         $webhook = ($this->createWebhook)(
             actor: $this->actor(),

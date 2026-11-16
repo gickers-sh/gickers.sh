@@ -47,13 +47,14 @@ final class RepoCommitCommand extends AbstractSshCommand
         $name = $this->stringArgument($input, 'repository');
         $sha = $this->stringArgument($input, 'sha');
         $patchOnly = (bool) $input->getOption('patch');
+        $color = (bool) $input->getOption('color');
 
         $repo = $this->repoQuery->get($this->actor(), $name);
         if (!is_dir($this->storage->pathFor($repo->name()))) {
             throw new NotFound(sprintf("repository '%s' not found", $name));
         }
 
-        $shown = $this->reader->show($this->storage->open($repo->name()), $sha, $patchOnly);
+        $shown = $this->reader->show($this->storage->open($repo->name()), $sha, $patchOnly, $color);
         if (null === $shown) {
             throw new NotFound(sprintf("commit '%s' not found", $sha));
         }

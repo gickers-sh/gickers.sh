@@ -18,8 +18,7 @@ final class BareRepositoryStorage implements RepoDirectory
     public function __construct(
         private readonly ServerSettings $settings,
         private readonly ?GitRepositoryReader $reader = null,
-    ) {
-    }
+    ) {}
 
     /**
      * Absolute path of `<repos>/<name>.git`, whether it exists or not.
@@ -35,9 +34,9 @@ final class BareRepositoryStorage implements RepoDirectory
             throw new \InvalidArgumentException('Path traversal is forbidden.');
         }
 
-        $path = $reposBase.'/'.$val.'.git';
+        $path = $reposBase . '/' . $val . '.git';
 
-        if (!str_starts_with($path, $reposBase.'/')) {
+        if (!str_starts_with($path, $reposBase . '/')) {
             throw new \InvalidArgumentException(sprintf('Path "%s" escapes repository root "%s".', $path, $reposBase));
         }
 
@@ -51,7 +50,7 @@ final class BareRepositoryStorage implements RepoDirectory
     {
         $path = $this->pathFor($name);
 
-        return is_dir($path) && (is_file($path.'/HEAD') || is_file($path.'/.git/HEAD'));
+        return is_dir($path) && (is_file($path . '/HEAD') || is_file($path . '/.git/HEAD'));
     }
 
     /**
@@ -98,14 +97,14 @@ final class BareRepositoryStorage implements RepoDirectory
             }
         }
 
-        $process = GitCommand::run(dirname($path), ['init', '--bare', '--initial-branch='.$defaultBranch, $path]);
+        $process = GitCommand::run(dirname($path), ['init', '--bare', '--initial-branch=' . $defaultBranch, $path]);
         if (!$process->isSuccessful()) {
             GitCommand::mustRun(dirname($path), ['init', '--bare', $path]);
-            GitCommand::mustRun($path, ['symbolic-ref', 'HEAD', new Revision('refs/heads/'.$defaultBranch)]);
+            GitCommand::mustRun($path, ['symbolic-ref', 'HEAD', new Revision('refs/heads/' . $defaultBranch)]);
         }
 
         if ('' !== $description) {
-            file_put_contents($path.'/description', $description."\n");
+            file_put_contents($path . '/description', $description . "\n");
         }
 
         $realPath = realpath($path) ?: $path;
@@ -167,7 +166,7 @@ final class BareRepositoryStorage implements RepoDirectory
         GitCommand::run($targetPath, ['remote', 'remove', 'origin']);
 
         if ('' !== $description) {
-            file_put_contents($targetPath.'/description', $description."\n");
+            file_put_contents($targetPath . '/description', $description . "\n");
         }
 
         $realPath = realpath($targetPath) ?: $targetPath;
@@ -178,8 +177,13 @@ final class BareRepositoryStorage implements RepoDirectory
     /**
      * Clones a remote repository as a bare/mirror repository.
      */
-    public function importMirror(string $remoteUrl, RepoName $target, bool $mirror): GitRepository
-    {
+    public function importMirror(
+        string $remoteUrl,
+        RepoName $target,
+        bool $mirror,
+        bool $lfs = false,
+        string $lfsEndpoint = '',
+    ): GitRepository {
         $targetPath = $this->pathFor($target);
         if ($this->exists($target)) {
             throw new \RuntimeException(sprintf('Target repository "%s" already exists.', $target->value));
@@ -198,6 +202,14 @@ final class BareRepositoryStorage implements RepoDirectory
         $args[] = $targetPath;
 
         GitCommand::mustRun($parentDir, $args);
+
+        if ('' !== $lfsEndpoint) {
+            GitCommand::mustRun($targetPath, ['config', 'lfs.url', $lfsEndpoint]);
+        }
+        if ($lfs) {
+            GitCommand::mustRun($targetPath, ['config', 'soft-serve.lfs', 'true']);
+            GitCommand::mustRun($targetPath, ['lfs', 'fetch', '--all']);
+        }
 
         return $this->open($target);
     }

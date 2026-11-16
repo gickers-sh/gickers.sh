@@ -26,7 +26,7 @@ final class WebhookCommandTest extends KernelTestCase
         $container = static::getContainer();
 
         $userStore = $container->get(UserStore::class);
-        $this->owner = new User('whsshuser'.uniqid(), true, new \DateTimeImmutable());
+        $this->owner = new User('whsshuser' . uniqid(), true, new \DateTimeImmutable());
         $userStore->save($this->owner);
 
         /** @var SshSession $session */
@@ -35,7 +35,7 @@ final class WebhookCommandTest extends KernelTestCase
         $this->session->authenticate($this->owner, 'SHA256:fingerprint');
 
         $storage = $container->get(BareRepositoryStorage::class);
-        $repoName = RepoName::fromInput('wh-ssh-'.uniqid());
+        $repoName = RepoName::fromInput('wh-ssh-' . uniqid());
         $storage->init($repoName);
 
         $this->repo = new Repo($repoName, $this->owner, 'proj', 'desc', false, false, false, null, new \DateTimeImmutable());
@@ -63,10 +63,20 @@ final class WebhookCommandTest extends KernelTestCase
         ]);
         $this->assertStringContainsString(sprintf('Created webhook 1 for %s', $this->repo->nameString()), $tester->getDisplay());
 
+        // 2b. Create inactive webhook with --active=false
+        $tester->execute([
+            'repository' => $this->repo->nameString(),
+            'url' => 'https://example.com/inactive-hook',
+            '--active' => 'false',
+        ]);
+        $this->assertStringContainsString(sprintf('Created webhook 2 for %s', $this->repo->nameString()), $tester->getDisplay());
+
         // 3. List
         $tester = new CommandTester($listCmd);
         $tester->execute(['repository' => $this->repo->nameString()]);
-        $this->assertStringContainsString('#1     https://example.com/hook                  active', $tester->getDisplay());
+        $display = $tester->getDisplay();
+        $this->assertStringContainsString('#1     https://example.com/hook                  active', $display);
+        $this->assertStringContainsString('#2     https://example.com/inactive-hook         inactive', $display);
 
         // 4. Delete
         $delCmd = $container->get('test.webhook_delete_command');
@@ -76,6 +86,11 @@ final class WebhookCommandTest extends KernelTestCase
             'id' => '1',
         ]);
         $this->assertStringContainsString('Deleted webhook 1', $tester->getDisplay());
+        $tester->execute([
+            'repository' => $this->repo->nameString(),
+            'id' => '2',
+        ]);
+        $this->assertStringContainsString('Deleted webhook 2', $tester->getDisplay());
 
         // 5. List after delete
         $tester = new CommandTester($listCmd);

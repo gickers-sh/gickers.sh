@@ -28,11 +28,11 @@ final class GitRepositoryReader
         }
 
         $isBare = false;
-        $gitDir = $realPath.'/.git';
+        $gitDir = $realPath . '/.git';
 
         if (is_dir($gitDir)) {
             $isBare = false;
-        } elseif (is_file($realPath.'/HEAD') && (is_dir($realPath.'/objects') || is_dir($realPath.'/refs'))) {
+        } elseif (is_file($realPath . '/HEAD') && (is_dir($realPath . '/objects') || is_dir($realPath . '/refs'))) {
             $isBare = true;
             $gitDir = $realPath;
         } else {
@@ -42,7 +42,7 @@ final class GitRepositoryReader
                 throw new \RuntimeException(sprintf('Path "%s" is not a valid git repository.', $path));
             }
             $isBare = 'true' === trim($process->getOutput());
-            $gitDir = $isBare ? $realPath : $realPath.'/.git';
+            $gitDir = $isBare ? $realPath : $realPath . '/.git';
         }
 
         $name = basename($realPath);
@@ -52,7 +52,7 @@ final class GitRepositoryReader
 
         // Description
         $description = '';
-        $descFile = $gitDir.'/description';
+        $descFile = $gitDir . '/description';
         if (is_file($descFile)) {
             $descContent = trim((string) file_get_contents($descFile));
             // Default git description is "Unnamed repository; edit this file 'description' to name the repository."
@@ -63,7 +63,7 @@ final class GitRepositoryReader
 
         // Default / HEAD branch: read $gitDir/HEAD directly when it is a standard symbolic ref
         $defaultBranch = 'main';
-        $headFile = $gitDir.'/HEAD';
+        $headFile = $gitDir . '/HEAD';
         $headResolved = false;
         if (is_file($headFile)) {
             $headRaw = trim((string) file_get_contents($headFile));
@@ -161,7 +161,7 @@ final class GitRepositoryReader
         $args = ['ls-tree', '-l', '-z', new Revision($ref)];
         if ('' !== $subpath) {
             $args[] = '--';
-            $args[] = rtrim($subpath, '/').'/';
+            $args[] = rtrim($subpath, '/') . '/';
         }
 
         return $async ? GitCommand::start($repo->path, $args) : GitCommand::run($repo->path, $args);
@@ -450,10 +450,10 @@ final class GitRepositoryReader
         $args = [
             'log',
             '-z',
-            '--format=format:'.$format,
+            '--format=format:' . $format,
             '-n',
             (string) $limit,
-            '--skip='.(string) $offset,
+            '--skip=' . (string) $offset,
             new Revision($ref),
         ];
 
@@ -596,13 +596,16 @@ final class GitRepositoryReader
     }
 
     /**
-     * Output of `git show [--format=] <revision>`, or null when the revision does not resolve.
+     * Output of `git show [--format=] [--color=always] <revision>`, or null when the revision does not resolve.
      */
-    public function show(GitRepository $repo, string $revision, bool $patchOnly = false): ?string
+    public function show(GitRepository $repo, string $revision, bool $patchOnly = false, bool $color = false): ?string
     {
         $args = ['show'];
         if ($patchOnly) {
             $args[] = '--format=';
+        }
+        if ($color) {
+            $args[] = '--color=always';
         }
         $args[] = new Revision($revision);
 
@@ -622,7 +625,7 @@ final class GitRepositoryReader
         if ($branchProcess->isSuccessful()) {
             $raw = trim($branchProcess->getOutput());
             if ('' !== $raw) {
-                $branches = array_filter(array_map('trim', explode("\n", $raw)), static fn ($b) => '' !== $b);
+                $branches = array_filter(array_map('trim', explode("\n", $raw)), static fn($b) => '' !== $b);
                 $branches = array_values($branches);
             }
         }
@@ -643,7 +646,7 @@ final class GitRepositoryReader
         if ($tagProcess->isSuccessful()) {
             $raw = trim($tagProcess->getOutput());
             if ('' !== $raw) {
-                $tags = array_filter(array_map('trim', explode("\n", $raw)), static fn ($t) => '' !== $t);
+                $tags = array_filter(array_map('trim', explode("\n", $raw)), static fn($t) => '' !== $t);
                 $tags = array_values($tags);
             }
         }

@@ -10,6 +10,7 @@ use App\Repo\Infrastructure\Git\GitRepositoryReader;
 use App\Shared\Domain\Exception\InvalidInput;
 use App\UI\Ssh\Command\AbstractSshCommand;
 use App\UI\Ssh\SshSession;
+use App\UI\Tui\Render\CodeHighlighter;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
@@ -44,6 +45,8 @@ final class RepoBlobCommand extends AbstractSshCommand
             ->addArgument('repository', InputArgument::REQUIRED, 'Repository name')
             ->addArgument('ref_or_path', InputArgument::OPTIONAL, 'Git reference or file path if no ref')
             ->addArgument('path', InputArgument::OPTIONAL, 'File path when ref is specified')
+            ->addOption('color', 'c', InputOption::VALUE_NONE, 'Colorize output')
+            ->addOption('linenumber', 'l', InputOption::VALUE_NONE, 'Print line numbers')
             ->addOption('raw', 'r', InputOption::VALUE_NONE, 'Print raw file contents without binary check');
     }
 
@@ -53,6 +56,8 @@ final class RepoBlobCommand extends AbstractSshCommand
         $arg1 = $this->nullableStringArgument($input, 'ref_or_path');
         $arg2 = $this->nullableStringArgument($input, 'path');
         $raw = (bool) $input->getOption('raw');
+        $color = (bool) $input->getOption('color');
+        $lineNumber = (bool) $input->getOption('linenumber');
 
         if (null === $arg1) {
             throw new InvalidInput('Missing file path');
@@ -77,7 +82,33 @@ final class RepoBlobCommand extends AbstractSshCommand
             return Command::SUCCESS;
         }
 
-        $this->writeRaw($output, $content);
+        if ($raw || (!$color && !$lineNumber) || '' === $content) {
+            $this->writeRaw($output, $content);
+
+            return Command::SUCCESS;
+        }
+
+        $normalized = str_replace(["\r\n", "\r"], "\n", $content);
+        $trimmed = str_ends_with($normalized, "\n") ? substr($normalized, 0, -1) : $normalized;
+        $lines = explode("\n", $trimmed);
+
+        if ($color) {
+            $highlighted = (new CodeHighlighter())->highlightLines($path, $content);
+            if (null !== $highlighted && \count($highlighted) === \count($lines)) {
+                $lines = $highlighted;
+            }
+        }
+
+        if ($lineNumber) {
+            $width = \strlen((string) \count($lines));
+            foreach ($lines as $idx => $line) {
+                $num = str_pad((string) ($idx + 1), $width, ' ', \STR_PAD_LEFT);
+                $prefix = $color ? "\e[2m" . $num . "\e[0m  " : $num . '  ';
+                $lines[$idx] = $prefix . $line;
+            }
+        }
+
+        $this->writeRaw($output, implode("\n", $lines) . "\n");
 
         return Command::SUCCESS;
     }

@@ -33,6 +33,8 @@ final class RepoImportCommand extends AbstractSshCommand
             ->setDescription('Import a remote repository')
             ->addArgument('repository', InputArgument::REQUIRED, 'Repository name')
             ->addArgument('remote_url', InputArgument::REQUIRED, 'Remote Git repository URL')
+            ->addOption('lfs', null, InputOption::VALUE_NONE, 'Pull Git LFS objects')
+            ->addOption('lfs-endpoint', null, InputOption::VALUE_REQUIRED, 'Set the Git LFS endpoint', '')
             ->addOption('mirror', 'm', InputOption::VALUE_NONE, 'Mirror the repository')
             ->addOption('private', 'p', InputOption::VALUE_NONE, 'Make the repository private')
             ->addOption('description', 'd', InputOption::VALUE_REQUIRED, 'Set the repository description', '')
@@ -49,6 +51,8 @@ final class RepoImportCommand extends AbstractSshCommand
         $hidden = (bool) $input->getOption('hidden');
         $description = $this->stringOption($input, 'description');
         $projectName = $this->stringOption($input, 'name');
+        $lfs = (bool) $input->getOption('lfs');
+        $lfsEndpoint = $this->stringOption($input, 'lfs-endpoint');
 
         ($this->importRepo)(
             actor: $this->actor(),
@@ -59,6 +63,8 @@ final class RepoImportCommand extends AbstractSshCommand
             hidden: $hidden,
             description: $description,
             projectName: $projectName,
+            lfs: $lfs,
+            lfsEndpoint: $lfsEndpoint,
         );
 
         // Go soft serve imports repositories silently without stdout/stderr output.

@@ -36,8 +36,7 @@ final readonly class ImportRepo
         private SsrfGuard $ssrfGuard,
         private ClockInterface $clock,
         private EventDispatcherInterface $eventDispatcher,
-    ) {
-    }
+    ) {}
 
     public function __invoke(
         ?User $actor,
@@ -48,9 +47,13 @@ final readonly class ImportRepo
         bool $hidden = false,
         string $description = '',
         string $projectName = '',
+        bool $lfs = false,
+        string $lfsEndpoint = '',
     ): Repo {
         $this->ssrfGuard->assertPublicUrl($remoteUrl);
-
+        if ('' !== $lfsEndpoint) {
+            $this->ssrfGuard->assertPublicUrl($lfsEndpoint);
+        }
         $name = $name instanceof RepoName ? $name : RepoName::fromInput($name);
 
         $existing = $this->repoStore->byName($name);
@@ -66,7 +69,7 @@ final readonly class ImportRepo
 
         $now = $this->clock->now();
         try {
-            $gitRepo = $this->storage->importMirror($remoteUrl, $name, $mirror);
+            $gitRepo = $this->storage->importMirror($remoteUrl, $name, $mirror, $lfs, $lfsEndpoint);
             $this->hookInstaller->install($gitRepo);
             $repo = new Repo(
                 name: $name,
