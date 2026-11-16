@@ -5,6 +5,9 @@ security:
         app_users:
             id: App\Identity\Infrastructure\Security\SecurityUserProvider
     firewalls:
+        dev:
+            pattern: ^/(_(profiler|wdt)|css|images|js)/
+            security: false
         # SSH sessions set their PreAuthenticatedToken directly (SshEntrypointCommand); never matched by HTTP.
         ssh:
             pattern: ^/_ssh$
