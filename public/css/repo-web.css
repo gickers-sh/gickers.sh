@@ -627,6 +627,7 @@ pre:hover .pre-copy-btn,
     background: var(--gutter);
     border: 1px solid var(--line);
     border-radius: 6px;
+    line-height: 1.6;
 }
 
 .cli-login-hint code {
@@ -634,6 +635,28 @@ pre:hover .pre-copy-btn,
     background: var(--surface);
     padding: 1px 5px;
     border-radius: 4px;
+}
+
+.cli-login-hint a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.cli-login-hint a code {
+    cursor: pointer;
+    border: 1px solid var(--line);
+    transition: all .15s ease;
+}
+
+.cli-login-hint a:hover code {
+    color: var(--blue);
+    background: var(--surface-hover);
+    border-color: var(--line-active);
+}
+
+.cli-login-hint .copy-btn {
+    vertical-align: middle;
+    margin: 0 4px;
 }
 
 /* "My Repositories" dashboard list. */

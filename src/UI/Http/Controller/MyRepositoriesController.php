@@ -33,11 +33,16 @@ final readonly class MyRepositoriesController
     public function __invoke(): Response
     {
         $user = $this->domainUser();
+        $sshPrefix = $this->sshPrefix();
+        $sshUrlBase = $this->sshUrlBase();
+        $sshLoginUrl = '' !== $sshUrlBase ? $sshUrlBase . '/web%20login' : 'ssh://' . ($this->settings->name ?: 'codes.sh') . '/web%20login';
 
         $html = $this->twig->render('web/my-repositories.html.twig', [
             'serverName' => $this->settings->name,
             'username' => $user?->username(),
-            'sshPrefix' => $this->sshPrefix(),
+            'sshPrefix' => $sshPrefix,
+            'sshUrlBase' => $sshUrlBase,
+            'sshLoginUrl' => $sshLoginUrl,
             'repositories' => null === $user ? [] : $this->repositoriesFor($user),
         ]);
 
@@ -132,5 +137,33 @@ final readonly class MyRepositoriesController
         $target = null !== $user && '' !== $user ? "{$user}@{$host}" : $host;
 
         return null !== $port ? "ssh -p {$port} {$target}" : "ssh {$target}";
+    }
+
+    /**
+     * Base of an `ssh://` URL for this server (e.g. `ssh://codes.sh:2223`), or an
+     * empty string when no public SSH URL is configured.
+     */
+    private function sshUrlBase(): string
+    {
+        $raw = trim($this->settings->sshPublicUrl);
+        if ('' === $raw) {
+            return '';
+        }
+
+        $url = str_contains($raw, '://') ? $raw : 'ssh://' . $raw;
+        $parsed = parse_url($url);
+        if (false === $parsed || !isset($parsed['host'])) {
+            return '';
+        }
+
+        $authority = $parsed['host'];
+        if (isset($parsed['user']) && '' !== $parsed['user']) {
+            $authority = $parsed['user'] . '@' . $authority;
+        }
+        if (isset($parsed['port'])) {
+            $authority .= ':' . (int) $parsed['port'];
+        }
+
+        return 'ssh://' . $authority;
     }
 }

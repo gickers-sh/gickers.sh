@@ -77,6 +77,7 @@ final readonly class RepoWebController
         $cloneCommand = $this->cloneCommand($name);
         $sshPrefix = $this->sshPrefix();
         $sshUrlBase = $this->sshUrlBase();
+        $sshLoginUrl = '' !== $sshUrlBase ? $sshUrlBase . '/web%20login' : 'ssh://' . ($this->settings->name ?: 'codes.sh') . '/web%20login';
         $cliCommands = $this->cliCommands($name, $level);
 
         $response = new Response(
@@ -86,6 +87,7 @@ final readonly class RepoWebController
                 'cloneCommand' => $cloneCommand,
                 'sshPrefix' => $sshPrefix,
                 'sshUrlBase' => $sshUrlBase,
+                'sshLoginUrl' => $sshLoginUrl,
                 'cliCommands' => $cliCommands,
                 'canWrite' => $level->canWrite(),
                 'isAdmin' => $level->isAdmin(),

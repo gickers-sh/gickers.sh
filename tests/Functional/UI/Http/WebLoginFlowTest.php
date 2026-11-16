@@ -96,6 +96,18 @@ final class WebLoginFlowTest extends KernelTestCase
         $this->assertStringNotContainsString('data-filter="admin"', $html);
     }
 
+    public function testAnonymousDashboardRendersClickableSshLoginLink(): void
+    {
+        $response = $this->get('/');
+        $this->assertSame(200, $response->getStatusCode());
+        $html = (string) $response->getContent();
+
+        $this->assertStringContainsString('You are not signed in to this browser.', $html);
+        $this->assertMatchesRegularExpression('#<a class="cli-login-link" href="ssh://[^"]+/web%20login"[^>]*><code>[^<]+web login</code></a>#', $html);
+        $this->assertStringContainsString('data-copy="', $html);
+        $this->assertStringContainsString('<script src="/js/repo-web.js"', $html);
+    }
+
     private function sessionCookie(Response $response): ?string
     {
         foreach ($response->headers->getCookies() as $cookie) {

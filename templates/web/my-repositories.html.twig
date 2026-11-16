@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>My Repositories - {{ serverName }}</title>
     <link rel="stylesheet" href="/css/repo-web.css">
+    <script src="/js/repo-web.js" defer></script>
 </head>
 <body>
 <main>
@@ -22,7 +23,7 @@
     {% if username is null %}
         <section class="section active">
             <p class="notice">You are not signed in to this browser.</p>
-            <p class="cli-login-hint">Run <a href="ssh://{{ sshPrefix }} web login"><code>{{ sshPrefix }} web login</code></a> over SSH, then open the link it prints to sign in. Your repositories will appear here.</p>
+            <p class="cli-login-hint">Run <a class="cli-login-link" href="{{ sshLoginUrl }}" title="Open in your terminal (ssh://)"><code>{{ sshPrefix }} web login</code></a> <button type="button" class="copy-btn copy-btn-sm" data-copy="{{ sshPrefix }} web login" aria-label="Copy login command" title="Copy to clipboard"><svg class="copy-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg class="check-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span class="copy-label">Copy</span></button> over SSH, then open the link it prints to sign in. Your repositories will appear here.</p>
         </section>
     {% elseif repositories is empty %}
         <section class="section active">
