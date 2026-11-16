@@ -5,27 +5,24 @@ PHP ?= php
 COMPOSER ?= composer
 GO ?= go
 
-# Directories & Configuration (exported to bin/soft; see .env for every SOFT_SERVE_* variable)
+# Directories & admin keys. Toute la config réseau/URL vient de .env (SOFT_SERVE_*).
 DATA_DIR ?= .data
-SOFT_SERVE_DATA_PATH ?= $(CURDIR)/$(DATA_DIR)
 SOFT_SERVE_INITIAL_ADMIN_KEYS ?= $(shell cat ~/.ssh/id_ed25519.pub 2>/dev/null || cat ~/.ssh/id_rsa.pub 2>/dev/null || echo "")
 
-# Server Network Settings
+# Port SSH utilisé uniquement par `make publish` (tunnel bore). Le serveur lui-même
+# lit SOFT_SERVE_SSH_LISTEN_ADDR depuis .env.
 SSH_PORT ?= 2223
-SSH_HOST ?= 127.0.0.1
-SSH_PUBLIC_URL ?= ssh://localhost:$(SSH_PORT)
-HTTP_PORT ?= 23232
-HTTP_HOST ?= 127.0.0.1
-HTTP_PUBLIC_URL ?= http://localhost:$(HTTP_PORT)
 
-SERVE_ENV = SOFT_SERVE_DATA_PATH="$(SOFT_SERVE_DATA_PATH)" \
-	SOFT_SERVE_INITIAL_ADMIN_KEYS="$(SOFT_SERVE_INITIAL_ADMIN_KEYS)" \
-	SOFT_SERVE_SSH_LISTEN_ADDR="$(SSH_HOST):$(SSH_PORT)" \
-	SOFT_SERVE_HTTP_LISTEN_ADDR="$(HTTP_HOST):$(HTTP_PORT)" \
-	SOFT_SERVE_HTTP_PUBLIC_URL="$(HTTP_PUBLIC_URL)"
+# Seule surcharge runtime : les clés admin détectées sur la machine (absentes de .env versionné).
+SERVE_ENV = SOFT_SERVE_INITIAL_ADMIN_KEYS="$(SOFT_SERVE_INITIAL_ADMIN_KEYS)"
 
 # Tunneling / Publish ports
 PUBLISH_PORTS ?= 2220 2221 2222 2223 2224 2225 2226 2227 2228 2229
+
+# Docker multi-container deployment (independent from `make run`).
+DOCKER_COMPOSE ?= docker compose
+DOCKER_ENV_FILE ?= .env.docker
+DC = $(DOCKER_COMPOSE) --env-file $(DOCKER_ENV_FILE)
 
 # Upstream synchronization
 UPSTREAM_URL ?= https://github.com/charmbracelet/soft-serve.git
@@ -37,7 +34,7 @@ REQUIRED_BINS ?= $(PHP) $(COMPOSER) git
 OPTIONAL_BINS ?= git-lfs gpg bore
 REQUIRED_PHP_EXTS ?= ffi mbstring pcntl posix
 
-.PHONY: all build setup preflight install run serve debug e2e browse publish migrate rollback sync-hooks test test-render lint cs cs-check stan deptrac clean clean-all help upstream-setup upstream-fetch upstream-status upstream-sync
+.PHONY: all build setup preflight install run serve debug e2e browse publish migrate rollback sync-hooks test test-render lint cs cs-check stan deptrac clean clean-all help upstream-setup upstream-fetch upstream-status upstream-sync docker-env docker-build docker-up docker-watch docker-down docker-logs docker-ps docker-import-sqlite docker-import-repos docker-import
 
 all: build
 
@@ -105,18 +102,18 @@ preflight: build
 		echo "   dependances composer OK"; \
 	fi
 	@echo "==> Migrations (idempotent, sans effacement des donnees)..."
-	@SOFT_SERVE_DATA_PATH="$(SOFT_SERVE_DATA_PATH)" ./bin/soft doctrine:migrations:migrate --allow-no-migration --no-interaction
+	@./bin/soft doctrine:migrations:migrate --allow-no-migration --no-interaction
 
 ## run: Run codes.sh (codes-ssh :2223, HTTP :23232, Messenger worker)
 run: preflight
-	$(SERVE_ENV) SOFT_SERVE_SSH_PUBLIC_URL="$(SSH_PUBLIC_URL)" ./bin/soft serve
+	$(SERVE_ENV) ./bin/soft serve
 
 ## serve: Alias of run
 serve: run
 
 ## debug: Run the server with verbose output (process command lines, debug logs)
 debug: preflight
-	$(SERVE_ENV) SOFT_SERVE_SSH_PUBLIC_URL="$(SSH_PUBLIC_URL)" LOG_LEVEL=debug ./bin/soft serve -vv
+	$(SERVE_ENV) LOG_LEVEL=debug ./bin/soft serve -vv
 
 ## e2e: End-to-end run on throwaway ports/data: ssh signup, repo create, git push over SSH, clone over HTTP
 e2e: build
@@ -124,7 +121,57 @@ e2e: build
 
 ## browse: Launch the codes.sh terminal UI repository browser
 browse: build
-	SOFT_SERVE_DATA_PATH="$(SOFT_SERVE_DATA_PATH)" ./bin/soft browse
+	./bin/soft browse
+
+## docker-env: Create .env.docker from the example if missing
+docker-env:
+	@test -f $(DOCKER_ENV_FILE) || { cp .env.docker.example $(DOCKER_ENV_FILE); echo ">> $(DOCKER_ENV_FILE) créé depuis .env.docker.example — édite APP_SECRET et SOFT_SERVE_INITIAL_ADMIN_KEYS"; }
+
+## docker-build: Build the shared container image (Go gateway + PHP app)
+docker-build: docker-env
+	$(DC) build
+
+## docker-up: Start the full stack (postgres, init, http, ssh, worker) in the background
+docker-up: docker-env
+	$(DC) up -d --build
+	@set -a; . ./$(DOCKER_ENV_FILE); set +a; \
+		echo ">> HTTP: $${SOFT_SERVE_HTTP_PUBLIC_URL:-http://localhost:$${HTTP_PORT:-80}} (host port $${HTTP_PORT:-80})"; \
+		echo ">> SSH:  $${SOFT_SERVE_SSH_PUBLIC_URL:-ssh://localhost:$${SSH_PORT:-2223}} (host port $${SSH_PORT:-2223})"
+
+## docker-watch: Start stack and follow with docker compose watch for hot reload
+docker-watch: docker-env
+	$(DC) up -d --build
+	$(DC) watch
+
+## docker-down: Stop the stack (add ARGS=-v to also drop volumes/data)
+docker-down:
+	$(DC) down $(ARGS)
+
+## docker-logs: Follow logs (optionally SERVICE=http|ssh|worker|init|postgres)
+docker-logs:
+	$(DC) logs -f $(SERVICE)
+
+## docker-ps: Show the status of the stack services
+docker-ps:
+	$(DC) ps
+
+## docker-import-sqlite: Replace Postgres data with a legacy SQLite db (stack must be up; SRC=path, default .data/codes-sh.db)
+docker-import-sqlite:
+	@test -f $(or $(SRC),.data/codes-sh.db) || { echo "!! fichier SQLite introuvable: $(or $(SRC),.data/codes-sh.db)"; exit 1; }
+	$(DC) run --rm --no-deps \
+		-v "$(abspath $(or $(SRC),.data/codes-sh.db)):/tmp/import.db:ro" \
+		worker admin db:import-sqlite /tmp/import.db --truncate
+
+## docker-import-repos: Copy on-disk bare repositories + LFS into the volume and resync hooks (stack must be up)
+docker-import-repos:
+	@test -d $(DATA_DIR)/repos || { echo "!! $(DATA_DIR)/repos introuvable"; exit 1; }
+	$(DC) run --rm --no-deps \
+		-v "$(abspath $(DATA_DIR)/repos):/seed/repos:ro" \
+		-v "$(abspath $(DATA_DIR)/lfs):/seed/lfs:ro" \
+		--entrypoint sh worker -c 'cp -a /seed/repos/. /app/.data/repos/ && cp -a /seed/lfs/. /app/.data/lfs/ 2>/dev/null; php bin/soft admin sync-hooks'
+
+## docker-import: Full migration into the running stack — SQLite data then on-disk repositories
+docker-import: docker-import-sqlite docker-import-repos
 
 ## publish: Run soft serve and expose it publicly via bore on a free port (2220-2229)
 publish: build
@@ -152,15 +199,15 @@ publish: build
 
 ## migrate: Apply database migrations (SQLite / PostgreSQL)
 migrate: build
-	SOFT_SERVE_DATA_PATH="$(SOFT_SERVE_DATA_PATH)" ./bin/soft admin migrate
+	./bin/soft admin migrate
 
 ## rollback: Rollback database to the previous migration step
 rollback: build
-	SOFT_SERVE_DATA_PATH="$(SOFT_SERVE_DATA_PATH)" ./bin/soft admin rollback
+	./bin/soft admin rollback
 
 ## sync-hooks: Synchronize and install Git hooks in all bare repositories
 sync-hooks: build
-	SOFT_SERVE_DATA_PATH="$(SOFT_SERVE_DATA_PATH)" ./bin/soft admin sync-hooks
+	./bin/soft admin sync-hooks
 
 ## test: Run Go and PHPUnit test suites
 test:

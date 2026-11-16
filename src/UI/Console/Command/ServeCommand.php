@@ -53,6 +53,8 @@ final class ServeCommand extends Command
         private readonly string $messengerDsn,
         #[Autowire(env: 'SOFT_SERVE_WEBHOOK_ALLOW_LIST')]
         private readonly string $webhookAllowList,
+        #[Autowire(env: 'default::CODES_SSH_BIN')]
+        private readonly ?string $customCodesSshBin = null,
     ) {
         parent::__construct();
     }
@@ -60,6 +62,8 @@ final class ServeCommand extends Command
     protected function configure(): void
     {
         $this
+            ->addOption('only', null, InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, 'Run only the given component(s): init, ssh, http, worker (repeatable). Default: all.')
+            ->addOption('skip-init', null, InputOption::VALUE_NONE, 'Skip the one-time preparation (data dir, migrations, cache warmup, bootstrap, JWT keys)')
             ->addOption('sync-hooks', null, InputOption::VALUE_NONE, 'Synchronize the hooks of every repository before starting')
             ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Prepare everything, print the plan, and exit without starting processes');
     }
@@ -68,13 +72,32 @@ final class ServeCommand extends Command
     {
         $errOutput = $output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output;
 
-        $this->dataDirectory->initialize();
-        $this->runConsole('doctrine:migrations:migrate', ['--allow-no-migration' => true], $output);
-        // Every SSH session and git hook boots bin/console: warm the cache once, up front.
-        $this->runConsole('cache:warmup', [], $output);
-        ($this->bootstrapServer)();
+        $rawOnly = $input->getOption('only');
+        $only = array_map(static fn (mixed $component): string => is_scalar($component) ? strtolower((string) $component) : '', is_array($rawOnly) ? $rawOnly : []);
+        $known = ['init', 'ssh', 'http', 'worker'];
+        foreach ($only as $component) {
+            if (!in_array($component, $known, true)) {
+                $errOutput->writeln(sprintf('<error>Unknown --only component "%s" (expected: %s)</error>', $component, implode(', ', $known)));
 
-        $this->jwtKeys->ensure();
+                return Command::FAILURE;
+            }
+        }
+
+        if (!$input->getOption('skip-init')) {
+            $this->dataDirectory->initialize();
+            $this->runConsole('doctrine:migrations:migrate', ['--allow-no-migration' => true], $output);
+            // Every SSH session and git hook boots bin/console: warm the cache once, up front.
+            $this->runConsole('cache:warmup', [], $output);
+            ($this->bootstrapServer)();
+            $this->jwtKeys->ensure();
+        }
+
+        // `--only=init` runs the preparation above and exits (one-shot init container).
+        if (['init'] === $only) {
+            $output->writeln('<info>Initialization complete.</info>');
+
+            return Command::SUCCESS;
+        }
 
         $sshListen = ListenAddress::parse($this->settings->sshListenAddr, 23231);
         $httpListen = ListenAddress::parse($this->settings->httpListenAddr, 23232);
@@ -95,6 +118,11 @@ final class ServeCommand extends Command
         $processes = $this->buildProcesses($sshListen, $httpListen, $dryRun, $errOutput);
         if (null === $processes) {
             return Command::FAILURE;
+        }
+
+        $selected = array_values(array_filter($only, static fn (string $component): bool => 'init' !== $component));
+        if ([] !== $selected) {
+            $processes = array_intersect_key($processes, array_flip($selected));
         }
 
         $output->writeln(sprintf('Data directory: <info>%s</info>', $this->settings->dataPath));
@@ -139,7 +167,9 @@ final class ServeCommand extends Command
     {
         $finder = new ExecutableFinder();
         $console = $this->projectDir.'/bin/console';
-        $codesSshBin = $this->projectDir.'/bin/codes-ssh';
+        $codesSshBin = null !== $this->customCodesSshBin && '' !== $this->customCodesSshBin
+            ? $this->customCodesSshBin
+            : (is_executable('/usr/local/bin/codes-ssh') ? '/usr/local/bin/codes-ssh' : $this->projectDir.'/bin/codes-ssh');
 
         if (!is_executable($codesSshBin)) {
             if (!$dryRun) {
@@ -166,7 +196,11 @@ final class ServeCommand extends Command
 
         $frankenphp = $finder->find('frankenphp');
         $http = null !== $frankenphp
-            ? new Process([$frankenphp, 'run', '--config', $this->projectDir.'/Caddyfile'], $this->projectDir, ['SOFT_SERVE_HTTP_LISTEN_ADDR' => (string) $httpListen])
+            ? new Process([$frankenphp, 'run', '--config', $this->projectDir.'/Caddyfile'], $this->projectDir, [
+                'SOFT_SERVE_HTTP_LISTEN_ADDR' => (string) $httpListen,
+                'SOFT_SERVE_HTTP_PORT' => (string) $httpListen->port,
+                'SOFT_SERVE_HTTP_HOST' => $httpListen->host,
+            ])
             // Development fallback: PHP's built-in server (single process, no worker mode).
             // variables_order=EGPCS fills $_ENV, otherwise Dotenv lets .env shadow the real environment.
             : new Process([\PHP_BINARY, '-d', 'variables_order=EGPCS', '-S', (string) $httpListen, '-t', 'public', 'public/router.php'], $this->projectDir);

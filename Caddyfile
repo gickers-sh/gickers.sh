@@ -1,13 +1,20 @@
 {
 	auto_https off
-	frankenphp {
-		worker public/index.php
-	}
 }
 
-# soft:serve passes SOFT_SERVE_HTTP_LISTEN_ADDR (Go-style host:port or :port).
-http://{$SOFT_SERVE_HTTP_LISTEN_ADDR:127.0.0.1:23232} {
+# soft:serve passes SOFT_SERVE_HTTP_PORT and SOFT_SERVE_HTTP_HOST.
+:{$SOFT_SERVE_HTTP_PORT:23232} {
+	bind {$SOFT_SERVE_HTTP_HOST:0.0.0.0}
 	root * public/
 	encode zstd br gzip
-	php_server
+	php_server {
+		# Symfony selects its persistent request runner only when this marker is
+		# present. Without it, the worker boots the regular runner and returns an
+		# empty 200 response for every request.
+		worker {
+			file public/index.php
+			env FRANKENPHP_WORKER true
+			watch
+		}
+	}
 }

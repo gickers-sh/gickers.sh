@@ -1,0 +1,20 @@
+# Rebuilt or host-only artifacts — never bake into the image.
+.git
+.data
+var/cache
+var/log
+vendor
+bin/codes-ssh
+
+# Local secrets / overrides (port 80, dev admin key, sqlite DSN).
+.env.local
+.env.*.local
+.env.docker
+
+# Dev-only
+tests
+specs
+*.md
+phpstan-baseline.neon
+phpstan.dist.neon
+deptrac.yaml

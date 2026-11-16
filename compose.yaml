@@ -1,0 +1,113 @@
+# Multi-container deployment for codes.sh.
+#
+# One shared image (PHP app + FrankenPHP + the Go codes-ssh gateway) runs four
+# roles against one shared `.data` volume and a Postgres database:
+#   init    one-shot: data dir, migrations, cache warmup, bootstrap, JWT keys
+#   http    FrankenPHP worker mode (binds :80 inside the container)
+#   ssh     codes-ssh gateway
+#   worker  Messenger consumer (async + scheduler)
+#
+# Host ports are configurable: HTTP_PORT (default 80), SSH_PORT (default 2223).
+# `make run` on the host is unaffected — it never touches this file.
+
+name: codes-sh
+
+x-app: &app
+  build:
+    context: .
+    # codes-sh/termstrap is a sibling path repository required by composer.
+    additional_contexts:
+      termstrap: ../termstrap
+  image: codes-sh:latest
+  environment: &app-env
+    APP_ENV: ${APP_ENV:-dev}
+    APP_DEBUG: ${APP_DEBUG:-1}
+    APP_SECRET: ${APP_SECRET:?set APP_SECRET in .env.docker}
+    CODES_SSH_BIN: /usr/local/bin/codes-ssh
+    DATABASE_URL: postgresql://${POSTGRES_USER:-codes}:${POSTGRES_PASSWORD:-codes}@postgres:5432/${POSTGRES_DB:-codes}?serverVersion=16&charset=utf8
+    MESSENGER_TRANSPORT_DSN: doctrine://default?auto_setup=0
+    SOFT_SERVE_NAME: ${SOFT_SERVE_NAME:-Codes.sh}
+    SOFT_SERVE_DATA_PATH: /app/.data
+    # 0.0.0.0 inside the container; the host-side port is set per service below.
+    SOFT_SERVE_SSH_LISTEN_ADDR: 0.0.0.0:2223
+    SOFT_SERVE_HTTP_LISTEN_ADDR: 0.0.0.0:80
+    SOFT_SERVE_SSH_PUBLIC_URL: ${SOFT_SERVE_SSH_PUBLIC_URL:-ssh://localhost:${SSH_PORT:-2223}}
+    SOFT_SERVE_HTTP_PUBLIC_URL: ${SOFT_SERVE_HTTP_PUBLIC_URL:-http://localhost:${HTTP_PORT:-80}}
+    SOFT_SERVE_LFS_ENABLED: ${SOFT_SERVE_LFS_ENABLED:-true}
+    SOFT_SERVE_ANON_ACCESS: ${SOFT_SERVE_ANON_ACCESS:-read-only}
+    SOFT_SERVE_ALLOW_KEYLESS: ${SOFT_SERVE_ALLOW_KEYLESS:-true}
+    SOFT_SERVE_INITIAL_ADMIN_KEYS: ${SOFT_SERVE_INITIAL_ADMIN_KEYS:-}
+    SOFT_SERVE_WEBHOOK_ALLOW_LIST: ${SOFT_SERVE_WEBHOOK_ALLOW_LIST:-}
+  volumes:
+    - ./:/app
+    - ../termstrap:/termstrap
+    - codes-data:/app/.data
+    - codes-var:/app/var
+  develop:
+    watch:
+      - action: rebuild
+        path: ./composer.lock
+      - action: rebuild
+        path: ./cmd/codes-ssh
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-codes}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-codes}
+      POSTGRES_DB: ${POSTGRES_DB:-codes}
+    volumes:
+      - codes-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-codes} -d ${POSTGRES_DB:-codes}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  init:
+    <<: *app
+    command: ["serve", "--only=init"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  http:
+    <<: *app
+    command: ["serve", "--only=http", "--skip-init"]
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+
+  ssh:
+    <<: *app
+    command: ["serve", "--only=ssh", "--skip-init"]
+    ports:
+      - "${SSH_PORT:-2223}:2223"
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *app
+    command: ["serve", "--only=worker", "--skip-init"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+
+volumes:
+  codes-data:
+  codes-db:
+  codes-var:

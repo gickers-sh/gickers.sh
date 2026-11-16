@@ -4,6 +4,7 @@
 /.omp/
 .env.local
 .env.*.local
+.env.docker
 .DS_Store
 *.log
 /.deptrac.cache
