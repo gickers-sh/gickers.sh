@@ -779,7 +779,7 @@ reports the offending ref and reason and leaves the repository unchanged.
 
 ### HTML Repository Browser
 
-Open `http://localhost:23232/icecream` (using your HTTP URL and repository name) to browse a repository in a web browser. The Twig-rendered page uses a separate CSS file and shows the clone command, repository description, and README in a dark terminal-inspired layout. README content is rendered as GitHub-flavored Markdown; raw HTML is stripped and unsafe links are disabled. Private repositories use the same HTTP read authorization. The page has no JavaScript or external assets. The HTTP root `/` does not list repositories.
+Open `http://localhost:23232/icecream` (using your HTTP URL and repository name) to browse a repository in a web browser. The Twig-rendered page uses a Tokyo Night terminal-inspired layout and shows the clone command with 1-click copy, an interactive SSH CLI command palette (`ssh codes.sh <cmd>`), repository description, and README. Code blocks throughout the interface and README support 1-click clipboard copying. README content is rendered as GitHub-flavored Markdown; raw HTML is stripped and unsafe links are disabled. Private repositories use the same HTTP read authorization. The page uses lightweight local assets, no external dependencies or trackers, and enforces a strict Content Security Policy. The HTTP root `/` does not list repositories.
 
 ### Repository Tree
 

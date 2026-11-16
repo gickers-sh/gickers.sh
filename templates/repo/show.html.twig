@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ repository }} - {{ serverName }}</title>
     <link rel="stylesheet" href="/css/repo-web.css">
+    <script src="/js/repo-web.js" defer></script>
 </head>
 <body>
 <main>
@@ -13,13 +14,91 @@
             <h1>{{ repository }}</h1>
             {% if description is not empty %}<p class="description">{{ description }}</p>{% endif %}
         </div>
-        {% if cloneCommand is not empty %}<div class="clone"><span class="clone-label">Clone</span><code>{{ cloneCommand }}</code></div>{% endif %}
+        {% if cloneCommand is not empty %}
+            <div class="clone">
+                <span class="clone-label">Clone</span>
+                <div class="clone-box" title="Click to copy clone command">
+                    <code class="clone-code">{{ cloneCommand }}</code>
+                    <button type="button" class="copy-btn copy-btn-sm" data-copy="{{ cloneCommand }}" aria-label="Copy clone command" title="Copy clone command">
+                        <svg class="copy-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        <svg class="check-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        <span class="copy-label">Copy</span>
+                    </button>
+                </div>
+            </div>
+        {% endif %}
     </header>
     {% if empty %}
         <p class="notice">This repository is empty.</p>
     {% else %}
-        <nav class="tabs" aria-label="Repository sections"><a class="active" href="#readme">Readme</a></nav>
-        <section id="readme" class="section">
+        <nav class="tabs" aria-label="Repository sections"><a class="active" href="#commands" data-tab="commands">Commands</a><a href="#readme" data-tab="readme">Readme</a></nav>
+        <section id="commands" class="section tab-content active" aria-label="SSH CLI Palette">
+            <div class="cli-drawer">
+                <div class="cli-drawer-header">
+                    <span class="cli-drawer-title">
+                        <span class="cli-prompt">&gt;_</span> SSH CLI Palette
+                        <span class="cli-host">({{ sshPrefix }})</span>
+                    </span>
+                    <span class="cli-drawer-hint">
+                        {% if isAdmin %}Admin access · full palette{% elseif canWrite %}Write access{% else %}Click any command to copy{% endif %}
+                    </span>
+                </div>
+                <div class="cli-drawer-body">
+                    <div class="cli-filter-bar">
+                        <div class="cli-tabs" role="tablist">
+                            <button type="button" class="cli-tab active" data-filter="all">All</button>
+                            <button type="button" class="cli-tab" data-filter="explore">Explore</button>
+                            <button type="button" class="cli-tab" data-filter="files">Files</button>
+                            <button type="button" class="cli-tab" data-filter="git">Git</button>
+                            {% if canWrite %}<button type="button" class="cli-tab" data-filter="write">Write</button>{% endif %}
+                            {% if isAdmin %}<button type="button" class="cli-tab" data-filter="admin">Admin</button>{% endif %}
+                        </div>
+                        <input type="search" class="cli-search" placeholder="Filter commands (tree, grep, diff)..." aria-label="Filter commands">
+                    </div>
+                    <div class="cli-command-grid" data-prefix="{{ sshPrefix }}" data-ssh-base="{{ sshUrlBase }}">
+                        {% for item in cliCommands %}
+                            <div class="cli-command-card{% if item.fields is not empty %} has-detail{% endif %}" data-category="{{ item.category }}" data-base="{{ item.base }}">
+                                <div class="cli-card-info"{% if item.fields is not empty %} role="button" tabindex="0" aria-expanded="false" title="Click to edit arguments"{% endif %}>
+                                    <span class="cli-card-title">{{ item.title }}{% if item.tier != 'read' %} <span class="cli-tier cli-tier-{{ item.tier }}">{{ item.tier }}</span>{% endif %}{% if item.fields is not empty %} <span class="cli-card-caret" aria-hidden="true">▸</span>{% endif %}</span>
+                                    <span class="cli-card-desc">{{ item.description }}</span>
+                                </div>
+                                {% if item.fields is not empty %}
+                                    <div class="cli-card-detail" hidden>
+                                        {% for f in item.fields %}
+                                            <label class="cli-field">
+                                                <span class="cli-field-label">{{ f.label }}{% if f.required %} <abbr title="required" class="cli-req">*</abbr>{% endif %}<code class="cli-field-token">{{ f.flag ?: f.key }}</code></span>
+                                                {% if f.kind == 'bool' %}
+                                                    <input type="checkbox" class="cli-field-input" data-key="{{ f.key }}" data-kind="bool" data-flag="{{ f.flag }}"{% if f.default %} checked{% endif %}>
+                                                {% elseif f.kind starts with 'choice' %}
+                                                    <select class="cli-field-input" data-key="{{ f.key }}" data-kind="{{ f.kind }}" data-flag="{{ f.flag }}">
+                                                        {% for c in f.choices %}<option value="{{ c }}"{% if c == f.default %} selected{% endif %}>{{ c }}</option>{% endfor %}
+                                                    </select>
+                                                {% else %}
+                                                    <input type="text" class="cli-field-input" data-key="{{ f.key }}" data-kind="{{ f.kind }}" data-flag="{{ f.flag }}" placeholder="{{ f.placeholder }}" value="{{ f.default }}"{% if f.required %} data-required="1"{% endif %}>
+                                                {% endif %}
+                                            </label>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                                <div class="cli-card-action" title="Click to copy command">
+                                    <code class="cli-code">{{ item.command }}</code>
+                                    {% if sshUrlBase is not empty %}<a class="cli-ssh-link" href="{{ sshUrlBase }}/{{ item.remote|url_encode }}" title="Open in your terminal (ssh://)" aria-label="Open {{ item.title }} in terminal">↗</a>{% endif %}
+                                    <button type="button" class="copy-btn" data-copy="{{ item.command }}" aria-label="Copy {{ item.title }} command" title="Copy to clipboard">
+                                        <svg class="copy-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                        <svg class="check-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        <span class="copy-label">Copy</span>
+                                    </button>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    {% if not isAdmin %}
+                        <p class="cli-login-hint">Not seeing management commands? Run <code>{{ sshPrefix }} web login</code> to authenticate this browser and unlock the actions you're allowed to run.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+        <section id="readme" class="section tab-content" aria-label="README">
             {% if readmePath is null %}
                 <h2>README</h2>
                 <p class="notice">This repository has no README.</p>
@@ -29,7 +108,7 @@
             {% endif %}
         </section>
     {% endif %}
-    <footer class="status"><span class="status-name">{{ repository }}</span><span class="status-summary">{{ empty ? 'empty repository' : 'README · HEAD' }}</span><span class="status-meta">HTTP · {{ serverName }}</span></footer>
+    <footer class="status"><span class="status-name">{{ repository }}</span><span class="status-summary" id="status-summary">{{ empty ? 'empty repository' : 'Commands · HEAD' }}</span><span class="status-meta">HTTP · {{ serverName }}</span></footer>
 </main>
 </body>
 </html>

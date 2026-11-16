@@ -59,14 +59,14 @@ final class RepoWebPageTest extends KernelTestCase
 
         /** @var UserStore $userStore */
         $userStore = $container->get(UserStore::class);
-        $admin = new User('webadmin-'.bin2hex(random_bytes(3)), true, new \DateTimeImmutable());
+        $admin = new User('webadmin-' . bin2hex(random_bytes(3)), true, new \DateTimeImmutable());
         $userStore->save($admin);
         $this->admin = $admin;
     }
 
     private function user(string $prefix): User
     {
-        return ($this->createUser)($this->admin, $prefix.'-'.bin2hex(random_bytes(3)));
+        return ($this->createUser)($this->admin, $prefix . '-' . bin2hex(random_bytes(3)));
     }
 
     private function secret(User $user): string
@@ -81,7 +81,7 @@ final class RepoWebPageTest extends KernelTestCase
      */
     private function repo(User $owner, bool $private = false, string $description = ''): string
     {
-        $repo = ($this->createRepo)($owner, 'web-'.bin2hex(random_bytes(4)), private: $private, description: $description);
+        $repo = ($this->createRepo)($owner, 'web-' . bin2hex(random_bytes(4)), private: $private, description: $description);
 
         return $repo->name()->value;
     }
@@ -93,7 +93,7 @@ final class RepoWebPageTest extends KernelTestCase
 
     private function get(string $uri, ?string $token = null): Response
     {
-        $server = null === $token ? [] : ['HTTP_AUTHORIZATION' => 'Token '.$token];
+        $server = null === $token ? [] : ['HTTP_AUTHORIZATION' => 'Token ' . $token];
         $request = Request::create($uri, 'GET', [], [], [], $server);
 
         $kernel = self::$kernel ?? throw new \LogicException('Kernel not booted');
@@ -116,7 +116,7 @@ final class RepoWebPageTest extends KernelTestCase
     private function goImportMeta(string $name): string
     {
         $parsed = parse_url($this->settings->httpPublicUrl);
-        $host = ($parsed['host'] ?? 'localhost').(isset($parsed['port']) ? ':'.$parsed['port'] : '');
+        $host = ($parsed['host'] ?? 'localhost') . (isset($parsed['port']) ? ':' . $parsed['port'] : '');
 
         return sprintf('<meta name="go-import" content="%s/%s git %s/%s.git">', $host, $name, rtrim($this->settings->httpPublicUrl, '/'), $name);
     }
@@ -136,26 +136,26 @@ final class RepoWebPageTest extends KernelTestCase
         GitTestHelper::writeFile($git, 'main', 'src/app.php', "<?php\n", 'add source');
         GitTestHelper::writeFile($git, 'main', 'LICENSE', "MIT\n", 'add license');
 
-        $response = $this->get('/'.$name);
+        $response = $this->get('/' . $name);
         $html = (string) $response->getContent();
 
         $this->assertSame(200, $response->getStatusCode());
         $this->assertSame('text/html; charset=utf-8', $response->headers->get('Content-Type'));
-        $this->assertStringContainsString('<h1>'.$name.'</h1>', $html);
+        $this->assertStringContainsString('<h1>' . $name . '</h1>', $html);
         $this->assertStringContainsString('A demo project', $html);
         $this->assertStringContainsString('<h1>Demo</h1>', $html);
         $this->assertStringContainsString('<p>Hello world</p>', $html);
         $this->assertStringContainsString($this->sshCloneCommand($name), $html);
 
-        // The page presents repository metadata and README, not the Git file tree.
-        $this->assertStringContainsString('<nav class="tabs" aria-label="Repository sections"><a class="active" href="#readme">Readme</a></nav>', $html);
-        $this->assertStringContainsString('<footer class="status"><span class="status-name">'.$name.'</span>', $html);
+        // The page presents repository metadata, CLI palette and README tabs, not the Git file tree.
+        $this->assertStringContainsString('<nav class="tabs" aria-label="Repository sections"><a class="active" href="#commands" data-tab="commands">Commands</a><a href="#readme" data-tab="readme">Readme</a></nav>', $html);
+        $this->assertStringContainsString('<footer class="status"><span class="status-name">' . $name . '</span>', $html);
         $this->assertStringNotContainsString('<ul', $html);
         $this->assertStringNotContainsString('src/app.php', $html);
         $this->assertStringNotContainsString('LICENSE</a>', $html);
 
         // The advertised file link serves the blob through the raw route.
-        $raw = $this->get('/'.$name.'/raw/HEAD/LICENSE');
+        $raw = $this->get('/' . $name . '/raw/HEAD/LICENSE');
         $this->assertSame(200, $raw->getStatusCode());
         $this->assertSame("MIT\n", $raw->getContent());
     }
@@ -167,18 +167,18 @@ final class RepoWebPageTest extends KernelTestCase
         GitTestHelper::writeFile($git, 'main', 'README.md', "<script>alert(\"x\")</script> & <img src=x onerror=alert(1)>\n\n[bad](javascript:alert(1))\n", 'add readme');
         GitTestHelper::writeFile($git, 'main', 'x<y>&z.txt', "data\n", 'add odd file name');
 
-        $response = $this->get('/'.$name);
+        $response = $this->get('/' . $name);
         $html = (string) $response->getContent();
 
         $this->assertSame(200, $response->getStatusCode());
-        $this->assertStringNotContainsString('<script', $html);
+        $this->assertStringNotContainsString('<script>alert', $html);
         $this->assertStringNotContainsString('<img', $html);
         $this->assertStringContainsString('<a>bad</a>', $html);
         $this->assertStringNotContainsString('href="javascript:', $html);
         $this->assertStringContainsString('&lt;b&gt;bold&lt;/b&gt; &quot;quoted&quot;', $html);
 
         // Percent-encoding in the link round-trips to the odd file name.
-        $raw = $this->get('/'.$name.'/raw/HEAD/x%3Cy%3E%26z.txt');
+        $raw = $this->get('/' . $name . '/raw/HEAD/x%3Cy%3E%26z.txt');
         $this->assertSame(200, $raw->getStatusCode());
         $this->assertSame("data\n", $raw->getContent());
     }
@@ -189,7 +189,7 @@ final class RepoWebPageTest extends KernelTestCase
         $markdown = "# GFM\n\n~~removed~~ **bold** and `inline code`.\n\n| Feature | Status |\n| --- | --- |\n| Tables | supported |\n";
         GitTestHelper::writeFile($this->git($name), 'main', 'README.md', $markdown, 'add GFM readme');
 
-        $response = $this->get('/'.$name);
+        $response = $this->get('/' . $name);
         $html = (string) $response->getContent();
 
         $this->assertSame(200, $response->getStatusCode());
@@ -200,28 +200,61 @@ final class RepoWebPageTest extends KernelTestCase
         $this->assertStringContainsString('<table>', $html);
     }
 
-    public function testPageHasNoScriptAndUsesSmallLocalStylesheet(): void
+    public function testPageUsesSmallLocalAssetsAndEnforcesLocalCsp(): void
     {
         $name = $this->repo($this->user('carol'));
         GitTestHelper::writeFile($this->git($name), 'main', 'README.md', "# Hello\n", 'add readme');
 
-        $response = $this->get('/'.$name);
+        $response = $this->get('/' . $name);
         $html = (string) $response->getContent();
 
         $this->assertSame(200, $response->getStatusCode());
-        $this->assertStringNotContainsStringIgnoringCase('<script', $html);
         $this->assertStringContainsString('<link rel="stylesheet" href="/css/repo-web.css">', $html);
-        $this->assertDoesNotMatchRegularExpression('#\ssrc\s*=#i', $html);
-        $stylesheet = file_get_contents(dirname(__DIR__, 4).'/public/css/repo-web.css');
+        $this->assertStringContainsString('<script src="/js/repo-web.js"', $html);
+        // External assets (http/https/CDN) are forbidden
+        $this->assertDoesNotMatchRegularExpression('#\ssrc=["\']https?://#i', $html);
+        $csp = (string) $response->headers->get('Content-Security-Policy');
+        $this->assertStringContainsString("script-src 'self'", $csp);
+
+        $stylesheet = file_get_contents(dirname(__DIR__, 4) . '/public/css/repo-web.css');
         $this->assertIsString($stylesheet);
-        $this->assertLessThan(5000, strlen($stylesheet));
+        $this->assertLessThan(15000, strlen($stylesheet));
+
+        $script = file_get_contents(dirname(__DIR__, 4) . '/public/js/repo-web.js');
+        $this->assertIsString($script);
+        $this->assertLessThan(13000, strlen($script));
+    }
+
+    public function testPageRendersSshCliPaletteAndCopyButtons(): void
+    {
+        $name = $this->repo($this->user('palette'));
+        GitTestHelper::writeFile($this->git($name), 'main', 'README.md', "# CLI\n```bash\necho hello\n```\n", 'add readme');
+
+        $response = $this->get('/' . $name);
+        $html = (string) $response->getContent();
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertStringContainsString('SSH CLI Palette', $html);
+        $this->assertStringContainsString('repo tree', $html);
+        $this->assertStringContainsString('repo info', $html);
+        $this->assertStringContainsString('repo blob', $html);
+        $this->assertStringContainsString('repo grep', $html);
+        $this->assertStringContainsString('repo commit', $html);
+        $this->assertStringContainsString('repo diff', $html);
+        $this->assertStringContainsString('copy-btn', $html);
+        // Expandable cards expose editable arguments/options and an ssh:// launcher.
+        $this->assertStringContainsString('cli-command-card has-detail', $html);
+        $this->assertStringContainsString('data-base="repo blob ' . $name . '"', $html);
+        $this->assertStringContainsString('cli-field-input', $html);
+        $this->assertStringContainsString('data-ssh-base="ssh://', $html);
+        $this->assertMatchesRegularExpression('#<a class="cli-ssh-link" href="ssh://[^"]+"#', $html);
     }
 
     public function testEmptyRepositoryStillShowsCloneCommand(): void
     {
         $name = $this->repo($this->user('dave'));
 
-        $response = $this->get('/'.$name);
+        $response = $this->get('/' . $name);
         $html = (string) $response->getContent();
 
         $this->assertSame(200, $response->getStatusCode());
@@ -236,7 +269,7 @@ final class RepoWebPageTest extends KernelTestCase
         $name = $this->repo($this->user('erin'));
         GitTestHelper::writeFile($this->git($name), 'main', 'main.go', "package main\n", 'add source');
 
-        $response = $this->get('/'.$name);
+        $response = $this->get('/' . $name);
         $html = (string) $response->getContent();
 
         $this->assertSame(200, $response->getStatusCode());
@@ -250,29 +283,29 @@ final class RepoWebPageTest extends KernelTestCase
         $name = $this->repo($this->user('frank'));
         GitTestHelper::writeFile($this->git($name), 'main', 'README.md', "# Suffix\n", 'add readme');
 
-        foreach (['/'.$name.'.git', '/'.$name.'/'] as $uri) {
+        foreach (['/' . $name . '.git', '/' . $name . '/'] as $uri) {
             $response = $this->get($uri);
 
             $this->assertSame(200, $response->getStatusCode(), $uri);
-            $this->assertStringContainsString('<h1>'.$name.'</h1>', (string) $response->getContent(), $uri);
+            $this->assertStringContainsString('<h1>' . $name . '</h1>', (string) $response->getContent(), $uri);
         }
     }
 
     public function testNestedRepositoryNameIsServedWithItsFullPath(): void
     {
-        $name = 'group-'.bin2hex(random_bytes(3)).'/project';
+        $name = 'group-' . bin2hex(random_bytes(3)) . '/project';
         ($this->createRepo)($this->user('lena'), $name);
         GitTestHelper::writeFile($this->git($name), 'main', 'README.md', "# Nested\n", 'add readme');
 
-        $response = $this->get('/'.$name);
+        $response = $this->get('/' . $name);
         $html = (string) $response->getContent();
 
         $this->assertSame(200, $response->getStatusCode());
-        $this->assertStringContainsString('<h1>'.$name.'</h1>', $html);
+        $this->assertStringContainsString('<h1>' . $name . '</h1>', $html);
         $this->assertStringContainsString($this->sshCloneCommand($name), $html);
         $this->assertStringNotContainsString('README.md</a>', $html);
 
-        $raw = $this->get('/'.$name.'/raw/HEAD/README.md');
+        $raw = $this->get('/' . $name . '/raw/HEAD/README.md');
         $this->assertSame(200, $raw->getStatusCode());
         $this->assertSame("# Nested\n", $raw->getContent());
     }
@@ -288,21 +321,21 @@ final class RepoWebPageTest extends KernelTestCase
         $name = $this->repo($owner, private: true);
         GitTestHelper::writeFile($this->git($name), 'main', 'README.md', "# Secret plans\n", 'add readme');
 
-        $missing = $this->get('/no-such-'.bin2hex(random_bytes(4)));
+        $missing = $this->get('/no-such-' . bin2hex(random_bytes(4)));
         $this->assertNotFound($missing);
 
-        $anonymous = $this->get('/'.$name);
+        $anonymous = $this->get('/' . $name);
         $this->assertNotFound($anonymous);
         $this->assertSame($missing->getContent(), $anonymous->getContent(), 'private and missing must be indistinguishable');
 
-        $this->assertNotFound($this->get('/'.$name, $outsiderToken));
-        $this->assertNotFound($this->get('/'.$name, 'not-a-valid-token'));
+        $this->assertNotFound($this->get('/' . $name, $outsiderToken));
+        $this->assertNotFound($this->get('/' . $name, 'not-a-valid-token'));
 
-        $ownerResponse = $this->get('/'.$name, $ownerToken);
+        $ownerResponse = $this->get('/' . $name, $ownerToken);
         $this->assertSame(200, $ownerResponse->getStatusCode());
         $this->assertStringContainsString('<h1>Secret plans</h1>', (string) $ownerResponse->getContent());
 
-        $adminResponse = $this->get('/'.$name, $adminToken);
+        $adminResponse = $this->get('/' . $name, $adminToken);
         $this->assertSame(200, $adminResponse->getStatusCode());
     }
 
@@ -311,10 +344,10 @@ final class RepoWebPageTest extends KernelTestCase
         $name = $this->repo($this->user('ivan'));
         GitTestHelper::writeFile($this->git($name), 'main', 'README.md', "# Hi\n", 'add readme');
 
-        $this->assertNotFound($this->get('/no-such-'.bin2hex(random_bytes(4))));
+        $this->assertNotFound($this->get('/no-such-' . bin2hex(random_bytes(4))));
         $this->assertNotFound($this->get('/favicon.ico'));
         // Sub-paths are not repositories (navigation routes are not declared here).
-        $this->assertNotFound($this->get('/'.$name.'/pkg/util'));
+        $this->assertNotFound($this->get('/' . $name . '/pkg/util'));
         // Names that fail validation never reach the store.
         $this->assertNotFound($this->get('/%3Cscript%3Ealert(1)%3C/script%3E'));
         $this->assertNotFound($this->get('/.git'));
@@ -329,14 +362,14 @@ final class RepoWebPageTest extends KernelTestCase
         GitTestHelper::writeFile($this->git($name), 'main', 'README.md', "# Go\n", 'add readme');
 
         // The discovery document is GoGetController's own: go-import meta, not the browse page.
-        $discovery = $this->get('/'.$name.'?go-get=1');
+        $discovery = $this->get('/' . $name . '?go-get=1');
         $this->assertSame(200, $discovery->getStatusCode());
         $this->assertSame('text/html; charset=utf-8', $discovery->headers->get('Content-Type'));
         $this->assertStringContainsString($this->goImportMeta($name), (string) $discovery->getContent());
         $this->assertStringNotContainsString('<h1>', (string) $discovery->getContent());
 
         // Sub-package paths walk up to the repository; a trailing .git is ignored.
-        foreach (['/'.$name.'/pkg/util?go-get=1', '/'.$name.'.git?go-get=1'] as $uri) {
+        foreach (['/' . $name . '/pkg/util?go-get=1', '/' . $name . '.git?go-get=1'] as $uri) {
             $response = $this->get($uri);
 
             $this->assertSame(200, $response->getStatusCode(), $uri);
@@ -344,17 +377,17 @@ final class RepoWebPageTest extends KernelTestCase
         }
 
         // 404 otherwise: unknown repository, or one the caller cannot read.
-        $this->assertNotFound($this->get('/no-such-'.bin2hex(random_bytes(4)).'?go-get=1'));
-        $this->assertNotFound($this->get('/'.$privateName.'?go-get=1'));
-        $ownerResponse = $this->get('/'.$privateName.'?go-get=1', $ownerToken);
+        $this->assertNotFound($this->get('/no-such-' . bin2hex(random_bytes(4)) . '?go-get=1'));
+        $this->assertNotFound($this->get('/' . $privateName . '?go-get=1'));
+        $ownerResponse = $this->get('/' . $privateName . '?go-get=1', $ownerToken);
         $this->assertSame(200, $ownerResponse->getStatusCode());
         $this->assertStringContainsString($this->goImportMeta($privateName), (string) $ownerResponse->getContent());
 
         // Any other go-get value is a plain page view, not a discovery document.
-        $page = $this->get('/'.$name.'?go-get=0');
+        $page = $this->get('/' . $name . '?go-get=0');
         $this->assertSame(200, $page->getStatusCode());
         $this->assertStringNotContainsString('go-import', (string) $page->getContent());
-        $this->assertStringContainsString('<h1>'.$name.'</h1>', (string) $page->getContent());
+        $this->assertStringContainsString('<h1>' . $name . '</h1>', (string) $page->getContent());
     }
 
     public function testGitSmartAndDumbRoutesStillWinOverThePage(): void
@@ -362,11 +395,11 @@ final class RepoWebPageTest extends KernelTestCase
         $name = $this->repo($this->user('karl'));
         GitTestHelper::writeFile($this->git($name), 'main', 'README.md', "# Git\n", 'add readme');
 
-        $smart = $this->get('/'.$name.'.git/info/refs?service=git-upload-pack');
+        $smart = $this->get('/' . $name . '.git/info/refs?service=git-upload-pack');
         $this->assertSame(200, $smart->getStatusCode());
         $this->assertStringContainsString('application/x-git-upload-pack-advertisement', (string) $smart->headers->get('Content-Type'));
 
-        $dumb = $this->get('/'.$name.'.git/HEAD');
+        $dumb = $this->get('/' . $name . '.git/HEAD');
         $this->assertSame(200, $dumb->getStatusCode());
         $this->assertStringNotContainsString('text/html', (string) $dumb->headers->get('Content-Type'));
     }
@@ -386,7 +419,7 @@ final class RepoWebPageTest extends KernelTestCase
             ['POST', '/demo/git-receive-pack'],
             ['POST', '/demo.git/info/lfs/objects/batch'],
             ['GET', '/demo.git/info/lfs/locks'],
-            ['GET', '/demo.git/info/lfs/objects/basic/'.$oid],
+            ['GET', '/demo.git/info/lfs/objects/basic/' . $oid],
         ];
         foreach ($cases as [$method, $path]) {
             $router->getContext()->setMethod($method);
