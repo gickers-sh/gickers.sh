@@ -33,12 +33,42 @@ final class DoctrineUserStore extends ServiceEntityRepository implements UserSto
 
     public function byFingerprint(string $fingerprint): ?User
     {
+        $users = $this->allByFingerprint($fingerprint);
+
+        return $users[0] ?? null;
+    }
+
+    public function byFingerprintAndUsername(string $fingerprint, string $username): ?User
+    {
+        try {
+            $normalized = User::normalizeUsername($username);
+        } catch (\App\Shared\Domain\Exception\InvalidInput) {
+            return null;
+        }
+
+        return $this->createQueryBuilder('u')
+            ->innerJoin('u.publicKeys', 'pk')
+            ->where('pk.fingerprint = :fingerprint')
+            ->andWhere('u.username = :username')
+            ->setParameter('fingerprint', $fingerprint)
+            ->setParameter('username', $normalized)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
+    /**
+     * @return list<User>
+     */
+    public function allByFingerprint(string $fingerprint): array
+    {
+        /** @var list<User> */
         return $this->createQueryBuilder('u')
             ->innerJoin('u.publicKeys', 'pk')
             ->where('pk.fingerprint = :fingerprint')
             ->setParameter('fingerprint', $fingerprint)
+            ->orderBy('pk.id', 'ASC')
             ->getQuery()
-            ->getOneOrNullResult();
+            ->getResult();
     }
 
     /**

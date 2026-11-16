@@ -33,15 +33,15 @@ final readonly class SignUp
             throw new AccessDenied('self-service signup is disabled');
         }
 
-        $key = SshKey::parse($keyLine);
-        $existing = $this->userStore->byFingerprint($key->fingerprint);
-        if (null !== $existing) {
-            throw new Conflict(sprintf('this public key already belongs to user "%s"', $existing->username()));
-        }
-
         $normalized = User::normalizeUsername($username);
         if (null !== $this->userStore->byUsername($normalized)) {
             throw new Conflict(sprintf('user "%s" already exists', $normalized));
+        }
+
+        $key = SshKey::parse($keyLine);
+        $existing = $this->userStore->byFingerprintAndUsername($key->fingerprint, $normalized);
+        if (null !== $existing) {
+            throw new Conflict(sprintf('this public key already belongs to user "%s"', $existing->username()));
         }
 
         $now = $this->clock->now();

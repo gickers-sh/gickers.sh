@@ -8,6 +8,7 @@ use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'user_public_keys')]
+#[ORM\UniqueConstraint(name: 'uniq_user_fingerprint', columns: ['user_id', 'fingerprint'])]
 class PublicKey
 {
     #[ORM\Id]
@@ -21,7 +22,7 @@ class PublicKey
     #[ORM\Column(type: 'text')]
     private string $keyData;
 
-    #[ORM\Column(length: 128, unique: true)]
+    #[ORM\Column(length: 128)]
     private string $fingerprint;
 
     #[ORM\Column(length: 255, nullable: true)]

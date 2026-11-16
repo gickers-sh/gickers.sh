@@ -14,8 +14,12 @@ final readonly class AuthenticateSshKey
     ) {
     }
 
-    public function __invoke(string $fingerprint): ?User
+    public function __invoke(string $fingerprint, ?string $targetUsername = null): ?User
     {
+        if (null !== $targetUsername && '' !== trim($targetUsername)) {
+            return $this->userStore->byFingerprintAndUsername($fingerprint, trim($targetUsername));
+        }
+
         return $this->userStore->byFingerprint($fingerprint);
     }
 }

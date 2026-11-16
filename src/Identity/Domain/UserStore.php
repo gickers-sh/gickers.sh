@@ -14,6 +14,11 @@ interface UserStore
 
     public function byFingerprint(string $fingerprint): ?User;
 
+    public function byFingerprintAndUsername(string $fingerprint, string $username): ?User;
+
+    /** @return list<User> */
+    public function allByFingerprint(string $fingerprint): array;
+
     /** @return list<User> ordered by username */
     public function all(): array;
 
