@@ -1,23 +1,14 @@
+{% extends 'base.html.twig' %}
 {% import 'macros/ui.html.twig' as ui %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ serverName }} - Git server for the command line</title>
-    <link rel="stylesheet" href="/css/repo-web.css">
-    <script src="/js/repo-web.js" defer></script>
-</head>
-<body>
-<main>
-    <header class="repo-head home-header">
-        <div class="identity">
-            <h1 class="home-title"><span class="cli-prompt">&gt;_</span> {{ serverName }}</h1>
-            <p class="description">A tasty, self-hostable Git server for the command line.</p>
-        </div>
-        {{ ui.user_nav(currentUsername, sshPrefix, 'home') }}
-    </header>
 
+{% set nav_page = 'home' %}
+
+{% block header_identity %}
+    <h1 class="home-title"><span class="cli-prompt">&gt;_</span> {{ serverName }}</h1>
+    <p class="description">A tasty, self-hostable Git server for the command line.</p>
+{% endblock %}
+
+{% block main %}
     <section class="home-hero">
         <div class="hero-card">
             <div class="hero-main">
@@ -64,10 +55,10 @@
     </section>
 
     {% if currentUsername is null %}
-        <section class="section home-auth-notice">
-            <p class="notice">You are not signed in to this browser.</p>
-            <p class="cli-login-hint">Run <code>{{ sshPrefix }} web login</code> {{ ui.copy_btn(sshPrefix ~ ' web login', null, 'copy-btn-sm', 'Copy login command') }} over SSH, then open the link it prints to sign in. Your repositories will appear here.</p>
-        </section>
+        {% include 'components/auth_notice.html.twig' with {
+            class: 'home-auth-notice',
+            sshPrefix: sshPrefix
+        } only %}
     {% endif %}
 
     <section class="home-repos-section" aria-label="Public repositories">
@@ -84,26 +75,14 @@
         {% else %}
             <ul class="repo-list">
                 {% for repo in publicRepositories %}
-                    <li class="repo-list-item">
-                        <a class="repo-list-link" href="/{{ repo.name }}">{{ repo.name }}</a>
-                        <span class="repo-list-badges">
-                            {% if repo.owner %}
-                                <a href="/@{{ repo.owner }}" class="cli-tier cli-tier-owner" title="View @{{ repo.owner }}'s repositories">@{{ repo.owner }}</a>
-                            {% endif %}
-                            <span class="cli-tier cli-tier-public">public</span>
-                        </span>
-                        {% if repo.description is not empty %}<span class="repo-list-desc">{{ repo.description }}</span>{% endif %}
-                    </li>
+                    {% include 'components/repo_item.html.twig' with {
+                        repo: repo,
+                        show_public_badge: true
+                    } only %}
                 {% endfor %}
             </ul>
         {% endif %}
     </section>
+{% endblock %}
 
-    <footer class="status">
-        <span class="status-name">{{ serverName }}</span>
-        <span class="status-summary">{{ publicRepositories|length }} public repositor{{ publicRepositories|length == 1 ? 'y' : 'ies' }}</span>
-        <span class="status-meta">HTTP · {{ serverName }}</span>
-    </footer>
-</main>
-</body>
-</html>
+{% block footer_summary %}{{ publicRepositories|length }} public repositor{{ publicRepositories|length == 1 ? 'y' : 'ies' }}{% endblock %}

@@ -1,0 +1,23 @@
+<li class="repo-list-item">
+    <a class="repo-list-link" href="/{{ repo.name }}">{{ repo.name }}</a>
+    <span class="repo-list-badges">
+        {% if repo.owner is defined and repo.owner %}
+            <a href="/@{{ repo.owner }}" class="cli-tier cli-tier-owner" title="View @{{ repo.owner }}'s repositories">@{{ repo.owner }}</a>
+        {% endif %}
+        {% if repo.role is defined and repo.role %}
+            <span class="cli-tier cli-tier-role">{{ repo.role }}</span>
+        {% endif %}
+        {% if repo.private is defined and repo.private %}
+            <span class="cli-tier cli-tier-admin">private</span>
+        {% endif %}
+        {% if repo.hidden is defined and repo.hidden %}
+            <span class="cli-tier cli-tier-write">hidden</span>
+        {% endif %}
+        {% if show_public_badge|default(false) %}
+            <span class="cli-tier cli-tier-public">public</span>
+        {% endif %}
+    </span>
+    {% if repo.description is defined and repo.description is not empty %}
+        <span class="repo-list-desc">{{ repo.description }}</span>
+    {% endif %}
+</li>

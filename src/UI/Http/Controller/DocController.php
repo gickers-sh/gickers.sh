@@ -37,7 +37,7 @@ final readonly class DocController
 
         $commands = $this->docRegistry->allCommands($isAdmin, $sshPrefix);
 
-        $html = $this->twig->render('web/docs.html.twig', [
+        $html = $this->twig->render('docs/index.html.twig', [
             'serverName' => $this->settings->name ?: 'codes.sh',
             'currentUsername' => $user?->username(),
             'isAdmin' => $isAdmin,
@@ -69,7 +69,7 @@ final readonly class DocController
             throw new NotFoundHttpException(sprintf('Command "%s" not found.', $path));
         }
 
-        $html = $this->twig->render('web/doc_command.html.twig', [
+        $html = $this->twig->render('docs/command.html.twig', [
             'serverName' => $this->settings->name ?: 'codes.sh',
             'currentUsername' => $user?->username(),
             'isAdmin' => $isAdmin,

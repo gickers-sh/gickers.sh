@@ -1,0 +1,62 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ serverName }} - CLI Command Reference{% endblock %}
+
+{% set nav_page = 'docs' %}
+
+{% block header_identity %}
+    <h1 class="home-title"><a href="/" style="text-decoration: none; color: inherit;"><span class="cli-prompt">&gt;_</span> {{ serverName }}</a> <span class="cli-host">/ docs</span></h1>
+    <p class="description">Command line reference and documentation for SSH CLI and web administration.</p>
+{% endblock %}
+
+{% block main %}
+    <section class="section cli-palette-section" id="commands" aria-label="CLI Command Reference">
+        <div class="cli-drawer-header">
+            <span class="cli-drawer-title">
+                <span class="cli-prompt">&gt;_</span> Command Catalog
+                <span class="cli-host">({{ sshPrefix }})</span>
+            </span>
+            <span class="cli-drawer-hint">
+                {{ commands|length }} commands · {% if isAdmin %}Admin access{% else %}Public & User scope{% endif %}
+            </span>
+        </div>
+        <div class="cli-drawer-body">
+            <div class="cli-filter-bar">
+                <div class="cli-tabs" role="tablist">
+                    <button type="button" class="cli-tab active" data-filter="all">All</button>
+                    <button type="button" class="cli-tab" data-filter="explore">Explore</button>
+                    <button type="button" class="cli-tab" data-filter="repo">Repositories</button>
+                    <button type="button" class="cli-tab" data-filter="keys">Keys &amp; Tokens</button>
+                    <button type="button" class="cli-tab" data-filter="identity">Identity</button>
+                    {% if isAdmin %}
+                        <button type="button" class="cli-tab" data-filter="admin">User Admin</button>
+                        <button type="button" class="cli-tab" data-filter="settings">Server Settings</button>
+                    {% endif %}
+                </div>
+                {% include 'components/filter_actions.html.twig' with {
+                    placeholder: 'Filter commands (e.g. branch, pubkey, token)...'
+                } only %}
+            </div>
+
+            <div class="cli-command-grid" data-prefix="{{ sshPrefix }}">
+                {% for cmd in commands %}
+                    {% include 'components/command_card.html.twig' with {
+                        category: cmd.category,
+                        base: cmd.path,
+                        url: cmd.url,
+                        title_text: 'documentation for ' ~ cmd.path,
+                        name: cmd.path,
+                        tier: cmd.tier,
+                        description: cmd.short,
+                        action_title: 'Click to copy command',
+                        command: cmd.synopsis,
+                        btn_title: 'Copy command to clipboard'
+                    } only %}
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+{% endblock %}
+
+{% block footer_summary %}Interactive Command Reference{% endblock %}
+{% block footer_meta %}Centralized Catalog{% endblock %}

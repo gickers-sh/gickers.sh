@@ -31,7 +31,7 @@ final readonly class HomeController
         $user = $this->domainUser();
         $sshPrefix = $this->sshPrefix();
 
-        $html = $this->twig->render('web/home.html.twig', [
+        $html = $this->twig->render('home.html.twig', [
             'serverName' => $this->settings->name ?: 'codes.sh',
             'currentUsername' => $user?->username(),
             'sshPrefix' => $sshPrefix,

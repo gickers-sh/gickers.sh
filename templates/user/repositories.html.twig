@@ -1,0 +1,64 @@
+{% extends 'base.html.twig' %}
+{% import 'macros/ui.html.twig' as ui %}
+
+{% block title %}{% if isOwner %}My Repositories - {{ serverName }}{% elseif targetUsername %}@{{ targetUsername }} - {{ serverName }}{% else %}My Repositories - {{ serverName }}{% endif %}{% endblock %}
+
+{% set nav_page = 'user_repos' %}
+
+{% block header_identity %}
+    <div class="repo-breadcrumb">
+        <a href="/" class="breadcrumb-link"><span class="cli-prompt">&gt;_</span> {{ serverName }}</a>
+        <span class="breadcrumb-sep">/</span>
+        <span class="breadcrumb-current">{% if isOwner %}My Repositories{% elseif targetUsername %}@{{ targetUsername }}{% else %}repositories{% endif %}</span>
+    </div>
+    <h1>{% if isOwner %}My Repositories{% elseif targetUsername %}@{{ targetUsername }}{% else %}My Repositories{% endif %}</h1>
+    <p class="description">
+        {% if isOwner %}
+            Signed in as <strong>@{{ targetUsername }}</strong> on {{ serverName }}.
+        {% elseif targetUsername %}
+            Repositories on {{ serverName }}.
+        {% else %}
+            {{ serverName }}
+        {% endif %}
+    </p>
+{% endblock %}
+
+{% block main %}
+    {% if isOwner %}
+        {% include 'components/clone_bar.html.twig' with {
+            label: 'New Repo',
+            command: sshPrefix ~ ' repo create <name>',
+            copy_command: sshPrefix ~ ' repo create ',
+            btn_title: 'Copy repo create command'
+        } only %}
+    {% endif %}
+
+    {% if targetUsername is null and currentUsername is null %}
+        {% include 'components/auth_notice.html.twig' with {
+            class: 'active',
+            sshPrefix: sshPrefix
+        } only %}
+    {% elseif repositories is empty %}
+        <section class="section active">
+            {% if isOwner %}
+                <p class="notice">You don't own or collaborate on any repositories yet.</p>
+                <p class="cli-login-hint">Create one with <code>{{ sshPrefix }} repo create &lt;name&gt;</code>.</p>
+            {% else %}
+                <p class="notice">No public repositories found for @{{ targetUsername }}.</p>
+            {% endif %}
+        </section>
+    {% else %}
+        <section class="section active" aria-label="Repositories list">
+            <ul class="repo-list">
+                {% for repo in repositories %}
+                    {% include 'components/repo_item.html.twig' with {
+                        repo: repo
+                    } only %}
+                {% endfor %}
+            </ul>
+        </section>
+    {% endif %}
+{% endblock %}
+
+{% block footer_name %}{% if targetUsername %}@{{ targetUsername }}{% else %}{{ serverName }}{% endif %}{% endblock %}
+{% block footer_summary %}{{ repositories|length }} repositor{{ repositories|length == 1 ? 'y' : 'ies' }}{% endblock %}

@@ -1,0 +1,5 @@
+{% import 'macros/ui.html.twig' as ui %}
+<section class="section{% if class is defined and class %} {{ class }}{% endif %}">
+    <p class="notice">{{ message|default('You are not signed in to this browser.') }}</p>
+    <p class="cli-login-hint">Run <code>{{ sshPrefix }} web login</code> {{ ui.copy_btn(sshPrefix ~ ' web login', null, 'copy-btn-sm', 'Copy login command') }} over SSH, then open the link it prints to sign in. Your repositories will appear here.</p>
+</section>

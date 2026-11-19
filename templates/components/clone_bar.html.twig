@@ -1,0 +1,10 @@
+{% import 'macros/ui.html.twig' as ui %}
+<div class="repo-clone-bar{% if class is defined and class %} {{ class }}{% endif %}">
+    {% if label is defined and label %}
+        <span class="clone-label">{{ label }}</span>
+    {% endif %}
+    <div class="clone-box{% if box_class is defined and box_class %} {{ box_class }}{% endif %}" title="{{ box_title|default('Click to copy command') }}">
+        <code class="clone-code">{{ display_command|default(command)|raw }}</code>
+        {{ ui.copy_btn(copy_command|default(command), btn_label|default('Copy'), 'copy-btn-sm', btn_title|default('Copy command'), aria_label|default(btn_title|default('Copy command'))) }}
+    </div>
+</div>

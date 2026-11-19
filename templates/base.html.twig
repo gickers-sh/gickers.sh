@@ -1,0 +1,38 @@
+{% import 'macros/ui.html.twig' as ui %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{{ serverName }} - Git server for the command line{% endblock %}</title>
+    {% block styles %}
+        <link rel="stylesheet" href="{{ asset('/css/repo-web.css') }}">
+    {% endblock %}
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    {% block content %}
+        <main>
+            {% block header %}
+                <header class="repo-head home-header">
+                    <div class="identity">
+                        {% block header_identity %}{% endblock %}
+                    </div>
+                    {% block header_nav %}
+                        {{ ui.user_nav(currentUsername|default(null), sshPrefix|default(''), nav_page|default('home')) }}
+                    {% endblock %}
+                </header>
+            {% endblock %}
+
+            {% block main %}{% endblock %}
+
+            {% block footer %}
+                <footer class="status{% block footer_class %}{% endblock %}"{% block footer_attrs %}{% endblock %}><span class="status-name">{% block footer_name %}{{ serverName }}{% endblock %}</span><span class="status-summary"{% block footer_summary_attrs %}{% endblock %}>{% block footer_summary %}{% endblock %}</span><span class="status-meta">{% block footer_meta %}HTTP · {{ serverName }}{% endblock %}</span></footer>
+            {% endblock %}
+        </main>
+    {% endblock %}
+</body>
+{% block javascript %}
+    <script src="{{ asset('/js/repo-web.js') }}" defer></script>
+{% endblock %}
+</html>

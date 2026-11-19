@@ -1,0 +1,19 @@
+{% import 'macros/ui.html.twig' as ui %}
+<div class="cli-command-card"{% if category is defined and category %} data-category="{{ category }}"{% endif %}{% if base is defined and base %} data-base="{{ base }}"{% endif %}>
+    <a href="{{ url }}" class="cli-card-info cli-card-link" title="View {{ title_text|default('documentation for ' ~ name) }}">
+        <span class="cli-card-title">
+            <code>{{ name }}</code>
+            {% if tier is defined and tier and tier != 'read' %}
+                <span class="cli-tier cli-tier-{{ tier }}">{{ tier }}</span>
+            {% endif %}
+            <span class="cli-card-arrow" aria-hidden="true">&rarr;</span>
+        </span>
+        {% if description is defined and description %}
+            <span class="cli-card-desc">{{ description }}</span>
+        {% endif %}
+    </a>
+    <div class="cli-card-action"{% if action_title is defined and action_title %} title="{{ action_title }}"{% endif %}>
+        <code class="cli-code">{{ command }}</code>
+        {{ ui.copy_btn(copy_command|default(command), btn_label|default('Copy'), 'copy-btn-sm', btn_title|default('Copy command to clipboard')) }}
+    </div>
+</div>

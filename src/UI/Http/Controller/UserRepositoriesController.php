@@ -51,7 +51,7 @@ final readonly class UserRepositoriesController
             ? $this->repositoriesForOwner($targetUser)
             : $this->repositoriesForViewer($targetUser, $viewer);
 
-        $html = $this->twig->render('web/user-repositories.html.twig', [
+        $html = $this->twig->render('user/repositories.html.twig', [
             'serverName' => $this->settings->name ?: 'codes.sh',
             'targetUsername' => $targetUser->username(),
             'currentUsername' => $viewer?->username(),
@@ -81,7 +81,7 @@ final readonly class UserRepositoriesController
 
         $sshPrefix = $this->sshPrefix();
 
-        $html = $this->twig->render('web/user-repositories.html.twig', [
+        $html = $this->twig->render('user/repositories.html.twig', [
             'serverName' => $this->settings->name ?: 'codes.sh',
             'targetUsername' => null,
             'currentUsername' => null,
