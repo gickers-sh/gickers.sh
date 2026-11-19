@@ -13,7 +13,23 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/codes-ssh .
 FROM dunglas/frankenphp:1-php8.4-bookworm AS runtime
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git git-lfs postgresql-client \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        git-lfs \
+        gnupg \
+        postgresql-client \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
+    && chmod a+r /etc/apt/keyrings/docker.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        docker-ce-cli \
+        docker-compose-plugin \
+        docker-buildx-plugin \
+    && ln -sf /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose \
     && git lfs install --system \
     && rm -rf /var/lib/apt/lists/*
 

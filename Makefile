@@ -34,7 +34,7 @@ REQUIRED_BINS ?= $(PHP) $(COMPOSER) git
 OPTIONAL_BINS ?= git-lfs gpg bore
 REQUIRED_PHP_EXTS ?= ffi mbstring pcntl posix
 
-.PHONY: all build setup preflight install run serve debug e2e browse publish migrate rollback sync-hooks test test-render lint cs cs-check stan deptrac clean clean-all help upstream-setup upstream-fetch upstream-status upstream-sync docker-env docker-build docker-up docker-watch docker-down docker-logs docker-ps docker-import-sqlite docker-import-repos docker-import
+.PHONY: all build setup preflight install run serve debug e2e browse publish migrate rollback sync-hooks test test-render lint cs cs-check stan deptrac clean clean-all help upstream-setup upstream-fetch upstream-status upstream-sync docker-env docker-build docker-up docker-watch docker-down docker-logs docker-ps docker-migrate docker-rollback docker-import-sqlite docker-import-repos docker-import
 
 all: build
 
@@ -154,6 +154,14 @@ docker-logs:
 ## docker-ps: Show the status of the stack services
 docker-ps:
 	$(DC) ps
+
+## docker-migrate: Apply database migrations in Docker (PostgreSQL; optional ARGS="...")
+docker-migrate: docker-env
+	$(DC) run --rm init admin migrate $(ARGS)
+
+## docker-rollback: Rollback database to the previous migration step in Docker (optional ARGS="...")
+docker-rollback: docker-env
+	$(DC) run --rm init admin rollback $(ARGS)
 
 ## docker-import-sqlite: Replace Postgres data with a legacy SQLite db (stack must be up; SRC=path, default .data/codes-sh.db)
 docker-import-sqlite:

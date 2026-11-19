@@ -38,6 +38,8 @@ x-app: &app
     SOFT_SERVE_ALLOW_KEYLESS: ${SOFT_SERVE_ALLOW_KEYLESS:-true}
     SOFT_SERVE_INITIAL_ADMIN_KEYS: ${SOFT_SERVE_INITIAL_ADMIN_KEYS:-}
     SOFT_SERVE_WEBHOOK_ALLOW_LIST: ${SOFT_SERVE_WEBHOOK_ALLOW_LIST:-}
+    DOCKER_HOST: ${DOCKER_HOST:-tcp://docker-socket-proxy:2375}
+    CADDY_TLS: ${CADDY_TLS:-}
   volumes:
     - ./:/app
     - ../termstrap:/termstrap
@@ -59,6 +61,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-codes}
     volumes:
       - codes-db:/var/lib/postgresql/data
+    networks:
+      - codes-internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-codes} -d ${POSTGRES_DB:-codes}"]
       interval: 5s
@@ -68,6 +72,8 @@ services:
   init:
     <<: *app
     command: ["serve", "--only=init"]
+    networks:
+      - codes-internal
     restart: "no"
     depends_on:
       postgres:
@@ -78,6 +84,10 @@ services:
     command: ["serve", "--only=http", "--skip-init"]
     ports:
       - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    networks:
+      - codes-internal
+      - codes-proxy
     restart: unless-stopped
     depends_on:
       postgres:
@@ -90,22 +100,66 @@ services:
     command: ["serve", "--only=ssh", "--skip-init"]
     ports:
       - "${SSH_PORT:-2223}:2223"
+    environment:
+      <<: *app-env
+      CADDY_ADMIN_ADDR: http:2019
+    networks:
+      - codes-internal
+      - codes-proxy
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       init:
         condition: service_completed_successfully
+      docker-socket-proxy:
+        condition: service_started
+
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    environment:
+      PING: 1
+      VERSION: 1
+      CONTAINERS: 1
+      IMAGES: 1
+      NETWORKS: 1
+      VOLUMES: 1
+      BUILD: 1
+      SESSION: 1
+      COMMIT: 1
+      EXEC: 1
+      INFO: 1
+      POST: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - codes-internal
+    restart: unless-stopped
 
   worker:
     <<: *app
     command: ["serve", "--only=worker", "--skip-init"]
+    environment:
+      <<: *app-env
+      CADDY_ADMIN_ADDR: http:2019
+    networks:
+      - codes-internal
+      - codes-proxy
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       init:
         condition: service_completed_successfully
+      docker-socket-proxy:
+        condition: service_started
+
+networks:
+  codes-internal:
+    driver: bridge
+  codes-proxy:
+    name: codes-proxy
+    driver: bridge
 
 volumes:
   codes-data:

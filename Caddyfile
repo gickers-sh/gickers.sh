@@ -1,10 +1,13 @@
 {
-	auto_https off
+	admin 0.0.0.0:2019 {
+		origins 0.0.0.0:2019 http:2019 127.0.0.1:2019 localhost:2019
+	}
 }
 
 # soft:serve passes SOFT_SERVE_HTTP_PORT and SOFT_SERVE_HTTP_HOST.
-:{$SOFT_SERVE_HTTP_PORT:23232} {
-	bind {$SOFT_SERVE_HTTP_HOST:0.0.0.0}
+codes.sh, *.codes.sh {
+	{$CADDY_TLS}
+
 	root * public/
 	encode zstd br gzip
 	php_server {
@@ -18,3 +21,20 @@
 		}
 	}
 }
+
+:{$SOFT_SERVE_HTTP_PORT:23232} {
+	root * public/
+	encode zstd br gzip
+	php_server {
+		# Symfony selects its persistent request runner only when this marker is
+		# present. Without it, the worker boots the regular runner and returns an
+		# empty 200 response for every request.
+		worker {
+			file public/index.php
+			env FRANKENPHP_WORKER true
+			watch
+		}
+	}
+}
+
+import {$SOFT_SERVE_DATA_PATH:.data}/caddy/sites/*.caddy

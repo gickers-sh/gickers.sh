@@ -11,3 +11,5 @@
 /.php-cs-fixer.cache
 /.phpunit.cache/
 /bin/codes-ssh
+*.pem
+*.key
