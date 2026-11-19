@@ -79,6 +79,7 @@ final readonly class CommandDocumentationRegistry
      *     parentUrl: ?string,
      *     short: string,
      *     long: string,
+     *     doc: array{lead: string, scope: ?string, arguments: list<array{name: string, description: string, optional: bool}>, output: ?string, notes: ?string},
      *     example: string,
      *     synopsis: string,
      *     use: string,
@@ -124,6 +125,7 @@ final readonly class CommandDocumentationRegistry
      *     parentUrl: ?string,
      *     short: string,
      *     long: string,
+     *     doc: array{lead: string, scope: ?string, arguments: list<array{name: string, description: string, optional: bool}>, output: ?string, notes: ?string},
      *     example: string,
      *     synopsis: string,
      *     use: string,
@@ -145,7 +147,8 @@ final readonly class CommandDocumentationRegistry
             return null;
         }
 
-        $tokens = array_values(array_filter(preg_split('#[/ ]+#', $clean)));
+        $split = preg_split('#[/ ]+#', $clean);
+        $tokens = array_values(array_filter(is_array($split) ? $split : []));
         if ([] === $tokens) {
             return null;
         }
@@ -180,6 +183,7 @@ final readonly class CommandDocumentationRegistry
      *     parentUrl: ?string,
      *     short: string,
      *     long: string,
+     *     doc: array{lead: string, scope: ?string, arguments: list<array{name: string, description: string, optional: bool}>, output: ?string, notes: ?string},
      *     example: string,
      *     synopsis: string,
      *     use: string,
@@ -214,9 +218,9 @@ final readonly class CommandDocumentationRegistry
         ], $node->uiSpecs);
 
         $primaryUi = $node->uiSpecs[0] ?? null;
-        $category = $primaryUi?->category ?? $this->inferCategory($node);
-        $tier = $primaryUi?->tier ?? 'read';
-        $scope = $primaryUi?->scope ?? 'global';
+        $category = null !== $primaryUi ? $primaryUi->category : $this->inferCategory($node);
+        $tier = null !== $primaryUi ? $primaryUi->tier : 'read';
+        $scope = null !== $primaryUi ? $primaryUi->scope : 'global';
 
         $cmdPath = trim($node->commandPath());
         $slug = str_replace(' ', '/', $cmdPath);
@@ -251,9 +255,11 @@ final readonly class CommandDocumentationRegistry
                 'slug' => str_replace(' ', '/', $childPath),
                 'url' => '/docs/' . str_replace(' ', '/', $childPath),
                 'short' => $child->short,
-                'tier' => $childUi?->tier ?? 'read',
+                'tier' => null !== $childUi ? $childUi->tier : 'read',
             ];
         }
+
+        $parsedDoc = $this->parseLongDescription($node->long);
 
         return [
             'name' => $node->name,
@@ -264,6 +270,7 @@ final readonly class CommandDocumentationRegistry
             'parentUrl' => $parentUrl,
             'short' => $node->short,
             'long' => $node->long,
+            'doc' => $parsedDoc,
             'example' => $example,
             'synopsis' => $synopsis,
             'use' => $use,
@@ -277,6 +284,80 @@ final readonly class CommandDocumentationRegistry
             'subcommands' => $subcommands,
             'breadcrumbs' => $breadcrumbs,
         ];
+    }
+
+    /**
+     * Parse structured sections from command long description.
+     *
+     * @return array{
+     *     lead: string,
+     *     scope: ?string,
+     *     arguments: list<array{name: string, description: string, optional: bool}>,
+     *     output: ?string,
+     *     notes: ?string,
+     * }
+     */
+    public function parseLongDescription(string $raw): array
+    {
+        $lines = explode("\n", trim($raw));
+        /** @var array<string, list<string>> $grouped */
+        $grouped = [];
+        $current = 'lead';
+
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+            if (1 === preg_match('/^(Scope|Arguments|Output|Notes|Flags):\s*$/', $trimmed, $m)) {
+                $current = $m[1];
+                continue;
+            }
+            $grouped[$current][] = $line;
+        }
+
+        $leadText = isset($grouped['lead']) ? trim(implode("\n", $grouped['lead'])) : '';
+        $scopeText = isset($grouped['Scope']) ? trim(implode("\n", $grouped['Scope'])) : null;
+        $outputText = isset($grouped['Output']) ? trim(implode("\n", $grouped['Output'])) : null;
+        $notesText = isset($grouped['Notes']) ? trim(implode("\n", $grouped['Notes'])) : null;
+
+        $arguments = isset($grouped['Arguments']) ? $this->parseArguments($grouped['Arguments']) : [];
+
+        return [
+            'lead' => $leadText,
+            'scope' => '' !== $scopeText ? $scopeText : null,
+            'arguments' => $arguments,
+            'output' => '' !== $outputText ? $outputText : null,
+            'notes' => '' !== $notesText ? $notesText : null,
+        ];
+    }
+
+    /**
+     * @param list<string> $lines
+     *
+     * @return list<array{name: string, description: string, optional: bool}>
+     */
+    private function parseArguments(array $lines): array
+    {
+        $arguments = [];
+        foreach ($lines as $line) {
+            if (1 === preg_match('/^\s*([A-Za-z0-9_\[\]\.\-]+)\s{2,}(.+)$/', $line, $m)) {
+                $name = trim($m[1]);
+                $desc = trim($m[2]);
+                $optional = str_starts_with($name, '[') || str_contains(strtolower($desc), 'optional');
+                $arguments[] = [
+                    'name' => $name,
+                    'description' => $desc,
+                    'optional' => $optional,
+                ];
+            } elseif ([] !== $arguments && 1 === preg_match('/^\s{4,}(.+)$/', $line, $m)) {
+                $lastIndex = count($arguments) - 1;
+                $arguments[$lastIndex] = [
+                    'name' => $arguments[$lastIndex]['name'],
+                    'description' => $arguments[$lastIndex]['description'] . ' ' . trim($m[1]),
+                    'optional' => $arguments[$lastIndex]['optional'],
+                ];
+            }
+        }
+
+        return $arguments;
     }
 
     /**
