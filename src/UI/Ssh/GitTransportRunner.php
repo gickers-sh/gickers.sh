@@ -31,12 +31,16 @@ final readonly class GitTransportRunner
     ) {
     }
 
+    /**
+     * @param resource|string|\Traversable<string>|null $inputStream
+     */
     public function run(
         string $command,
         string $rawRepo,
         ?User $actor,
         OutputInterface $output,
         OutputInterface $errOutput,
+        $inputStream = null,
     ): int {
         if (!in_array($command, ['git-upload-pack', 'git-receive-pack', 'git-upload-archive'], true)) {
             throw new InvalidInput(sprintf('Unsupported git command "%s"', $command));
@@ -84,7 +88,11 @@ final readonly class GitTransportRunner
             'SOFT_SERVE_DATA_PATH' => $this->serverSettings->dataPath,
         ];
         $process->setEnv($env);
-        $process->setInput(\STDIN);
+        if (null !== $inputStream) {
+            $process->setInput($inputStream);
+        } elseif (\defined('STDIN')) {
+            $process->setInput(\STDIN);
+        }
         // Like Go's git transport: no wall-clock limit, large pushes/clones may run for minutes.
         $process->setTimeout(null);
 

@@ -18,6 +18,7 @@ use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Input\StreamableInputInterface;
 use Symfony\Component\Console\Input\StringInput;
 use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -194,12 +195,20 @@ final class SshEntrypointCommand extends Command
                     throw new InvalidInput('Missing repository argument');
                 }
 
+                $app = $this->getApplication();
+                $isTest = 'test' === ($app instanceof \Symfony\Bundle\FrameworkBundle\Console\Application ? $app->getKernel()->getEnvironment() : '');
+                $inputStream = $input instanceof StreamableInputInterface ? $input->getStream() : null;
+                if (null === $inputStream && $isTest) {
+                    $inputStream = '';
+                }
+
                 return $this->gitTransportRunner->run(
                     $firstToken,
                     $tokens[1],
                     $user,
                     $output,
-                    $errOutput
+                    $errOutput,
+                    $inputStream
                 );
             }
 

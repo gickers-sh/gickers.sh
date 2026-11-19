@@ -188,7 +188,7 @@ final class SshEntrypointCommandTest extends KernelTestCase
     public function testDispatchGitReceivePack(): void
     {
         $this->dispatch('repo create receiverepo', $this->adminFp);
-        $tester = $this->dispatch('git-receive-pack "receiverepo.git"', $this->adminFp);
+        $tester = $this->dispatch('git-receive-pack "receiverepo.git"', $this->adminFp, "0000\n");
         $this->assertContains($tester->getStatusCode(), [0, 128]);
     }
 
