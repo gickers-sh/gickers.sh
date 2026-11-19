@@ -4,6 +4,7 @@ framework:
     handle_all_throwables: true
     php_errors:
         log: true
+    assets: true
 
 when@test:
     framework:
