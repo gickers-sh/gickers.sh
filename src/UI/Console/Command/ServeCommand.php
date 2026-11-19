@@ -6,6 +6,7 @@ namespace App\UI\Console\Command;
 
 use App\Access\Application\ServerPolicy;
 use App\Access\Domain\AccessLevel;
+use App\Deploy\Application\ReconcileDeployments;
 use App\Identity\Application\BootstrapServer;
 use App\Repo\Infrastructure\Git\HookSynchronizer;
 use App\Shared\Infrastructure\Config\ServerSettings;
@@ -43,6 +44,7 @@ final class ServeCommand extends Command
         private readonly BootstrapServer $bootstrapServer,
         private readonly HookSynchronizer $hookSynchronizer,
         private readonly ProcessSupervisor $supervisor,
+        private readonly ReconcileDeployments $reconcileDeployments,
         #[Autowire('%kernel.project_dir%')]
         private readonly string $projectDir,
         #[Autowire('%kernel.environment%')]
@@ -55,6 +57,8 @@ final class ServeCommand extends Command
         private readonly string $webhookAllowList,
         #[Autowire(env: 'default::CODES_SSH_BIN')]
         private readonly ?string $customCodesSshBin = null,
+        #[Autowire(env: 'default::DEPLOY_AUTO_RECONCILE_ON_BOOT')]
+        private readonly ?string $autoReconcileOnBoot = null,
     ) {
         parent::__construct();
     }
@@ -90,6 +94,18 @@ final class ServeCommand extends Command
             $this->runConsole('cache:warmup', [], $output);
             ($this->bootstrapServer)();
             $this->jwtKeys->ensure();
+
+            $syncedCount = $this->reconcileDeployments->reconcileCaddyRoutes(reload: false);
+            if ($syncedCount > 0) {
+                $output->writeln(sprintf('<info>Reconciled Caddy reverse proxy routes for %d active deployment domain(s).</info>', $syncedCount));
+            }
+
+            if ($this->shouldAutoReconcileDeployOnBoot()) {
+                $requeued = $this->reconcileDeployments->reconcileOnBoot();
+                if ([] !== $requeued) {
+                    $output->writeln(sprintf('<info>Requeued %d running deployment(s) for container reconciliation on boot.</info>', count($requeued)));
+                }
+            }
         }
 
         // `--only=init` runs the preparation above and exits (one-shot init container).
@@ -214,5 +230,14 @@ final class ServeCommand extends Command
             // `scheduler_default` is the transport Symfony derives from the #[AsSchedule('default')] provider (recurring jobs, e.g. mirror sync).
             'worker' => new Process([\PHP_BINARY, $console, 'messenger:consume', 'async', 'scheduler_default', '--time-limit=3600', '--memory-limit=128M'], $this->projectDir),
         ];
+    }
+
+    private function shouldAutoReconcileDeployOnBoot(): bool
+    {
+        if (null === $this->autoReconcileOnBoot || '' === trim($this->autoReconcileOnBoot)) {
+            return true;
+        }
+
+        return filter_var($this->autoReconcileOnBoot, FILTER_VALIDATE_BOOLEAN);
     }
 }

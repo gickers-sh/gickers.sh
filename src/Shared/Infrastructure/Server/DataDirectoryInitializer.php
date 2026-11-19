@@ -71,6 +71,8 @@ final readonly class DataDirectoryInitializer
             $this->settings->dataPath.'/log' => 0o755,
             $this->settings->reposPath() => 0o755,
             $this->settings->lfsPath() => 0o755,
+            $this->settings->deployPath() => 0o700,
+            $this->settings->caddySitesPath() => 0o755,
         ];
         foreach ($dirs as $dir => $mode) {
             if (!is_dir($dir) && !mkdir($dir, $mode, true) && !is_dir($dir)) {

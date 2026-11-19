@@ -95,6 +95,9 @@ final class SshCommandResolver
         } elseif (in_array($tokens[0], ['webhook', 'webhooks'], true)) {
             array_shift($tokens);
             array_unshift($tokens, 'repo', 'webhook');
+        } elseif (in_array($tokens[0], ['deploy', 'deployments', 'deployment'], true)) {
+            array_shift($tokens);
+            array_unshift($tokens, 'repo', 'deploy');
         }
 
         // Group alias normalizations on token 0
@@ -113,6 +116,7 @@ final class SshCommandResolver
                 'webhooks' => 'webhook',
                 'branches' => 'branch',
                 'tags' => 'tag',
+                'deployments', 'deployment' => 'deploy',
                 default => $tokens[1],
             };
         }

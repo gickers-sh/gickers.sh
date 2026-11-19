@@ -224,6 +224,7 @@ Available Commands:
   commit       Print out the contents of a diff
   create       Create a new repository
   delete       Delete a repository
+  deploy       Manage repository Docker deployments
   description  Set or get the description for a repository
   diff         Print the diff between two references
   fork         Fork an existing repository
@@ -1214,6 +1215,7 @@ Available Commands:
   allow-keyless Set or get allow keyless access to repositories
   allow-signup  Set or get whether unregistered keys may self-register
   anon-access   Set or get the default access level for anonymous users
+  deploy-policy Set or get the server-wide deployment policy
 
 Flags:
   -h, --help   help for settings
@@ -1374,6 +1376,7 @@ Available Commands:
   add-pubkey    Add a public key to a user
   create        Create a new user
   delete        Delete a user
+  deploy-allow  Set or get whether a user is allowed to deploy repositories
   info          Show information about a user
   list          List users
   remove-pubkey Remove a public key from a user

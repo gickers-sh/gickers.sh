@@ -27,6 +27,9 @@ class User
     #[ORM\Column(options: ['default' => 0])]
     private int $webTokenVersion = 0;
 
+    #[ORM\Column(options: ['default' => false])]
+    private bool $deployAllowed = false;
+
     #[ORM\Column]
     private \DateTimeImmutable $updatedAt;
 
@@ -78,6 +81,17 @@ class User
     public function isAdmin(): bool
     {
         return $this->isAdmin;
+    }
+
+    public function isDeployAllowed(): bool
+    {
+        return $this->deployAllowed;
+    }
+
+    public function setDeployAllowed(bool $allowed, \DateTimeImmutable $now): void
+    {
+        $this->deployAllowed = $allowed;
+        $this->updatedAt = $now;
     }
 
     public function passwordHash(): ?string

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Access\Application;
 
 use App\Access\Domain\AccessLevel;
+use App\Access\Domain\DeployPolicy;
 use App\Access\Domain\ServerSetting;
 use App\Access\Domain\SettingKey;
 use App\Shared\Infrastructure\Config\ServerSettings;
@@ -86,6 +87,29 @@ final readonly class ServerPolicy
             $setting->change($value, $now);
         } else {
             $setting = new ServerSetting(SettingKey::AllowSignup, $value, $now);
+            $this->entityManager->persist($setting);
+        }
+        $this->entityManager->flush();
+    }
+
+    public function deployPolicy(): DeployPolicy
+    {
+        $setting = $this->entityManager->find(ServerSetting::class, SettingKey::DeployPolicy);
+        if (null !== $setting) {
+            return DeployPolicy::tryFromString($setting->value()) ?? DeployPolicy::AdminsOnly;
+        }
+
+        return DeployPolicy::AdminsOnly;
+    }
+
+    public function setDeployPolicy(DeployPolicy $policy): void
+    {
+        $now = $this->clock->now();
+        $setting = $this->entityManager->find(ServerSetting::class, SettingKey::DeployPolicy);
+        if (null !== $setting) {
+            $setting->change($policy->value, $now);
+        } else {
+            $setting = new ServerSetting(SettingKey::DeployPolicy, $policy->value, $now);
             $this->entityManager->persist($setting);
         }
         $this->entityManager->flush();

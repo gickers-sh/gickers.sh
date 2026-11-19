@@ -54,6 +54,16 @@ final readonly class ServerSettings
         return $this->dataPath.'/ssh';
     }
 
+    public function deployPath(): string
+    {
+        return $this->dataPath.'/deploy';
+    }
+
+    public function caddySitesPath(): string
+    {
+        return $this->dataPath.'/caddy/sites';
+    }
+
     /**
      * The SOFT_SERVE_* variables this object was built from (config/packages/codes_sh.yaml),
      * for processes that do not inherit the environment (sshd sessions).

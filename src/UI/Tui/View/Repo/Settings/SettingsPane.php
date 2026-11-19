@@ -74,6 +74,24 @@ final class SettingsPane extends RepoScreen
             $lines[] = $renderKV('Visibility', $db->isPrivate() ? 'Private (restricted)' : 'Public');
             $lines[] = $renderKV('Mirror', $db->isMirror() ? 'Yes' : 'No');
             $lines[] = $renderKV('Hidden', $db->isHidden() ? 'Yes' : 'No');
+
+            if ($admin && null !== $this->repo->views->queryDeployments) {
+                $deployments = $this->repo->views->queryDeployments->buildEnvironmentsSummary($db);
+                $lines[] = '';
+                $lines[] = Theme::style('  Docker Deployments', Theme::BLUE, bold: true);
+                if ([] === $deployments) {
+                    $lines[] = '    ' . Theme::style('(no deployment environments configured)', Theme::MUTED, italic: true);
+                } else {
+                    foreach ($deployments as $item) {
+                        $env = $item['environment'];
+                        $sha = null !== $env->deployedSha() ? substr($env->deployedSha(), 0, 7) : 'none';
+                        $domains = array_map(static fn ($d): string => $d->domain(), $env->domains());
+                        $domStr = [] !== $domains ? ' [' . implode(', ', $domains) . ']' : '';
+                        $val = sprintf('%s (%s) sha=%s%s', $env->status()->value, $env->refType()->value, $sha, $domStr);
+                        $lines[] = $renderKV($env->refName(), $val);
+                    }
+                }
+            }
             $lines[] = '';
 
             $hint = $admin

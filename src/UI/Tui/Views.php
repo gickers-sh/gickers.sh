@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\UI\Tui;
 
 use App\Access\Application\ServerPolicy;
+use App\Deploy\Application\Query\QueryDeployments;
 use App\Identity\Domain\UserStore;
 use App\Repo\Application\Query\RepoQuery;
 use App\Repo\Domain\Git\GitRepository;
@@ -36,6 +37,7 @@ final class Views
         public readonly TermstrapRenderer $renderer,
         public readonly RepoDirectory $repoDirectory,
         public readonly ?LoggerInterface $logger = null,
+        public readonly ?QueryDeployments $queryDeployments = null,
     ) {
     }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\UI\Tui;
 
 use App\Access\Application\ServerPolicy;
+use App\Deploy\Application\Query\QueryDeployments;
 use App\Identity\Domain\Model\User;
 use App\Identity\Domain\UserStore;
 use App\Repo\Application\Query\RepoQuery;
@@ -30,6 +31,7 @@ final class TuiAppFactory
         private readonly TermstrapRenderer $renderer,
         private readonly RepoDirectory $repoDirectory,
         private readonly ?LoggerInterface $logger = null,
+        private readonly ?QueryDeployments $queryDeployments = null,
     ) {
     }
 
@@ -51,6 +53,7 @@ final class TuiAppFactory
                 $this->renderer,
                 $this->repoDirectory,
                 $this->logger,
+                $this->queryDeployments,
             ),
             $this->logger,
         );

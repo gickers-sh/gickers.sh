@@ -1,0 +1,53 @@
+when@test:
+    services:
+        test.settings_deploy_policy_command:
+            alias: App\UI\Ssh\Command\Settings\SettingsDeployPolicyCommand
+            public: true
+        test.user_deploy_allow_command:
+            alias: App\UI\Ssh\Command\User\UserDeployAllowCommand
+            public: true
+        test.repo_deploy_allow_command:
+            alias: App\UI\Ssh\Command\Repo\Deploy\RepoDeployAllowCommand
+            public: true
+        test.repo_deploy_quota_command:
+            alias: App\UI\Ssh\Command\Repo\Deploy\RepoDeployQuotaCommand
+            public: true
+        test.repo_deploy_enable_command:
+            alias: App\UI\Ssh\Command\Repo\Deploy\RepoDeployEnableCommand
+            public: true
+        test.repo_deploy_disable_command:
+            alias: App\UI\Ssh\Command\Repo\Deploy\RepoDeployDisableCommand
+            public: true
+        test.repo_deploy_status_command:
+            alias: App\UI\Ssh\Command\Repo\Deploy\RepoDeployStatusCommand
+            public: true
+        test.repo_deploy_env_set_command:
+            alias: App\UI\Ssh\Command\Repo\Deploy\RepoDeployEnvSetCommand
+            public: true
+        test.repo_deploy_env_get_command:
+            alias: App\UI\Ssh\Command\Repo\Deploy\RepoDeployEnvGetCommand
+            public: true
+        test.repo_deploy_env_unset_command:
+            alias: App\UI\Ssh\Command\Repo\Deploy\RepoDeployEnvUnsetCommand
+            public: true
+        test.repo_deploy_env_list_command:
+            alias: App\UI\Ssh\Command\Repo\Deploy\RepoDeployEnvListCommand
+            public: true
+        test.repo_deploy_domain_add_command:
+            alias: App\UI\Ssh\Command\Repo\Deploy\RepoDeployDomainAddCommand
+            public: true
+        test.repo_deploy_domain_get_command:
+            alias: App\UI\Ssh\Command\Repo\Deploy\RepoDeployDomainGetCommand
+            public: true
+        test.repo_deploy_domain_remove_command:
+            alias: App\UI\Ssh\Command\Repo\Deploy\RepoDeployDomainRemoveCommand
+            public: true
+        test.repo_deploy_domain_list_command:
+            alias: App\UI\Ssh\Command\Repo\Deploy\RepoDeployDomainListCommand
+            public: true
+        test.repo_deploy_redeploy_command:
+            alias: App\UI\Ssh\Command\Repo\Deploy\RepoDeployRedeployCommand
+            public: true
+        test.repo_deploy_logs_command:
+            alias: App\UI\Ssh\Command\Repo\Deploy\RepoDeployLogsCommand
+            public: true

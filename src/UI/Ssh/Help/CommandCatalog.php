@@ -573,6 +573,33 @@ EX;
             order: 42,
         ));
 
+        $deployPolicyLong = <<<'DESC'
+Gets or sets the server-wide Docker deployment authorization policy: 'admins-only', 'authorized', or 'repo-admins'.
+
+Scope:
+  Server Admin.
+
+Arguments:
+  POLICY    Deploy policy: 'admins-only', 'authorized', or 'repo-admins'. If omitted, prints current policy.
+DESC;
+        $deployPolicyExample = <<<'EX'
+  # Inspect current deploy policy
+  {ssh} settings deploy-policy
+
+  # Allow explicitly authorized users/repositories to deploy
+  {ssh} settings deploy-policy authorized
+EX;
+        $settings->addChild($this->leaf('deploy-policy [POLICY]', 'Set or get the server-wide deployment policy', $deployPolicyLong, [], [], $deployPolicyExample)->withUi(
+            category: 'settings',
+            title: 'Deploy Policy',
+            tier: 'admin',
+            description: 'Set or get the server-wide Docker deployment policy',
+            baseTemplate: 'settings deploy-policy',
+            fields: [FieldSpec::choiceArg('policy', 'Policy', ['admins-only', 'authorized', 'repo-admins'], 'admins-only')],
+            scope: 'global',
+            order: 43,
+        ));
+
         return $settings;
     }
 
@@ -886,6 +913,31 @@ EX;
             fields: [FieldSpec::arg('username', 'Target username', 'alice', true), FieldSpec::arg('new-username', 'New username', 'alice-new', true)],
             scope: 'global',
             order: 57,
+        ));
+
+        $deployAllowLong = <<<'DESC'
+Grants or revokes Docker deployment permissions for a user account under the 'authorized' deploy policy.
+
+Scope:
+  Server Admin.
+
+Arguments:
+  USERNAME    Target username.
+  value       Optional boolean ('true' or 'false'). If omitted, prints current status.
+DESC;
+        $deployAllowExample = <<<'EX'
+  # Allow user alice to deploy repositories
+  {ssh} user deploy-allow alice true
+EX;
+        $user->addChild($this->leaf('deploy-allow USERNAME [true|false]', 'Set or get whether a user is allowed to deploy repositories', $deployAllowLong, [], [], $deployAllowExample)->withUi(
+            category: 'admin',
+            title: 'Allow User Deployments',
+            tier: 'admin',
+            description: 'Allow or disallow a user to deploy repositories',
+            baseTemplate: 'user deploy-allow',
+            fields: [FieldSpec::arg('username', 'Username', 'alice', true), FieldSpec::choiceArg('allowed', 'Allowed', ['true', 'false'], 'true')],
+            scope: 'global',
+            order: 58,
         ));
 
         return $user;
@@ -1898,6 +1950,7 @@ EX;
         $repo->addChild($signaturesLeaf);
 
         $repo->addChild($this->webhook());
+        $repo->addChild($this->deploy());
 
         return $repo;
     }
@@ -2034,5 +2087,264 @@ EX;
         ));
 
         return $webhook;
+    }
+
+    private function deploy(): CommandSpec
+    {
+        $deployLong = <<<'DESC'
+Manage multi-environment Docker container deployments, resource quotas, encrypted environment variables, and Caddy custom domains for a repository.
+
+Scope:
+  Write/Admin access on REPOSITORY and authorized by the server deployment policy.
+DESC;
+        $deployExample = <<<'EX'
+  # Enable automatic deployment on the main branch
+  {ssh} repo deploy enable my-app main
+
+  # Set encrypted environment secrets for main
+  {ssh} repo deploy env set my-app main APP_ENV=prod
+
+  # Attach a custom domain to an explicit service and internal container port
+  {ssh} repo deploy domain add my-app main app.example.com --service=web --port=80
+
+  # Inspect deployment status and logs
+  {ssh} repo deploy status my-app
+  {ssh} repo deploy logs my-app main --follow
+EX;
+        $deploy = $this->group('deploy', 'Manage repository Docker deployments', ['deployments', 'deployment'], $deployLong, $deployExample);
+
+        $deploy->addChild($this->leaf(
+            'enable REPOSITORY [REF]',
+            'Enable automatic Docker deployment for a branch or tag',
+            'Enables automatic container deployment for a repository branch or tag (defaults to the repository default branch).',
+        )->withUi(
+            category: 'admin',
+            title: 'Enable Deployment',
+            tier: 'write',
+            description: 'Enable automatic Docker deployment for a branch or tag',
+            baseTemplate: 'repo deploy enable {repo}',
+            fields: [FieldSpec::arg('ref', 'Branch or tag', 'main')],
+            scope: 'repo',
+            order: 40,
+        ));
+
+        $deploy->addChild($this->leaf(
+            'disable REPOSITORY REF',
+            'Disable deployment and stop containers for a branch or tag',
+            'Disables deployment and stops running containers for the specified branch or tag.',
+        )->withUi(
+            category: 'admin',
+            title: 'Disable Deployment',
+            tier: 'write',
+            description: 'Disable deployment and stop containers for a branch or tag',
+            baseTemplate: 'repo deploy disable {repo}',
+            fields: [FieldSpec::arg('ref', 'Branch or tag', 'main', true)],
+            scope: 'repo',
+            order: 41,
+        ));
+
+        $deploy->addChild($this->leaf(
+            'status REPOSITORY [REF]',
+            'Show deployment environments status for a repository',
+            'Displays deployed branches/tags, container status, active commit SHA, attached domains, and resource quotas.',
+            ['list', 'ls'],
+        )->withUi(
+            category: 'git',
+            title: 'Deployment Status',
+            tier: 'write',
+            description: 'Show deployment environments status, domains, and quotas',
+            baseTemplate: 'repo deploy status {repo}',
+            fields: [FieldSpec::arg('ref', 'Branch or tag', 'main')],
+            scope: 'repo',
+            order: 42,
+        ));
+
+        $deploy->addChild($this->leaf(
+            'trigger REPOSITORY REF',
+            'Trigger a deployment build for an enabled branch or tag',
+            'Queues an immediate build and deployment for the current commit of the specified branch or tag.',
+        )->withUi(
+            category: 'admin',
+            title: 'Trigger Deployment',
+            tier: 'write',
+            description: 'Trigger a deployment build for an enabled branch or tag',
+            baseTemplate: 'repo deploy trigger {repo}',
+            fields: [FieldSpec::arg('ref', 'Branch or tag', 'main', true)],
+            scope: 'repo',
+            order: 43,
+        ));
+
+        $redeployLong = <<<'DESC'
+Triggers an immediate re-build and redeployment for one repository (all active branches or a specific ref), or all active repositories on the platform with --all.
+
+Arguments:
+  REPOSITORY    Repository name (optional if --all is specified).
+  REF           Branch or tag name (optional).
+DESC;
+
+        $deploy->addChild($this->leaf(
+            'redeploy [REPOSITORY] [REF]',
+            'Rebuild and restart containers for active deployments',
+            $redeployLong,
+            [],
+            [
+                new FlagSpec(null, 'all', '', 'Redeploy all active deployment environments across the server (Admin only)'),
+            ],
+            <<<'EX'
+  # Redeploy all active branches of a repository
+  {ssh} repo deploy redeploy my-app
+
+  # Redeploy a specific branch
+  {ssh} repo deploy redeploy my-app main
+
+  # Redeploy all active deployments across the server (Admin)
+  {ssh} repo deploy redeploy --all
+EX
+        )->withUi(
+            category: 'admin',
+            title: 'Redeploy Active Containers',
+            tier: 'write',
+            description: 'Rebuild and restart containers for active deployments',
+            baseTemplate: 'repo deploy redeploy {repo}',
+            fields: [FieldSpec::arg('ref', 'Branch or tag (optional)', '', false)],
+            scope: 'repo',
+            order: 44,
+        ));
+
+        $deploy->addChild($this->leaf(
+            'stop REPOSITORY REF',
+            'Stop running containers for a deployed branch or tag',
+        )->withUi(
+            category: 'admin',
+            title: 'Stop Deployment Containers',
+            tier: 'write',
+            description: 'Stop running containers for a deployed branch or tag',
+            baseTemplate: 'repo deploy stop {repo}',
+            fields: [FieldSpec::arg('ref', 'Branch or tag', 'main', true)],
+            scope: 'repo',
+            order: 44,
+        ));
+
+        $deploy->addChild($this->leaf(
+            'restart REPOSITORY REF',
+            'Restart containers for a deployed branch or tag',
+        )->withUi(
+            category: 'admin',
+            title: 'Restart Deployment Containers',
+            tier: 'write',
+            description: 'Restart containers for a deployed branch or tag',
+            baseTemplate: 'repo deploy restart {repo}',
+            fields: [FieldSpec::arg('ref', 'Branch or tag', 'main', true)],
+            scope: 'repo',
+            order: 45,
+        ));
+
+        $deploy->addChild($this->leaf(
+            'logs REPOSITORY REF',
+            'Print build and container logs for a deployed branch or tag',
+            'Prints release build logs and service container logs.',
+            [],
+            [
+                new FlagSpec('s', 'service', 'string', 'filter container logs by service name'),
+                new FlagSpec('b', 'build', '', 'show only build logs of the latest release'),
+                new FlagSpec('f', 'follow', '', 'follow build logs until user stops (Ctrl+C)'),
+            ],
+        )->withUi(
+            category: 'git',
+            title: 'Deployment Logs',
+            tier: 'write',
+            description: 'Print build and container logs for a deployed branch or tag',
+            baseTemplate: 'repo deploy logs {repo}',
+            fields: [
+                FieldSpec::arg('ref', 'Branch or tag', 'main', true),
+                FieldSpec::opt('service', 'Service name', '--service', 'web'),
+                FieldSpec::boolOpt('build', 'Build logs only', '--build', false),
+                FieldSpec::boolOpt('follow', 'Follow live', '--follow', false),
+            ],
+            scope: 'repo',
+            order: 46,
+        ));
+
+        $deploy->addChild($this->leaf(
+            'allow REPOSITORY [true|false]',
+            'Allow or disallow deployments on a repository or ref pattern (Admin)',
+            'Server admin command to grant or revoke deployment rights on a repository or a specific branch/tag/glob pattern.',
+            [],
+            [new FlagSpec('r', 'ref', 'string', 'branch, tag, or glob pattern (e.g. main, release/*, v*)')],
+        ));
+
+        $deploy->addChild($this->leaf(
+            'quota REPOSITORY',
+            'Configure or view resource quotas for a repository or ref pattern (Admin)',
+            'Server admin command to set or inspect CPU, RAM, PIDs, max-envs, and max-services quotas per repository or branch/tag pattern.',
+            [],
+            [
+                new FlagSpec('r', 'ref', 'string', 'branch, tag, or glob pattern'),
+                new FlagSpec(null, 'cpus', 'float', 'CPU limit per container (e.g. 1.0, 2.0)'),
+                new FlagSpec(null, 'memory', 'string', 'Memory limit per container (e.g. 512m, 2g)'),
+                new FlagSpec(null, 'pids', 'int', 'Max processes (PIDs) per container (e.g. 128)'),
+                new FlagSpec(null, 'max-envs', 'int', 'Max concurrent deployed environments'),
+                new FlagSpec(null, 'max-services', 'int', 'Max services allowed in compose.yaml'),
+            ],
+        ));
+
+        $deploy->addChild($this->leaf(
+            'exec REPOSITORY REF SERVICE COMMAND...',
+            'Execute a one-shot command inside a running service container (Admin)',
+        ));
+
+        $envGroup = $this->group('env', 'Manage encrypted environment variables per deployed branch or tag');
+        $envGroup->addChild($this->leaf('set REPOSITORY REF KEY=VALUE...', 'Set encrypted environment variables')->withUi(
+            category: 'admin',
+            title: 'Set Deploy Env Var',
+            tier: 'write',
+            description: 'Set encrypted environment variable for a deployed branch or tag',
+            baseTemplate: 'repo deploy env set {repo}',
+            fields: [
+                FieldSpec::arg('ref', 'Branch or tag', 'main', true),
+                FieldSpec::arg('pair', 'KEY=VALUE', 'APP_ENV=prod', true),
+            ],
+            scope: 'repo',
+            order: 47,
+        ));
+        $envGroup->addChild($this->leaf('get REPOSITORY REF KEY', 'Get an environment variable', '', [], [
+            new FlagSpec(null, 'reveal', '', 'reveal the decrypted secret value'),
+        ]));
+        $envGroup->addChild($this->leaf('unset REPOSITORY REF KEY', 'Remove an environment variable', '', ['rm', 'delete']));
+        $envGroup->addChild($this->leaf('list REPOSITORY REF', 'List environment variable keys', '', ['ls']));
+        $deploy->addChild($envGroup);
+
+        $domainGroup = $this->group('domain', 'Manage custom domains and Caddy service exposure per deployed branch or tag');
+        $domainGroup->addChild($this->leaf(
+            'add REPOSITORY REF DOMAIN',
+            'Attach a custom domain to an explicit service and internal port',
+            'Validates FQDN syntax, checks for collisions and public DNS resolution, attaches the service to Caddy, and runs an HTTP smoke test.',
+            [],
+            [
+                new FlagSpec('s', 'service', 'string', 'target service name in compose.yaml (required)'),
+                new FlagSpec('p', 'port', 'int', 'target internal container port (required)'),
+                new FlagSpec(null, 'skip-dns-check', '', 'skip public DNS resolution check'),
+            ],
+        )->withUi(
+            category: 'admin',
+            title: 'Add Deploy Domain',
+            tier: 'write',
+            description: 'Attach a custom domain to a service and internal container port',
+            baseTemplate: 'repo deploy domain add {repo}',
+            fields: [
+                FieldSpec::arg('ref', 'Branch or tag', 'main', true),
+                FieldSpec::arg('domain', 'Domain (FQDN)', 'app.example.com', true),
+                FieldSpec::opt('service', 'Service name', '--service', 'web', 'web'),
+                FieldSpec::opt('port', 'Container port', '--port', '80', '80'),
+            ],
+            scope: 'repo',
+            order: 48,
+        ));
+        $domainGroup->addChild($this->leaf('get REPOSITORY REF DOMAIN', 'Get details of an attached domain'));
+        $domainGroup->addChild($this->leaf('remove REPOSITORY REF DOMAIN', 'Remove an attached domain', '', ['rm', 'delete']));
+        $domainGroup->addChild($this->leaf('list REPOSITORY [REF]', 'List attached domains', '', ['ls']));
+        $deploy->addChild($domainGroup);
+
+        return $deploy;
     }
 }
