@@ -13,8 +13,9 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
- * `GET /`: the clean server home page — introduces the Git server, provides SSH connection
- * instructions, web login guidance, and showcases public repositories.
+ * `GET /`: landing and onboarding page for codes.sh.
+ * Highlights SSH onboarding commands (`ssh codes.sh`, `ssh codes.sh signup`),
+ * interactive TUI usage, web magic link authentication, and prominent links to documentation and repositories.
  */
 final readonly class HomeController
 {
@@ -30,12 +31,18 @@ final readonly class HomeController
     {
         $user = $this->domainUser();
         $sshPrefix = $this->sshPrefix();
+        $sshSignupCommand = $sshPrefix . ' signup';
+        $sshUserExample = $this->sshUserCommand('<username>');
+        $sshSignupUserExample = $this->sshUserCommand('<username>', 'signup');
 
         $html = $this->twig->render('home.html.twig', [
             'serverName' => $this->settings->name ?: 'codes.sh',
             'currentUsername' => $user?->username(),
             'sshPrefix' => $sshPrefix,
-            'publicRepositories' => $this->publicRepositories(),
+            'sshSignupCommand' => $sshSignupCommand,
+            'sshUserExample' => $sshUserExample,
+            'sshSignupUserExample' => $sshSignupUserExample,
+            'publicRepositoriesCount' => $this->publicRepositoriesCount(),
         ]);
 
         return new Response(
@@ -50,27 +57,18 @@ final readonly class HomeController
     }
 
     /**
-     * Public repositories (non-private, non-hidden) sorted by name.
-     *
-     * @return list<array{name: string, description: string, owner: string}>
+     * Counts all public (non-private, non-hidden) repositories.
      */
-    private function publicRepositories(): array
+    private function publicRepositoriesCount(): int
     {
-        $items = [];
+        $count = 0;
         foreach ($this->repoStore->all() as $repo) {
-            if ($repo->isPrivate() || $repo->isHidden()) {
-                continue;
+            if (!$repo->isPrivate() && !$repo->isHidden()) {
+                ++$count;
             }
-            $items[] = [
-                'name' => $repo->nameString(),
-                'description' => $repo->description(),
-                'owner' => $repo->owner()->username(),
-            ];
         }
 
-        usort($items, static fn(array $a, array $b): int => strcmp($a['name'], $b['name']));
-
-        return $items;
+        return $count;
     }
 
     private function domainUser(): ?User
@@ -81,7 +79,7 @@ final readonly class HomeController
     }
 
     /**
-     * Base SSH invocation advertised for this server (e.g. `ssh codes.sh`).
+     * Base SSH invocation advertised for this server (e.g. `ssh codes.sh` or `ssh -p 2222 codes.sh`).
      */
     private function sshPrefix(): string
     {
@@ -102,5 +100,37 @@ final readonly class HomeController
         $target = null !== $user && '' !== $user ? "{$user}@{$host}" : $host;
 
         return null !== $port ? "ssh -p {$port} {$target}" : "ssh {$target}";
+    }
+
+    /**
+     * Constructs user-targeted SSH invocation (e.g. `ssh <username>@codes.sh signup`).
+     */
+    private function sshUserCommand(string $username, string $subcommand = ''): string
+    {
+        $raw = trim($this->settings->sshPublicUrl);
+        $host = 'codes.sh';
+        $port = null;
+
+        if ('' !== $raw) {
+            $url = str_contains($raw, '://') ? $raw : 'ssh://' . $raw;
+            $parsed = parse_url($url);
+            if (false !== $parsed && isset($parsed['host'])) {
+                $host = $parsed['host'];
+                $port = isset($parsed['port']) && 22 !== (int) $parsed['port'] ? (int) $parsed['port'] : null;
+            } else {
+                $host = $raw;
+            }
+        }
+
+        $cmd = 'ssh';
+        if (null !== $port) {
+            $cmd .= " -p {$port}";
+        }
+        $cmd .= " {$username}@{$host}";
+        if ('' !== $subcommand) {
+            $cmd .= " {$subcommand}";
+        }
+
+        return $cmd;
     }
 }

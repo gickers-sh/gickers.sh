@@ -9,46 +9,157 @@
 {% endblock %}
 
 {% block main %}
-    <section class="home-hero">
-        <div class="hero-card">
-            <div class="hero-main">
-                <h2>Connect over SSH</h2>
-                <p class="hero-desc">Explore repositories interactively with our terminal TUI or manage them via the command line.</p>
+    {# 1. ONBOARDING HERO SHOWCASE #}
+    <section class="section" aria-label="Terminal onboarding">
+        <div class="doc-terminal">
+            <div class="doc-terminal-bar">
+                <div class="doc-terminal-header-left">
+                    {% include 'components/terminal_dots.html.twig' %}
+                    <span class="doc-terminal-title">Quick Start &middot; Onboarding</span>
+                </div>
+                <span class="gateway-badge">Terminal First</span>
             </div>
-            <div class="hero-command-box">
-                <div class="clone-box hero-code-box" title="Click to copy SSH command">
-                    <code class="clone-code">{{ sshPrefix }}</code>
-                    {{ ui.copy_btn(sshPrefix, 'Copy', 'copy-btn-sm', 'Copy SSH command') }}
+
+            <div class="onboarding-intro">
+                <h2>Welcome to {{ serverName }}</h2>
+                <p>Manage, browse, and collaborate on Git repositories straight from your terminal. No passwords, zero friction.</p>
+            </div>
+
+            <div class="cli-command-grid onboarding-grid">
+                <!-- 1. SIGNUP -->
+                <div class="cli-command-card onboarding-card highlight-signup">
+                    <div class="cli-card-info">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <span class="cli-card-title">1. Sign Up</span>
+                            <span class="onboarding-badge">Registration</span>
+                        </div>
+                        <span class="cli-card-desc">
+                            Register your account with your public SSH key in one command:
+                        </span>
+                    </div>
+                    <div class="cli-card-action" title="Click to copy signup command">
+                        <code class="cli-code">{{ sshSignupCommand }}</code>
+                        {{ ui.copy_btn(sshSignupCommand, 'Copy', 'copy-btn-sm', 'Copy signup command') }}
+                    </div>
+                    <div class="onboarding-tip">
+                        <span class="onboarding-tip-label">Tip:</span> You can specify your username directly: <code>{{ sshSignupUserExample }}</code>
+                    </div>
+                </div>
+
+                <!-- 2. CONNECT / TUI -->
+                <div class="cli-command-card onboarding-card highlight-connect">
+                    <div class="cli-card-info">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <span class="cli-card-title">2. Connect</span>
+                            <span class="onboarding-badge">Interactive TUI</span>
+                        </div>
+                        <span class="cli-card-desc">
+                            Launch the interactive keyboard-driven browser for repositories and branches:
+                        </span>
+                    </div>
+                    <div class="cli-card-action" title="Click to copy connect command">
+                        <code class="cli-code">{{ sshPrefix }}</code>
+                        {{ ui.copy_btn(sshPrefix, 'Copy', 'copy-btn-sm', 'Copy connect command') }}
+                    </div>
+                    <div class="onboarding-tip">
+                        <span class="onboarding-tip-label">Tip:</span> You can connect directly with your username: <code>{{ sshUserExample }}</code>
+                    </div>
                 </div>
             </div>
+        </div>
+    </section>
+
+    {# 2. GATEWAY CARDS: DOCUMENTATION & REPOSITORIES #}
+    <section class="section" aria-label="Explore codes.sh">
+        <div class="section-header">
+            <h2>Explore {{ serverName }}</h2>
+        </div>
+
+        <div class="cli-command-grid">
+            <!-- Repositories Gateway Card -->
+            <a href="/repos" class="cli-command-card gateway-card" title="Browse all public repositories">
+                <div class="cli-card-info">
+                    <div style="display: flex; align-items: center;">
+                        <span class="cli-card-title">📦 Public Repositories</span>
+                        <span class="gateway-badge">{{ publicRepositoriesCount }} repositor{{ publicRepositoriesCount == 1 ? 'y' : 'ies' }}</span>
+                    </div>
+                    <span class="cli-card-desc">
+                        Explore all public git repositories hosted on {{ serverName }}. Browse file trees, read READMEs, inspect commit histories, and grab clone commands.
+                    </span>
+                </div>
+                <div class="gateway-action">
+                    <span>Browse Repositories</span>
+                    <span aria-hidden="true">&rarr;</span>
+                </div>
+            </a>
+
+            <!-- Documentation Gateway Card -->
+            <a href="/docs" class="cli-command-card gateway-card" title="Explore CLI and web documentation">
+                <div class="cli-card-info">
+                    <div style="display: flex; align-items: center;">
+                        <span class="cli-card-title">📖 CLI Documentation</span>
+                        <span class="gateway-badge">Command Catalog</span>
+                    </div>
+                    <span class="cli-card-desc">
+                        Detailed reference for all SSH commands, repository settings, branch protection, SSH key management, personal access tokens, and webhooks.
+                    </span>
+                </div>
+                <div class="gateway-action">
+                    <span>Explore CLI Docs</span>
+                    <span aria-hidden="true">&rarr;</span>
+                </div>
+            </a>
+        </div>
+    </section>
+
+    {# 3. DETAILED WORKFLOW & CHEAT SHEET #}
+    <section class="section" aria-label="Developer workflow">
+        <div class="section-header">
+            <h2>Developer Workflow</h2>
         </div>
 
         <div class="cli-command-grid">
             <div class="cli-command-card">
                 <div class="cli-card-info">
-                    <span class="cli-card-title">💻 Terminal TUI</span>
-                    <span class="cli-card-desc">Interactive browser for branches, commits, files, and diffs right in your terminal.</span>
+                    <span class="cli-card-title">✨ 1. Self-Service Signup</span>
+                    <span class="cli-card-desc">No forms or passwords. Bind your SSH key to your handle. You can also specify your username directly: <code>{{ sshSignupUserExample }}</code>.</span>
+                </div>
+                <div class="cli-card-action">
+                    <code class="cli-code">{{ sshSignupCommand }}</code>
+                    {{ ui.copy_btn(sshSignupCommand, 'Copy', 'copy-btn-sm', 'Copy signup command') }}
+                </div>
+            </div>
+
+            <div class="cli-command-card">
+                <div class="cli-card-info">
+                    <span class="cli-card-title">💻 2. Terminal TUI &amp; Anonymous Access</span>
+                    <span class="cli-card-desc">Browse code with arrow keys, vim bindings, and search without leaving your shell. You can also connect as <code>{{ sshUserExample }}</code>.</span>
                 </div>
                 <div class="cli-card-action">
                     <code class="cli-code">{{ sshPrefix }}</code>
+                    {{ ui.copy_btn(sshPrefix, 'Copy', 'copy-btn-sm', 'Copy connect command') }}
                 </div>
             </div>
+
             <div class="cli-command-card">
                 <div class="cli-card-info">
-                    <span class="cli-card-title">🔑 SSH Web Login</span>
-                    <span class="cli-card-desc">Zero password authentication. Mint a magic link with your SSH key to sign in.</span>
-                </div>
-                <div class="cli-card-action">
-                    <code class="cli-code">{{ sshPrefix }} web login</code>
-                </div>
-            </div>
-            <div class="cli-command-card">
-                <div class="cli-card-info">
-                    <span class="cli-card-title">📦 Create Repos</span>
-                    <span class="cli-card-desc">Spin up new repositories instantly from your terminal or push on demand.</span>
+                    <span class="cli-card-title">📦 3. Create &amp; Push Repositories</span>
+                    <span class="cli-card-desc">Spin up new repositories in a flash from your terminal or push on demand via Git.</span>
                 </div>
                 <div class="cli-card-action">
                     <code class="cli-code">{{ sshPrefix }} repo create &lt;name&gt;</code>
+                    {{ ui.copy_btn(sshPrefix ~ ' repo create <name>', 'Copy', 'copy-btn-sm', 'Copy repo create command') }}
+                </div>
+            </div>
+
+            <div class="cli-command-card">
+                <div class="cli-card-info">
+                    <span class="cli-card-title">🔑 4. Zero-Password Web Login</span>
+                    <span class="cli-card-desc">Sign in to the web interface with a cryptographically signed magic link from your SSH session.</span>
+                </div>
+                <div class="cli-card-action">
+                    <code class="cli-code">{{ sshPrefix }} web login</code>
+                    {{ ui.copy_btn(sshPrefix ~ ' web login', 'Copy', 'copy-btn-sm', 'Copy web login command') }}
                 </div>
             </div>
         </div>
@@ -60,29 +171,7 @@
             sshPrefix: sshPrefix
         } only %}
     {% endif %}
-
-    <section class="home-repos-section" aria-label="Public repositories">
-        <div class="section-header">
-            <h2>Public Repositories</h2>
-            <span class="section-count">{{ publicRepositories|length }}</span>
-        </div>
-
-        {% if publicRepositories is empty %}
-            <div class="notice">
-                <p>No public repositories published yet.</p>
-                <p class="cli-login-hint">Create your first repository with <code>{{ sshPrefix }} repo create &lt;name&gt;</code> or push via Git.</p>
-            </div>
-        {% else %}
-            <ul class="repo-list">
-                {% for repo in publicRepositories %}
-                    {% include 'components/repo_item.html.twig' with {
-                        repo: repo,
-                        show_public_badge: true
-                    } only %}
-                {% endfor %}
-            </ul>
-        {% endif %}
-    </section>
 {% endblock %}
 
-{% block footer_summary %}{{ publicRepositories|length }} public repositor{{ publicRepositories|length == 1 ? 'y' : 'ies' }}{% endblock %}
+{% block footer_summary %}{{ publicRepositoriesCount }} public repositor{{ publicRepositoriesCount == 1 ? 'y' : 'ies' }}{% endblock %}
+{% block footer_meta %}SSH · HTTP · {{ serverName }}{% endblock %}

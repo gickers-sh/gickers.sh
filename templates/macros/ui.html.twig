@@ -10,11 +10,14 @@
 
 {% macro user_nav(currentUsername, sshPrefix, page = 'home') %}
     <div class="home-user-nav">
+        {% if page != 'home' %}
+            <a href="/" class="home-btn home-btn-subtle" title="Back to home page">&larr; Home</a>
+        {% endif %}
+        {% if page != 'repositories' %}
+            <a href="/repos" class="home-btn" title="Browse public repositories">Repositories</a>
+        {% endif %}
         {% if page != 'docs' %}
             <a href="/docs" class="home-btn" title="View complete CLI documentation">CLI Docs</a>
-        {% endif %}
-        {% if page != 'home' %}
-            <a href="/" class="home-btn" title="Back to repositories list">&larr; Repositories</a>
         {% endif %}
         {% if currentUsername %}
             <div class="user-pill">

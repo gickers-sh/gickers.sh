@@ -1,0 +1,44 @@
+{% extends 'base.html.twig' %}
+{% import 'macros/ui.html.twig' as ui %}
+
+{% block title %}Public Repositories - {{ serverName }}{% endblock %}
+
+{% set nav_page = 'repositories' %}
+
+{% block header_identity %}
+    <div class="repo-breadcrumb">
+        <a href="/" class="breadcrumb-link"><span class="cli-prompt">&gt;_</span> {{ serverName }}</a>
+        <span class="breadcrumb-sep">/</span>
+        <span class="breadcrumb-current">repositories</span>
+    </div>
+    <h1 class="home-title"><span class="cli-prompt">&gt;_</span> Public Repositories</h1>
+    <p class="description">Browse public git repositories hosted on {{ serverName }}.</p>
+{% endblock %}
+
+{% block main %}
+    <section class="home-repos-section" aria-label="Public repositories">
+        <div class="section-header">
+            <h2>Public Repositories</h2>
+            <span class="section-count">{{ repositories|length }}</span>
+        </div>
+
+        {% if repositories is empty %}
+            <div class="notice">
+                <p>No public repositories published yet.</p>
+                <p class="cli-login-hint">Create your first repository with <code>{{ sshPrefix }} repo create &lt;name&gt;</code> or push via Git.</p>
+            </div>
+        {% else %}
+            <ul class="repo-list">
+                {% for repo in repositories %}
+                    {% include 'components/repo_item.html.twig' with {
+                        repo: repo,
+                        show_public_badge: true
+                    } only %}
+                {% endfor %}
+            </ul>
+        {% endif %}
+    </section>
+{% endblock %}
+
+{% block footer_summary %}{{ repositories|length }} public repositor{{ repositories|length == 1 ? 'y' : 'ies' }}{% endblock %}
+{% block footer_meta %}HTTP · {{ serverName }}{% endblock %}

@@ -36,7 +36,7 @@ final class HomeAndProfilePageTest extends KernelTestCase
         $this->storage = $c->get(BareRepositoryStorage::class);
     }
 
-    public function testAnonymousHomePageRendersLandingWithPublicRepos(): void
+    public function testAnonymousHomePageRendersLandingWithOnboardingAndGateways(): void
     {
         $owner = new User('author-' . bin2hex(random_bytes(3)), false, new \DateTimeImmutable());
         $this->users->save($owner);
@@ -48,13 +48,40 @@ final class HomeAndProfilePageTest extends KernelTestCase
         $this->assertSame(200, $response->getStatusCode());
         $html = (string) $response->getContent();
 
-        $this->assertStringContainsString('Public Repositories', $html);
-        $this->assertStringContainsString('href="/' . $pub->name()->value . '"', $html);
-        $this->assertStringContainsString('A public demo', $html);
-        $this->assertStringContainsString('@' . $owner->username(), $html);
-        $this->assertStringNotContainsString('href="/' . $priv->name()->value . '"', $html);
+        $this->assertStringContainsString('Quick Start &middot; Onboarding', $html);
+        $this->assertStringContainsString('signup', $html);
+        $this->assertStringContainsString('Tip:', $html);
+        $this->assertStringContainsString('data-copy="ssh -p 2223 localhost signup"', $html);
+        $this->assertStringContainsString('data-copy="ssh -p 2223 localhost"', $html);
+        $this->assertStringNotContainsString('data-copy="ssh -p 2223 &lt;username&gt;', $html);
+        $this->assertStringContainsString('&lt;username&gt;', $html);
         $this->assertStringContainsString('Terminal login', $html);
-        $this->assertStringContainsString('Connect over SSH', $html);
+        $this->assertStringContainsString('Public Repositories', $html);
+        $this->assertStringContainsString('href="/repos"', $html);
+        $this->assertStringContainsString('href="/docs"', $html);
+        $this->assertStringContainsString('1 public repository', $html);
+        $this->assertStringNotContainsString('href="/' . $priv->name()->value . '"', $html);
+    }
+
+    public function testPublicRepositoriesPageListsPublicReposAndHidesPrivate(): void
+    {
+        $owner = new User('author-' . bin2hex(random_bytes(3)), false, new \DateTimeImmutable());
+        $this->users->save($owner);
+
+        $pub = ($this->createRepo)($owner, 'pub-' . bin2hex(random_bytes(4)), private: false, description: 'A public demo');
+        $priv = ($this->createRepo)($owner, 'priv-' . bin2hex(random_bytes(4)), private: true, description: 'A private demo');
+
+        foreach (['/repos', '/repositories'] as $uri) {
+            $response = $this->get($uri);
+            $this->assertSame(200, $response->getStatusCode(), "Failed asserting 200 for {$uri}");
+            $html = (string) $response->getContent();
+
+            $this->assertStringContainsString('Public Repositories', $html);
+            $this->assertStringContainsString('href="/' . $pub->name()->value . '"', $html);
+            $this->assertStringContainsString('A public demo', $html);
+            $this->assertStringContainsString('@' . $owner->username(), $html);
+            $this->assertStringNotContainsString('href="/' . $priv->name()->value . '"', $html);
+        }
     }
 
     public function testAuthenticatedHomePageShowsUserPillAndProfileLink(): void
