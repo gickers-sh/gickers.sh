@@ -82,6 +82,16 @@
         if (code) {
           copyToClipboard(code.textContent.trim(), btn);
         }
+        return;
+      }
+
+      // Clicking on a deployment card opens its details page
+      const deployCard = e.target.closest('.deploy-card[data-href]');
+      if (deployCard && !e.target.closest('a, button')) {
+        const href = deployCard.getAttribute('data-href');
+        if (href) {
+          window.location.href = href;
+        }
       }
     });
 
@@ -295,9 +305,9 @@
       });
     });
 
-    // Activate based on URL hash if present (#readme or #commands)
+    // Activate based on URL hash if present (#readme, #commands, or #deployments)
     const initialHash = (window.location.hash || '').replace('#', '');
-    if (initialHash === 'readme' || initialHash === 'commands') {
+    if (initialHash === 'readme' || initialHash === 'commands' || initialHash === 'deployments') {
       activateTab(initialHash, false);
     } else {
       activateTab('commands', false);
@@ -305,7 +315,7 @@
 
     window.addEventListener('hashchange', () => {
       const hash = (window.location.hash || '').replace('#', '');
-      if (hash === 'readme' || hash === 'commands') {
+      if (hash === 'readme' || hash === 'commands' || hash === 'deployments') {
         activateTab(hash, false);
       }
     });

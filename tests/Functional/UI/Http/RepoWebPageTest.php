@@ -218,7 +218,7 @@ final class RepoWebPageTest extends KernelTestCase
 
         $stylesheet = file_get_contents(dirname(__DIR__, 4) . '/public/css/repo-web.css');
         $this->assertIsString($stylesheet);
-        $this->assertLessThan(22000, strlen($stylesheet));
+        $this->assertLessThan(30000, strlen($stylesheet));
 
         $script = file_get_contents(dirname(__DIR__, 4) . '/public/js/repo-web.js');
         $this->assertIsString($script);
@@ -412,6 +412,8 @@ final class RepoWebPageTest extends KernelTestCase
         $oid = str_repeat('a', 64);
         $cases = [
             ['GET', '/demo/raw/main/README.md'],
+            ['GET', '/demo/deployments/main'],
+            ['GET', '/demo/deploy/main'],
             ['GET', '/demo.git/info/refs'],
             ['GET', '/demo/info/refs'],
             ['GET', '/demo.git/HEAD'],

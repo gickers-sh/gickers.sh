@@ -1,0 +1,236 @@
+{% extends 'base.html.twig' %}
+{% import 'macros/ui.html.twig' as ui %}
+
+{% block title %}{{ repository }} ({{ ref }}) - Deployments - {{ serverName }}{% endblock %}
+
+{% set nav_page = 'repo' %}
+
+{% block header_identity %}
+    <div class="repo-breadcrumb">
+        <a href="/" class="breadcrumb-link"><span class="cli-prompt">&gt;_</span> {{ serverName }}</a>
+        <span class="breadcrumb-sep">/</span>
+        <a href="/{{ repository }}" class="breadcrumb-link">{{ repository }}</a>
+        <span class="breadcrumb-sep">/</span>
+        <a href="/{{ repository }}#deployments" class="breadcrumb-link">deployments</a>
+        <span class="breadcrumb-sep">/</span>
+        <span class="breadcrumb-current">{{ ref }}</span>
+    </div>
+    <div class="deploy-title-bar">
+        <h1>{{ repository }} <span class="deploy-ref-badge">{{ ref }}</span></h1>
+        <span class="cli-tier cli-tier-{{ environment.status.value == 'running' ? 'public' : (environment.status.value == 'failed' ? 'admin' : (environment.status.value == 'building' ? 'write' : 'read')) }}">
+            {{ environment.status.value }}
+        </span>
+    </div>
+    {% if description is not empty %}<p class="description">{{ description }}</p>{% endif %}
+{% endblock %}
+
+{% block main %}
+    <div class="doc-header-nav" style="margin-bottom: 1.25rem;">
+        <a href="/{{ repository }}#deployments" class="doc-back-btn">
+            <span>&larr;</span> Back to repository deployments
+        </a>
+    </div>
+
+    {# Environment Metadata Cards Grid #}
+    <div class="deploy-meta-grid">
+        <div class="deploy-info-card">
+            <span class="deploy-info-title">Environment</span>
+            <div class="deploy-info-value">
+                <strong>{{ ref }}</strong>
+                <span class="deploy-sub">{{ environment.refType.value }} &middot; {{ environment.isEnabled ? 'Enabled' : 'Disabled' }}</span>
+                {% if environment.deployedSha %}
+                    <span class="deploy-sub">Active commit: <code>{{ environment.deployedSha|slice(0, 7) }}</code></span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="deploy-info-card">
+            <span class="deploy-info-title">Resource Quota</span>
+            <div class="deploy-info-value">
+                <strong>{{ quota.cpus }} CPU &middot; {{ quota.memoryMb }}MB RAM</strong>
+                <span class="deploy-sub">{{ quota.pids }} PIDs limit &middot; max {{ quota.maxServices }} services</span>
+            </div>
+        </div>
+
+        <div class="deploy-info-card">
+            <span class="deploy-info-title">Domains ({{ domains|length }})</span>
+            <div class="deploy-info-value">
+                {% if domains is empty %}
+                    <span class="deploy-sub">No custom domains configured.</span>
+                {% else %}
+                    <ul class="deploy-mini-list">
+                        {% for d in domains %}
+                            <li>
+                                <a href="https://{{ d.domain }}" target="_blank" rel="noopener noreferrer">{{ d.domain }}</a>
+                                <span class="deploy-sub">&rarr; {{ d.serviceName }}:{{ d.targetPort }}</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="deploy-info-card">
+            <span class="deploy-info-title">Environment Variables ({{ envVars|length }})</span>
+            <div class="deploy-info-value">
+                {% if envVars is empty %}
+                    <span class="deploy-sub">No environment variables set.</span>
+                {% else %}
+                    <div class="deploy-env-tags">
+                        {% for ev in envVars %}
+                            <span class="deploy-env-tag"><code>{{ ev.name }}</code>=••••••••</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# CLI Commands Helper #}
+    <div class="doc-lead-card" style="margin: 1.25rem 0;">
+        <span class="cli-drawer-title" style="font-size: 0.85rem; margin-bottom: 0.5rem; display: block;">
+            <span class="cli-prompt">&gt;_</span> Manage via SSH CLI
+        </span>
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+            <div class="clone-box">
+                <span class="clone-label" style="display: none;">Redeploy</span>
+                <code>{{ sshPrefix }} repo deploy redeploy {{ repository }} {{ ref }}</code>
+                {{ ui.copy_btn(sshPrefix ~ ' repo deploy redeploy ' ~ repository ~ ' ' ~ ref, null, 'copy-btn-sm') }}
+            </div>
+            <div class="clone-box">
+                <span class="clone-label" style="display: none;">Logs</span>
+                <code>{{ sshPrefix }} repo deploy logs {{ repository }} {{ ref }}</code>
+                {{ ui.copy_btn(sshPrefix ~ ' repo deploy logs ' ~ repository ~ ' ' ~ ref, null, 'copy-btn-sm') }}
+            </div>
+            <div class="clone-box">
+                <span class="clone-label" style="display: none;">Restart</span>
+                <code>{{ sshPrefix }} repo deploy restart {{ repository }} {{ ref }}</code>
+                {{ ui.copy_btn(sshPrefix ~ ' repo deploy restart ' ~ repository ~ ' ' ~ ref, null, 'copy-btn-sm') }}
+            </div>
+        </div>
+    </div>
+
+    {# Releases / Deployment Runs History #}
+    <section class="section" aria-label="Deployment Runs History">
+        <div class="section-header">
+            <h2>Deployment Runs</h2>
+            <span class="section-count">{{ releases|length }}</span>
+        </div>
+
+        {% if releases is empty %}
+            <p class="notice">No deployment runs recorded for this environment yet.</p>
+        {% else %}
+            <div class="deploy-table-wrapper">
+                <table class="deploy-releases-table">
+                    <thead>
+                        <tr>
+                            <th>Release</th>
+                            <th>Status</th>
+                            <th>Commit</th>
+                            <th>Triggered By</th>
+                            <th>Started</th>
+                            <th>Duration</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in releases %}
+                            {% set isSelected = activeRelease is not null and activeRelease.id == r.id %}
+                            <tr class="{% if isSelected %}active-release-row{% endif %}">
+                                <td>
+                                    <strong>#{{ r.id }}</strong>
+                                    {% if loop.first %}<span class="deploy-badge-latest">latest</span>{% endif %}
+                                </td>
+                                <td>
+                                    <span class="cli-tier cli-tier-{{ r.status.value == 'succeeded' ? 'public' : (r.status.value == 'failed' ? 'admin' : (r.status.value == 'building' ? 'write' : 'read')) }}">
+                                        {{ r.status.value }}
+                                    </span>
+                                </td>
+                                <td><code>{{ r.commitSha|slice(0, 7) }}</code></td>
+                                <td>{{ r.triggeredBy ? '@' ~ r.triggeredBy.username : 'git push' }}</td>
+                                <td>{{ r.startedAt|date('Y-m-d H:i:s') }}</td>
+                                <td>
+                                    {% if r.finishedAt %}
+                                        {{ r.finishedAt.timestamp - r.startedAt.timestamp }}s
+                                    {% elseif r.status.value == 'building' %}
+                                        running...
+                                    {% else %}
+                                        &mdash;
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if isSelected %}
+                                        <span class="deploy-badge-viewing">Viewing Log</span>
+                                    {% else %}
+                                        <a href="?release={{ r.id }}#logs" class="home-btn home-btn-subtle" style="font-size: 0.72rem; padding: 0.15rem 0.5rem;">View Log</a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </section>
+
+    {# Logs Section #}
+    <section id="logs" class="section" aria-label="Deployment Logs" style="margin-top: 2rem;">
+        <div class="section-header">
+            <h2>
+                {% if activeRelease %}
+                    Build Log &middot; Release #{{ activeRelease.id }}
+                    <span class="cli-tier cli-tier-{{ activeRelease.status.value == 'succeeded' ? 'public' : (activeRelease.status.value == 'failed' ? 'admin' : 'write') }}" style="font-size: 0.72rem; vertical-align: middle;">
+                        {{ activeRelease.status.value }}
+                    </span>
+                {% else %}
+                    Deployment Logs
+                {% endif %}
+            </h2>
+        </div>
+
+        {% if activeRelease is not null and activeRelease.buildLog is not empty %}
+            <div class="doc-terminal">
+                <div class="doc-terminal-bar">
+                    <div class="doc-terminal-header-left">
+                        {% include 'components/terminal_dots.html.twig' %}
+                        <span class="doc-terminal-title">Release #{{ activeRelease.id }} ({{ activeRelease.commitSha|slice(0, 7) }}) &mdash; {{ activeRelease.startedAt|date('Y-m-d H:i:s') }}</span>
+                    </div>
+                    {{ ui.copy_btn(activeRelease.buildLog, 'Copy Log', 'copy-btn-sm', 'Copy build log to clipboard') }}
+                </div>
+                <div class="doc-terminal-body" style="padding: 0;">
+                    <pre class="deployment-terminal-code">{{ activeRelease.buildLog }}</pre>
+                </div>
+            </div>
+        {% else %}
+            <p class="notice">No build logs available for this release.</p>
+        {% endif %}
+
+        {% if runtimeLogs is not empty %}
+            <div style="margin-top: 1.5rem;">
+                <div class="section-header">
+                    <h2>Container Runtime Logs</h2>
+                </div>
+                <div class="doc-terminal">
+                    <div class="doc-terminal-bar">
+                        <div class="doc-terminal-header-left">
+                            {% include 'components/terminal_dots.html.twig' %}
+                            <span class="doc-terminal-title">Runtime Output (stdout/stderr)</span>
+                        </div>
+                        {{ ui.copy_btn(runtimeLogs, 'Copy Runtime Logs', 'copy-btn-sm', 'Copy runtime logs') }}
+                    </div>
+                    <div class="doc-terminal-body" style="padding: 0;">
+                        <pre class="deployment-terminal-code">{{ runtimeLogs }}</pre>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </section>
+{% endblock %}
+
+{% block footer %}
+    <footer class="status">
+        <span class="status-name">{{ repository }}</span>
+        <span class="status-summary">{{ ref }} &middot; {{ environment.status.value }}</span>
+        <span class="status-meta">Deployments &middot; {{ serverName }}</span>
+    </footer>
+{% endblock %}

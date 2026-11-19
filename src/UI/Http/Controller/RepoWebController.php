@@ -6,6 +6,7 @@ namespace App\UI\Http\Controller;
 
 use App\Access\Application\AccessResolver;
 use App\Access\Domain\AccessLevel;
+use App\Deploy\Application\Query\QueryDeployments;
 use App\Identity\Domain\Model\User;
 use App\Identity\Domain\UserStore;
 use App\Identity\Infrastructure\Security\SecurityUser;
@@ -43,6 +44,7 @@ final readonly class RepoWebController
         private ReadmeRenderer $readmeRenderer,
         private UserStore $users,
         private \App\UI\Ssh\Help\CommandDocumentationRegistry $docRegistry,
+        private QueryDeployments $queryDeployments,
     ) {}
 
     // Lowest-priority catch-all: every specific git/LFS/raw route (all of which carry
@@ -94,6 +96,9 @@ final readonly class RepoWebController
         $cloneCommand = $this->cloneCommand($name);
         $sshPrefix = $this->sshPrefix();
         $cliCommands = $this->docRegistry->repoPalette($name, $level, $sshPrefix);
+        $deployments = ($level->canWrite() || $level->isAdmin())
+            ? $this->queryDeployments->buildEnvironmentsSummary($entity)
+            : [];
 
         $response = new Response(
             $this->twig->render('repo/show.html.twig', [
@@ -102,6 +107,7 @@ final readonly class RepoWebController
                 'cloneCommand' => $cloneCommand,
                 'sshPrefix' => $sshPrefix,
                 'cliCommands' => $cliCommands,
+                'deployments' => $deployments,
                 'canWrite' => $level->canWrite(),
                 'isAdmin' => $level->isAdmin(),
                 'readmePath' => $readme['path'] ?? null,

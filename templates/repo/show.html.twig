@@ -27,7 +27,7 @@
     {% if empty %}
         <p class="notice">This repository is empty.</p>
     {% else %}
-        <nav class="tabs" aria-label="Repository sections"><a class="active" href="#commands" data-tab="commands">Commands</a><a href="#readme" data-tab="readme">Readme</a></nav>
+        <nav class="tabs" aria-label="Repository sections"><a class="active" href="#commands" data-tab="commands">Commands</a><a href="#readme" data-tab="readme">Readme</a>{% if canWrite or isAdmin %}<a href="#deployments" data-tab="deployments">Deployments{% if deployments is defined and deployments is not empty %} ({{ deployments|length }}){% endif %}</a>{% endif %}</nav>
         <section id="commands" class="section tab-content active" aria-label="SSH CLI Palette">
             <div class="cli-drawer">
                 <div class="cli-drawer-header">
@@ -100,6 +100,51 @@
                 <div class="readme">{{ readmeHtml }}</div>
             {% endif %}
         </section>
+        {% if canWrite or isAdmin %}
+            <section id="deployments" class="section tab-content" aria-label="Deployments">
+                <div class="section-header" style="margin-top: 0;">
+                    <h2>Docker Deployments</h2>
+                    {% if deployments is defined and deployments is not empty %}
+                        <span class="section-count">{{ deployments|length }}</span>
+                    {% endif %}
+                </div>
+                {% if deployments is not defined or deployments is empty %}
+                    <p class="notice">No deployment environments configured. Enable one via SSH: <code>{{ sshPrefix }} repo deploy enable {{ repository }} main</code></p>
+                {% else %}
+                    <div class="cli-command-grid" style="grid-template-columns: 1fr;">
+                        {% for item in deployments %}
+                            {% set env = item.environment %}
+                            {% set rel = item.latestRelease %}
+                            {% set quota = item.quota %}
+                            <div class="cli-command-card deploy-card" data-href="/{{ repository }}/deployments/{{ env.refName }}" style="padding: 1rem 1.15rem;">
+                                <a href="/{{ repository }}/deployments/{{ env.refName }}" class="deploy-card-link" aria-label="View deployment details for {{ env.refName }}"></a>
+                                <div class="cli-card-info">
+                                    <div class="deploy-card-top">
+                                        <span class="cli-card-title" style="font-size: 1rem;">
+                                            {{ env.refName }} ({{ env.refType.value }})
+                                            <span class="cli-tier cli-tier-{{ env.status.value == 'running' ? 'public' : (env.status.value == 'failed' ? 'admin' : (env.status.value == 'building' ? 'write' : 'read')) }}">{{ env.status.value }}</span>
+                                        </span>
+                                        <span class="deploy-card-arrow" aria-hidden="true">&rarr;</span>
+                                    </div>
+                                    <span class="cli-card-desc" style="margin-top: 0.4rem;">
+                                        Commit: <code>{{ env.deployedSha ? env.deployedSha|slice(0, 7) : 'none' }}</code>
+                                        &middot; Quota: {{ quota.cpus }} CPU, {{ quota.memoryMb }}MB RAM, {{ quota.pids }} PIDs
+                                    </span>
+                                    {% if env.domains is not empty %}
+                                        <span class="cli-card-desc">
+                                            Domains:
+                                            {% for d in env.domains %}
+                                                <a href="https://{{ d.domain }}" target="_blank" rel="noopener noreferrer" class="deploy-nested-link">{{ d.domain }}</a> ({{ d.serviceName }}:{{ d.targetPort }}){% if not loop.last %}, {% endif %}
+                                            {% endfor %}
+                                        </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </section>
+        {% endif %}
     {% endif %}
 {% endblock %}
 
