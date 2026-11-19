@@ -76,6 +76,26 @@ final class SignupDispatchTest extends KernelTestCase
         self::assertSame($username, $user->username());
     }
 
+    public function testKnownKeyCanSignUpAnotherUsername(): void
+    {
+        $key = self::generateKey();
+        $user1 = 'user1'.bin2hex(random_bytes(4));
+        $user2 = 'user2'.bin2hex(random_bytes(4));
+
+        // First signup
+        $tester1 = $this->dispatch('signup '.$user1, $key);
+        self::assertSame(0, $tester1->getStatusCode(), self::text($tester1));
+
+        // Second signup with the exact same key
+        $tester2 = $this->dispatch('signup '.$user2, $key);
+        self::assertSame(0, $tester2->getStatusCode(), self::text($tester2));
+        self::assertStringContainsString('registered', self::text($tester2));
+
+        $fp = SshKey::parse($key)->fingerprint;
+        self::assertNotNull($this->userStore->byFingerprintAndUsername($fp, $user1));
+        self::assertNotNull($this->userStore->byFingerprintAndUsername($fp, $user2));
+    }
+
     public function testUnknownKeyIsRestrictedToSignup(): void
     {
         $tester = $this->dispatch('repo list', self::generateKey());

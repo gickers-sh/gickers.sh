@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\UI\Ssh\Command;
 
 use App\Identity\Application\SignUp;
-use App\Shared\Domain\Exception\Conflict;
 use App\Shared\Domain\Exception\InvalidInput;
 use App\UI\Ssh\SshSession;
 use Symfony\Component\Console\Command\Command;
@@ -43,11 +42,6 @@ final class SignupCommand extends AbstractSshCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $actor = $this->actor();
-        if (null !== $actor) {
-            throw new Conflict(sprintf('this SSH key already belongs to user "%s"', $actor->username()));
-        }
-
         $keyLine = $this->nullableStringOption($input, 'key') ?? $this->sshSession->authorizedKey();
         if (null === $keyLine) {
             throw new InvalidInput('no SSH public key was presented; pass one with --key');
