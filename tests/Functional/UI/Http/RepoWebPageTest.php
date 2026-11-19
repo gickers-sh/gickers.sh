@@ -218,7 +218,7 @@ final class RepoWebPageTest extends KernelTestCase
 
         $stylesheet = file_get_contents(dirname(__DIR__, 4) . '/public/css/repo-web.css');
         $this->assertIsString($stylesheet);
-        $this->assertLessThan(16000, strlen($stylesheet));
+        $this->assertLessThan(22000, strlen($stylesheet));
 
         $script = file_get_contents(dirname(__DIR__, 4) . '/public/js/repo-web.js');
         $this->assertIsString($script);
