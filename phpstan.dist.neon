@@ -19,6 +19,7 @@ parameters:
             allowIn:
                 - src/UI/Ssh/SshEntrypointCommand.php
                 - src/UI/Ssh/Command/*
+                - src/UI/Http/Controller/Dev/ConsoleDebugController.php
                 - tests/*
     disallowedSuperglobals:
         -
@@ -27,4 +28,5 @@ parameters:
             allowIn:
                 - src/UI/Ssh/SshEntrypointCommand.php
                 - src/UI/Ssh/Command/*
+                - src/UI/Http/Controller/Dev/ConsoleDebugController.php
                 - tests/*

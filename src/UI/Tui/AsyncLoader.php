@@ -26,12 +26,19 @@ final class AsyncLoader
     /** @var \SplObjectStorage<object, \Closure(): bool> */
     private \SplObjectStorage $tickers;
 
+    /** @var \SplObjectStorage<Process, array{started_at: float, owner: string}> */
+    private \SplObjectStorage $jobMeta;
+
+    /** @var list<array<string, mixed>> */
+    private array $recentJobs = [];
+
     public function __construct(
         private readonly Tui $tui,
         private readonly ?LoggerInterface $logger = null,
     ) {
         $this->jobs = new \SplObjectStorage();
         $this->tickers = new \SplObjectStorage();
+        $this->jobMeta = new \SplObjectStorage();
     }
 
     /**
@@ -44,6 +51,9 @@ final class AsyncLoader
         if (!$process->isStarted()) {
             $process->start();
         }
+        $ownerName = (new \ReflectionClass($owner))->getShortName();
+        $this->jobMeta[$process] = ['started_at' => microtime(true), 'owner' => $ownerName];
+
         $list = isset($this->jobs[$owner]) ? $this->jobs[$owner] : [];
         $list[] = [$process, $onDone];
         $this->jobs[$owner] = $list;
@@ -119,6 +129,27 @@ final class AsyncLoader
             if (!$this->forget($owner, $process)) {
                 continue; // cancelled by an earlier callback
             }
+            $meta = isset($this->jobMeta[$process]) ? $this->jobMeta[$process] : null;
+            $started = $meta['started_at'] ?? microtime(true);
+            $durationMs = round((microtime(true) - $started) * 1000, 1);
+            $this->recentJobs[] = [
+                'pid' => $process->getPid(),
+                'command' => $process->getCommandLine(),
+                'owner' => $meta['owner'] ?? (new \ReflectionClass($owner))->getShortName(),
+                'started_at' => $started,
+                'duration_ms' => $durationMs,
+                'running' => false,
+                'successful' => $process->isSuccessful(),
+                'exit_code' => $process->getExitCode(),
+                'error' => $process->getErrorOutput(),
+            ];
+            if (\count($this->recentJobs) > 30) {
+                array_shift($this->recentJobs);
+            }
+            if (isset($this->jobMeta[$process])) {
+                unset($this->jobMeta[$process]);
+            }
+
             $ran = true;
             try {
                 $onDone($process);
@@ -140,6 +171,33 @@ final class AsyncLoader
         }
 
         return $busy || $this->jobs->count() > 0;
+    }
+
+    /**
+     * Returns a snapshot of active and recently completed background processes.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function getActiveJobs(): array
+    {
+        $list = [];
+        foreach ($this->snapshot() as [$owner, $process]) {
+            $meta = isset($this->jobMeta[$process]) ? $this->jobMeta[$process] : null;
+            $started = $meta['started_at'] ?? microtime(true);
+            $list[] = [
+                'pid' => $process->getPid(),
+                'command' => $process->getCommandLine(),
+                'owner' => (new \ReflectionClass($owner))->getShortName(),
+                'started_at' => $started,
+                'duration_ms' => round((microtime(true) - $started) * 1000, 1),
+                'running' => $process->isRunning(),
+                'successful' => $process->isRunning() ? null : $process->isSuccessful(),
+                'exit_code' => $process->getExitCode(),
+                'error' => $process->getErrorOutput(),
+            ];
+        }
+
+        return array_merge($list, array_reverse($this->recentJobs));
     }
 
     /**

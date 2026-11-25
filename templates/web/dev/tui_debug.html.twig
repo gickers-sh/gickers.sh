@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ server_name }} — TUI Debugger & Studio</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+    <link rel="stylesheet" href="{{ asset('/css/repo-web.css') }}">
+    <style>
+        :root {
+            --bg: #1a1b26;
+            --bg-darker: #16161e;
+            --bg-card: #24283b;
+            --fg: #c0caf5;
+            --fg-dim: #a9b1d6;
+            --muted: #565f89;
+            --blue: #7aa2f7;
+            --cyan: #7dcfff;
+            --purple: #bb9af7;
+            --orange: #ff9e64;
+            --red: #f7768e;
+            --green: #9ece6a;
+            --border: #3b4261;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-darker);
+            color: var(--fg);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .studio-navbar {
+            background-color: var(--bg);
+            border-bottom: 1px solid var(--border);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 48px;
+            box-sizing: border-box;
+        }
+
+        .studio-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .badge-live {
+            background-color: rgba(158, 206, 106, 0.2);
+            color: var(--green);
+            border: 1px solid var(--green);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .badge-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: var(--green);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.4; }
+            100% { opacity: 1; }
+        }
+
+        .studio-links {
+            display: flex;
+            gap: 12px;
+            font-size: 13px;
+        }
+
+        .studio-links a {
+            color: var(--blue);
+            text-decoration: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .studio-links a:hover {
+            background-color: var(--bg-card);
+        }
+
+        .studio-links a.active {
+            background-color: var(--blue);
+            color: var(--bg);
+            font-weight: bold;
+        }
+
+        .studio-layout {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 48px);
+            overflow: hidden;
+        }
+
+        .terminal-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: #13141c;
+            padding: 20px;
+            overflow: auto;
+        }
+
+        .terminal-window {
+            background-color: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .terminal-header {
+            background-color: #1f2335;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            user-select: none;
+        }
+
+        .terminal-dots {
+            display: flex;
+            gap: 6px;
+        }
+
+        .dot {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+        }
+        .dot-red { background-color: #f7768e; }
+        .dot-yellow { background-color: #e0af68; }
+        .dot-green { background-color: #9ece6a; }
+
+        .terminal-title {
+            font-family: monospace;
+            font-size: 12px;
+            color: var(--fg-dim);
+        }
+
+        .terminal-size-badge {
+            font-size: 11px;
+            color: var(--muted);
+            font-family: monospace;
+        }
+
+        .terminal-viewport {
+            padding: 8px;
+            background-color: var(--bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .sidebar {
+            width: 320px;
+            background-color: var(--bg);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+            box-sizing: border-box;
+            gap: 20px;
+            overflow-y: auto;
+        }
+
+        .sidebar-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .sidebar-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--fg);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .btn:hover {
+            border-color: var(--blue);
+            color: var(--blue);
+        }
+
+        .btn.active {
+            background-color: var(--blue);
+            color: var(--bg);
+            border-color: var(--blue);
+            font-weight: bold;
+        }
+
+        .btn-key {
+            font-family: monospace;
+            padding: 4px 8px;
+            background-color: #1f2335;
+            font-size: 13px;
+        }
+
+        select.form-control, input.form-control {
+            background-color: var(--bg-darker);
+            border: 1px solid var(--border);
+            color: var(--fg);
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        select.form-control:focus, input.form-control:focus {
+            outline: none;
+            border-color: var(--blue);
+        }
+
+        .key-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+
+        .info-card {
+            background-color: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px;
+            font-size: 12px;
+            font-family: monospace;
+            color: var(--fg-dim);
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+    </style>
+</head>
+<body>
+
+    <header class="studio-navbar">
+        <div class="studio-title">
+            <span style="color: var(--purple); font-weight: bold; font-family: monospace;">codes.sh</span>
+            <span>TUI Studio & Debugger</span>
+            <span class="badge-live"><span class="badge-dot"></span> Live Stream</span>
+        </div>
+        <div class="studio-links">
+            <a href="{{ path('dev_tui') }}" class="active">Live Terminal</a>
+            <a href="{{ path('dev_tui_components') }}">Components Showcase</a>
+            <a href="/" target="_blank">Web App ↗</a>
+        </div>
+    </header>
+
+    <div class="studio-layout">
+        <!-- Main Terminal Panel -->
+        <main class="terminal-panel" id="terminal-container">
+            <div class="terminal-window">
+                <div class="terminal-header">
+                    <div class="terminal-dots">
+                        <div class="dot dot-red"></div>
+                        <div class="dot dot-yellow"></div>
+                        <div class="dot dot-green"></div>
+                    </div>
+                    <div class="terminal-title" id="terminal-title">ssh codes.sh — (80×24)</div>
+                    <div class="terminal-size-badge" id="terminal-size">80 × 24</div>
+                </div>
+                <div class="terminal-viewport">
+                    <div id="terminal"></div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Sidebar Controls -->
+        <aside class="sidebar">
+            <!-- Dimensions -->
+            <div class="sidebar-section">
+                <div class="sidebar-title">Terminal Size (Columns × Rows)</div>
+                <div class="btn-group">
+                    <button class="btn active" onclick="setSize(80, 24)">80 × 24</button>
+                    <button class="btn" onclick="setSize(100, 30)">100 × 30</button>
+                    <button class="btn" onclick="setSize(120, 35)">120 × 35</button>
+                </div>
+            </div>
+
+            <!-- User Impersonation -->
+            <div class="sidebar-section">
+                <div class="sidebar-title">Actor / Session User</div>
+                <select class="form-control" id="user-select" onchange="restartSession()">
+                    <option value="">(Anonymous session)</option>
+                    {% for user in users %}
+                        <option value="{{ user.username }}">@{{ user.username }}{{ user.isAdmin ? ' [Admin]' : '' }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Active Page / Section Navigation -->
+            <div class="sidebar-section">
+                <div class="sidebar-title">View / Active Section</div>
+                <select class="form-control" id="page-select" onchange="switchSection(this.value)">
+                    <optgroup label="Global Selection">
+                        <option value="selection:0">📄 About</option>
+                        <option value="selection:1">⚡ Feed</option>
+                        <option value="selection:2">📦 My Repositories</option>
+                        <option value="selection:3">👤 Profile</option>
+                        <option value="selection:4">📖 Wiki</option>
+                    </optgroup>
+                    {% if repos is defined and repos|length > 0 %}
+                        {% for r in repos %}
+                            <optgroup label="Repo: {{ r.name }}">
+                                <option value="repo:{{ r.name }}:0">📄 {{ r.name }} — Readme</option>
+                                <option value="repo:{{ r.name }}:1">📁 {{ r.name }} — Files</option>
+                                <option value="repo:{{ r.name }}:2">📜 {{ r.name }} — Commits</option>
+                                <option value="repo:{{ r.name }}:5">🚀 {{ r.name }} — Deployments</option>
+                            </optgroup>
+                        {% endfor %}
+                    {% endif %}
+                </select>
+            </div>
+
+            <!-- Virtual Keyboard -->
+            <div class="sidebar-section">
+                <div class="sidebar-title">Virtual Keypad</div>
+                <div class="key-grid">
+                    <button class="btn btn-key" onclick="sendKey('\t')">Tab</button>
+                    <button class="btn btn-key" onclick="sendKey('\r')">Enter</button>
+                    <button class="btn btn-key" onclick="sendKey('\x1b')">Esc</button>
+                    <button class="btn btn-key" onclick="sendKey('q')">q</button>
+                    <button class="btn btn-key" onclick="sendKey('\x1b[A')">↑</button>
+                    <button class="btn btn-key" onclick="sendKey('\x1b[B')">↓</button>
+                    <button class="btn btn-key" onclick="sendKey('\x1b[D')">←</button>
+                    <button class="btn btn-key" onclick="sendKey('\x1b[C')">→</button>
+                    <button class="btn btn-key" onclick="sendKey('/')">/</button>
+                    <button class="btn btn-key" onclick="sendKey('?')">?</button>
+                    <button class="btn btn-key" onclick="sendKey('r')">r</button>
+                    <button class="btn btn-key" onclick="sendKey(' ')">Space</button>
+                </div>
+            </div>
+
+            <!-- Session Controls -->
+            <div class="sidebar-section">
+                <div class="sidebar-title">Session Management</div>
+                <button class="btn" style="width: 100%;" onclick="restartSession()">🔄 Restart TUI Session</button>
+            </div>
+
+            <!-- Diagnostics -->
+            <div class="sidebar-section">
+                <div class="sidebar-title">Connection Info</div>
+                <div class="info-card">
+                    <div>Status: <span id="conn-status" style="color: var(--green);">Connecting...</span></div>
+                    <div>Session: <span id="session-id-display">{{ session_id }}</span></div>
+                    <div>Palette: TokyoNight 24-bit</div>
+                    <div>Buffer: VirtualTerminal + Termstrap</div>
+                </div>
+            </div>
+
+            <!-- Quick Tips -->
+            <div class="sidebar-section" style="font-size: 11px; color: var(--muted); line-height: 1.4;">
+                💡 <strong>Astuce :</strong> Le terminal écoute directement votre clavier ! Cliquez sur l'écran noir et naviguez avec les flèches, Tab, Entrée et Échap comme dans votre vrai terminal.
+            </div>
+        </aside>
+    </div>
+
+    <!-- xterm.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+
+    <script>
+        let sessionId = '{{ session_id }}';
+        let currentCols = 80;
+        let currentRows = 24;
+        let eventSource = null;
+        let term = null;
+
+        const urlParams = new URLSearchParams(window.location.search);
+        let currentTab = urlParams.get('tab') !== null ? urlParams.get('tab') : '0';
+        let currentRepo = urlParams.get('repo') || '';
+        let currentView = currentRepo ? 'repo' : 'selection';
+
+        function syncStateToUrlAndUI() {
+            const params = new URLSearchParams(window.location.search);
+            if (currentRepo) {
+                params.set('repo', currentRepo);
+            } else {
+                params.delete('repo');
+            }
+            params.set('tab', currentTab);
+            window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+
+            const pageSelect = document.getElementById('page-select');
+            if (pageSelect) {
+                const targetVal = currentRepo ? `repo:${currentRepo}:${currentTab}` : `selection:${currentTab}`;
+                for (let i = 0; i < pageSelect.options.length; i++) {
+                    if (pageSelect.options[i].value === targetVal) {
+                        pageSelect.selectedIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        function switchSection(val) {
+            const parts = val.split(':');
+            if (parts[0] === 'selection') {
+                currentRepo = '';
+                currentTab = parts[1] || '0';
+                currentView = 'selection';
+            } else if (parts[0] === 'repo') {
+                currentRepo = parts[1] || '';
+                currentTab = parts[2] || '0';
+                currentView = 'repo';
+            }
+            syncStateToUrlAndUI();
+            restartSession();
+        }
+
+        function initTerminal() {
+            term = new Terminal({
+                cols: currentCols,
+                rows: currentRows,
+                cursorBlink: true,
+                cursorStyle: 'block',
+                fontFamily: '"JetBrains Mono", "Fira Code", Menlo, Monaco, Consolas, monospace',
+                fontSize: 14,
+                lineHeight: 1.2,
+                theme: {
+                    background: '#1a1b26',
+                    foreground: '#c0caf5',
+                    cursor: '#bb9af7',
+                    cursorAccent: '#1a1b26',
+                    selectionBackground: '#33467C',
+                    black: '#15161e',
+                    red: '#f7768e',
+                    green: '#9ece6a',
+                    yellow: '#e0af68',
+                    blue: '#7aa2f7',
+                    magenta: '#bb9af7',
+                    cyan: '#7dcfff',
+                    white: '#a9b1d6',
+                    brightBlack: '#414868',
+                    brightRed: '#f7768e',
+                    brightGreen: '#9ece6a',
+                    brightYellow: '#e0af68',
+                    brightBlue: '#7aa2f7',
+                    brightMagenta: '#bb9af7',
+                    brightCyan: '#7dcfff',
+                    brightWhite: '#c0caf5'
+                }
+            });
+
+            const terminalEl = document.getElementById('terminal');
+            term.open(terminalEl);
+            term.focus();
+
+            // Allow native browser context menu on right click (e.g. Inspect Element)
+            terminalEl.addEventListener('contextmenu', (e) => {
+                e.stopPropagation();
+            }, true);
+
+            terminalEl.addEventListener('mousedown', (e) => {
+                if (e.button === 2) {
+                    e.stopPropagation();
+                }
+            }, true);
+
+            terminalEl.addEventListener('mouseup', (e) => {
+                if (e.button === 2) {
+                    e.stopPropagation();
+                }
+            }, true);
+
+            // Intercept special terminal keys (Tab, Esc) so the browser doesn't steal focus
+            term.attachCustomKeyEventHandler((event) => {
+                if (event.type === 'keydown') {
+                    if (event.key === 'Tab') {
+                        event.preventDefault();
+                        sendKey(event.shiftKey ? '\x1b[Z' : '\t');
+                        return false;
+                    }
+                    if (event.key === 'Escape') {
+                        event.preventDefault();
+                        sendKey('\x1b');
+                        return false;
+                    }
+                }
+                return true;
+            });
+
+            term.onData(data => {
+                // Ignore right-click mouse sequences
+                if (typeof data === 'string' && data.startsWith('\x1b[<2;')) {
+                    return;
+                }
+                sendKey(data);
+            });
+        }
+
+        function connectStream() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            const user = document.getElementById('user-select').value;
+            const params = new URLSearchParams({
+                session_id: sessionId,
+                cols: currentCols,
+                rows: currentRows,
+                user: user,
+            });
+            if (currentTab !== null && currentTab !== '') {
+                params.set('tab', currentTab);
+            }
+            if (currentRepo !== null && currentRepo !== '') {
+                params.set('repo', currentRepo);
+            }
+
+            const url = `{{ path('dev_tui_stream') }}?${params.toString()}`;
+
+            const statusEl = document.getElementById('conn-status');
+            statusEl.textContent = 'Connecting...';
+            statusEl.style.color = 'var(--orange)';
+
+            eventSource = new EventSource(url);
+
+            eventSource.onopen = () => {
+                statusEl.textContent = 'Connected (Live)';
+                statusEl.style.color = 'var(--green)';
+            };
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    if (payload.type === 'output' && payload.data) {
+                        term.write(payload.data);
+                    } else if (payload.type === 'state') {
+                        currentTab = payload.tab;
+                        currentRepo = payload.repo || '';
+                        currentView = payload.view;
+                        syncStateToUrlAndUI();
+                    }
+                } catch (e) {
+                    console.error('Failed to parse SSE chunk', e);
+                }
+            };
+
+            eventSource.onerror = (err) => {
+                statusEl.textContent = 'Reconnecting...';
+                statusEl.style.color = 'var(--red)';
+            };
+        }
+
+        function sendKey(data) {
+            fetch('{{ path('dev_tui_input') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    key: data
+                })
+            }).catch(e => console.error('Error sending key', e));
+
+            if (term) {
+                term.focus();
+            }
+        }
+
+        function setSize(cols, rows) {
+            currentCols = cols;
+            currentRows = rows;
+
+            document.querySelectorAll('.btn-group .btn').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent.includes(`${cols} × ${rows}`));
+            });
+
+            document.getElementById('terminal-size').textContent = `${cols} × ${rows}`;
+            document.getElementById('terminal-title').textContent = `ssh codes.sh — (${cols}×${rows})`;
+
+            term.resize(cols, rows);
+
+            fetch('{{ path('dev_tui_input') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    resize: { cols: cols, rows: rows }
+                })
+            }).catch(e => console.error('Error sending resize', e));
+        }
+
+        function restartSession() {
+            sessionId = 'tui_' + Math.random().toString(36).substring(2, 10);
+            document.getElementById('session-id-display').textContent = sessionId;
+            term.clear();
+            term.reset();
+            connectStream();
+            term.focus();
+        }
+
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', () => {
+            syncStateToUrlAndUI();
+            initTerminal();
+            connectStream();
+        });
+    </script>
+</body>
+</html>

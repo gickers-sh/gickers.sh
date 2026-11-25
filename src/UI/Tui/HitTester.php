@@ -59,6 +59,40 @@ final class HitTester
     }
 
     /**
+     * Resolves the deepest widget at given terminal coordinates (1-based),
+     * returning [widget => AbstractWidget, rect => WidgetRect] or null.
+     *
+     * @param int $x 1-based column
+     * @param int $y 1-based row
+     * @return array{widget: AbstractWidget, rect: \Symfony\Component\Tui\Render\WidgetRect}|null
+     */
+    public function findAt(int $x, int $y): ?array
+    {
+        $row = $y - 1;
+        $col = $x - 1;
+        $best = null;
+        $bestDepth = -1;
+        $bestRect = null;
+        $this->walk($this->navigator->top(), 0, function (AbstractWidget $w, int $depth) use ($row, $col, &$best, &$bestDepth, &$bestRect): void {
+            if ($depth <= $bestDepth) {
+                return;
+            }
+            $rect = $this->renderer->getWidgetRect($w);
+            if (null !== $rect && $rect->contains($row, $col)) {
+                $best = $w;
+                $bestDepth = $depth;
+                $bestRect = $rect;
+            }
+        });
+
+        if (null === $best || null === $bestRect) {
+            return null;
+        }
+
+        return ['widget' => $best, 'rect' => $bestRect];
+    }
+
+    /**
      * @param \Closure(AbstractWidget, int): void $visit
      */
     private function walk(AbstractWidget $widget, int $depth, \Closure $visit): void

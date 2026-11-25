@@ -25,6 +25,8 @@ final class TuiApp
     private readonly Navigator $navigator;
     private readonly AsyncLoader $async;
     private readonly Views $views;
+    private readonly Renderer $renderer;
+    private readonly HitTester $hitTester;
     private bool $restored = false;
 
     /**
@@ -36,22 +38,33 @@ final class TuiApp
         \Closure $viewsFactory,
         ?LoggerInterface $logger = null,
     ) {
-        $renderer = new Renderer(CodesStyleSheet::create());
+        $this->renderer = new Renderer(CodesStyleSheet::create());
         $keybindings = new Keybindings([
             'focus_next' => [Key::TAB, Key::F6],
             'focus_previous' => ['shift+tab', 'shift+f6'],
         ]);
-        $this->tui = new Tui(terminal: $terminal, keybindings: $keybindings, renderer: $renderer);
+        $this->tui = new Tui(terminal: $terminal, keybindings: $keybindings, renderer: $this->renderer);
         $this->async = new AsyncLoader($this->tui, $logger);
         $this->navigator = new Navigator($this->tui, $this->async);
         $this->tui->onTick(fn (): bool => $this->async->poll());
         $this->views = $viewsFactory($this);
-        new InputRouter($this, new HitTester($renderer, $this->navigator, $this->tui), $keybindings->getParser());
+        $this->hitTester = new HitTester($this->renderer, $this->navigator, $this->tui);
+        new InputRouter($this, $this->hitTester, $keybindings->getParser());
     }
 
     public function tui(): Tui
     {
         return $this->tui;
+    }
+
+    public function renderer(): Renderer
+    {
+        return $this->renderer;
+    }
+
+    public function hitTester(): HitTester
+    {
+        return $this->hitTester;
     }
 
     public function views(): Views

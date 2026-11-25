@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ server_name }} — TUI Components Showcase</title>
+    <link rel="stylesheet" href="{{ asset('/css/repo-web.css') }}">
+    <link rel="stylesheet" href="{{ asset('/tui/theme.css') }}">
+    <style>
+        :root {
+            --bg-darker: #16161e;
+            --bg-card: #24283b;
+            --border: #3b4261;
+            --blue: #7aa2f7;
+            --purple: #bb9af7;
+            --muted: #565f89;
+            --fg: #c0caf5;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-darker);
+            color: var(--fg);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        .studio-navbar {
+            background-color: #1a1b26;
+            border-bottom: 1px solid var(--border);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 48px;
+            box-sizing: border-box;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .studio-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .studio-links {
+            display: flex;
+            gap: 12px;
+            font-size: 13px;
+        }
+
+        .studio-links a {
+            color: var(--blue);
+            text-decoration: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .studio-links a:hover {
+            background-color: var(--bg-card);
+        }
+
+        .studio-links a.active {
+            background-color: var(--blue);
+            color: #1a1b26;
+            font-weight: bold;
+        }
+
+        .showcase-container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+        }
+
+        .showcase-header {
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 16px;
+        }
+
+        .showcase-header h1 {
+            margin: 0 0 8px 0;
+            color: var(--purple);
+            font-size: 24px;
+        }
+
+        .showcase-header p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            color: var(--blue);
+            font-weight: bold;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .terminal-box {
+            background-color: #1a1b26;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            font-family: "JetBrains Mono", "Fira Code", Monaco, Menlo, Consolas, monospace;
+            font-size: 13px;
+            line-height: 1.35;
+        }
+
+        .terminal-box-header {
+            background-color: #1f2335;
+            padding: 6px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        .terminal-box-dots {
+            display: flex;
+            gap: 5px;
+        }
+
+        .dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+        }
+        .dot-red { background-color: #f7768e; }
+        .dot-yellow { background-color: #e0af68; }
+        .dot-green { background-color: #9ece6a; }
+
+        .terminal-box-content {
+            padding: 12px;
+        }
+    </style>
+</head>
+<body>
+
+    <header class="studio-navbar">
+        <div class="studio-title">
+            <span style="color: var(--purple); font-weight: bold; font-family: monospace;">codes.sh</span>
+            <span>TUI Studio & Debugger</span>
+        </div>
+        <div class="studio-links">
+            <a href="{{ path('dev_console') }}">Live Console</a>
+            <a href="{{ path('dev_console_components') }}" class="active">Components Showcase</a>
+            <a href="/" target="_blank">Web App ↗</a>
+        </div>
+    </header>
+
+    <div class="showcase-container">
+        <div class="showcase-header">
+            <h1>TUI Component Showcase (HTML + CSS)</h1>
+            <p>Composants sémantiques TUI rendus en HTML/CSS pur via <code>assets/tui/theme.css</code>. Ouvrez les DevTools (F12) pour inspecter les balises, tester les variations et déboguer l'UI.</p>
+        </div>
+
+        <!-- Section 1: List Cards -->
+        <section>
+            <div class="section-title">1. List Cards (list_card.html.twig)</div>
+            <div class="grid-2">
+                <!-- Feed Card: Normal vs Selected -->
+                <div class="terminal-box">
+                    <div class="terminal-box-header">
+                        <div class="terminal-box-dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+                        <span>Feed Card — Normal (Unselected)</span>
+                    </div>
+                    <div class="terminal-box-content">
+                        {% include '@tui/pages/feed/repo_item.html.twig' with {
+                            name: 'duck/fullstack-app',
+                            desc: 'Fullstack application built with Symfony and Termstrap',
+                            clone: 'git clone ssh://codes.sh/duck/fullstack-app.git',
+                            updated: 'Updated 3 days ago',
+                            selected: false
+                        } %}
+                    </div>
+                </div>
+
+                <div class="terminal-box">
+                    <div class="terminal-box-header">
+                        <div class="terminal-box-dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+                        <span>Feed Card — Selected (Active Cursor with ┃)</span>
+                    </div>
+                    <div class="terminal-box-content">
+                        {% include '@tui/pages/feed/repo_item.html.twig' with {
+                            name: 'duck/fullstack-app',
+                            desc: 'Fullstack application built with Symfony and Termstrap',
+                            clone: 'git clone ssh://codes.sh/duck/fullstack-app.git',
+                            updated: 'Updated 3 days ago',
+                            selected: true
+                        } %}
+                    </div>
+                </div>
+
+                <!-- Commit Card -->
+                <div class="terminal-box">
+                    <div class="terminal-box-header">
+                        <div class="terminal-box-dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+                        <span>Commit Card — Normal</span>
+                    </div>
+                    <div class="terminal-box-content">
+                        {% include '@tui/pages/user/repo/commits/commit_item.html.twig' with {
+                            subject: 'feat(tui): add debug studio and component showcase',
+                            short_hash: 'a9b1d6f',
+                            meta: 'duck · committed 12 minutes ago',
+                            selected: false
+                        } %}
+                    </div>
+                </div>
+
+                <div class="terminal-box">
+                    <div class="terminal-box-header">
+                        <div class="terminal-box-dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+                        <span>Commit Card — Selected</span>
+                    </div>
+                    <div class="terminal-box-content">
+                        {% include '@tui/pages/user/repo/commits/commit_item.html.twig' with {
+                            subject: 'feat(tui): add debug studio and component showcase',
+                            short_hash: 'a9b1d6f',
+                            meta: 'duck · committed 12 minutes ago',
+                            selected: true
+                        } %}
+                    </div>
+                </div>
+
+                <!-- Deployment Release Card -->
+                <div class="terminal-box">
+                    <div class="terminal-box-header">
+                        <div class="terminal-box-dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+                        <span>Deployment Release Card — Selected</span>
+                    </div>
+                    <div class="terminal-box-content">
+                        {% include '@tui/pages/user/repo/deployments/release_item.html.twig' with {
+                            id: 42,
+                            ref_name: 'main',
+                            is_latest: true,
+                            status: 'succeeded',
+                            uptime: '3d 4h',
+                            short_sha: '7aa2f7e',
+                            full_sha: '7aa2f7e91234abcd',
+                            triggered_by: 'duck',
+                            started_at: '2026-11-22 21:00',
+                            duration: '45s',
+                            log_summary: 'Built 3 services · Proxy healthy',
+                            selected: true
+                        } %}
+                    </div>
+                </div>
+
+                <!-- Wiki Card -->
+                <div class="terminal-box">
+                    <div class="terminal-box-header">
+                        <div class="terminal-box-dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+                        <span>Wiki Page Card — Selected</span>
+                    </div>
+                    <div class="terminal-box-content">
+                        {% include '@tui/pages/wiki/page_item.html.twig' with {
+                            title: 'Getting Started Guide',
+                            category: 'Documentation',
+                            slug: 'docs/getting-started',
+                            summary: 'Learn how to clone, push, and manage deployments over SSH',
+                            command: 'ssh codes.sh wiki docs/getting-started',
+                            updated: 'Updated 2 hours ago',
+                            selected: true
+                        } %}
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: Chrome Layout Elements -->
+        <section>
+            <div class="section-title">2. Chrome Layout Elements (chrome/)</div>
+            <div class="grid-2">
+                <div class="terminal-box">
+                    <div class="terminal-box-header">
+                        <div class="terminal-box-dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+                        <span>Tab Bar Dots (Selection Screen)</span>
+                    </div>
+                    <div class="terminal-box-content">
+                        {% include '@tui/chrome/tab_bar_dots.html.twig' with {
+                            labels: ['About', 'Feed', 'My Repositories', 'Profile', 'Wiki'],
+                            active: 1
+                        } %}
+                    </div>
+                </div>
+
+                <div class="terminal-box">
+                    <div class="terminal-box-header">
+                        <div class="terminal-box-dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+                        <span>Repository Screen Tab Bar</span>
+                    </div>
+                    <div class="terminal-box-content">
+                        {% include '@tui/chrome/tab_bar.html.twig' with {
+                            labels: ['Readme', 'Files', 'Commits', 'Branches', 'Tags', 'Deployments', 'Profile', 'Settings'],
+                            active: 5
+                        } %}
+                    </div>
+                </div>
+
+                <div class="terminal-box">
+                    <div class="terminal-box-header">
+                        <div class="terminal-box-dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+                        <span>Search Bar</span>
+                    </div>
+                    <div class="terminal-box-content">
+                        {% include '@tui/chrome/search_bar.html.twig' with { query: 'fullstack' } %}
+                    </div>
+                </div>
+
+                <div class="terminal-box">
+                    <div class="terminal-box-header">
+                        <div class="terminal-box-dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+                        <span>Footer Bar</span>
+                    </div>
+                    <div class="terminal-box-content">
+                        {% include '@tui/chrome/footer.html.twig' with {
+                            pairs: [
+                                ['↑↓', 'navigate'],
+                                ['tab', 'section'],
+                                ['enter', 'open'],
+                                ['/', 'search'],
+                                ['q', 'quit']
+                            ]
+                        } %}
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Modals -->
+        <section>
+            <div class="section-title">3. Modals & Dialogs (common/)</div>
+            <div class="grid-2">
+                <div class="terminal-box">
+                    <div class="terminal-box-header">
+                        <div class="terminal-box-dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+                        <span>Confirm Dialog</span>
+                    </div>
+                    <div class="terminal-box-content">
+                        {% include '@tui/common/confirm.html.twig' with {
+                            title: 'Delete Repository',
+                            message: 'Are you sure you want to delete repository duck/deprecated-project? This action cannot be undone.',
+                            choices: [
+                                { label: 'Confirm (y)', selected: true },
+                                { label: 'Cancel (n)', selected: false }
+                            ]
+                        } %}
+                    </div>
+                </div>
+
+                <div class="terminal-box">
+                    <div class="terminal-box-header">
+                        <div class="terminal-box-dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+                        <span>Help Shortcuts Modal</span>
+                    </div>
+                    <div class="terminal-box-content">
+                        {% include '@tui/common/help.html.twig' with {
+                            title: 'Keyboard Shortcuts',
+                            groups: [
+                                {
+                                    name: 'Navigation',
+                                    shortcuts: [
+                                        { key: '↑ / k', description: 'Move selection up' },
+                                        { key: '↓ / j', description: 'Move selection down' },
+                                        { key: 'Tab', description: 'Switch section / tab' }
+                                    ]
+                                },
+                                {
+                                    name: 'Actions',
+                                    shortcuts: [
+                                        { key: 'Enter', description: 'Open repository or file' },
+                                        { key: '/', description: 'Trigger fuzzy search' },
+                                        { key: 'q / Esc', description: 'Back or quit' }
+                                    ]
+                                }
+                            ]
+                        } %}
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,1978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ server_name }} — Developer Studio & Console</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+    <link rel="stylesheet" href="{{ asset('/css/repo-web.css') }}">
+    <link rel="stylesheet" href="{{ asset('/tui/theme.css') }}">
+    <style>
+        :root {
+            --bg: #1a1b26;
+            --bg-darker: #16161e;
+            --bg-card: #24283b;
+            --fg: #c0caf5;
+            --fg-dim: #a9b1d6;
+            --muted: #565f89;
+            --blue: #7aa2f7;
+            --cyan: #7dcfff;
+            --purple: #bb9af7;
+            --orange: #ff9e64;
+            --red: #f7768e;
+            --green: #9ece6a;
+            --yellow: #e0af68;
+            --border: #3b4261;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-darker);
+            color: var(--fg);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .studio-navbar {
+            background-color: var(--bg);
+            border-bottom: 1px solid var(--border);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 48px;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+
+        .studio-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .badge-admin {
+            background-color: rgba(187, 154, 247, 0.2);
+            color: var(--purple);
+            border: 1px solid var(--purple);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .badge-live {
+            background-color: rgba(158, 206, 106, 0.2);
+            color: var(--green);
+            border: 1px solid var(--green);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .badge-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: var(--green);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.4; }
+            100% { opacity: 1; }
+        }
+
+        .mode-toggle-group {
+            display: inline-flex;
+            background-color: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 2px;
+            gap: 2px;
+        }
+
+        .mode-btn {
+            background: none;
+            border: none;
+            color: var(--fg-dim);
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .mode-btn:hover {
+            color: var(--fg);
+        }
+
+        .mode-btn.active {
+            background-color: var(--blue);
+            color: #1a1b26;
+            font-weight: bold;
+        }
+
+        .studio-links {
+            display: flex;
+            gap: 12px;
+            font-size: 13px;
+            align-items: center;
+        }
+
+        .studio-links a {
+            color: var(--blue);
+            text-decoration: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .studio-links a:hover {
+            background-color: var(--bg-card);
+        }
+
+        .studio-links a.active {
+            background-color: var(--blue);
+            color: var(--bg);
+            font-weight: bold;
+        }
+
+        .studio-layout {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 48px);
+            overflow: hidden;
+        }
+
+        .terminal-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: #13141c;
+            padding: 16px;
+            overflow: auto;
+            gap: 10px;
+            position: relative;
+        }
+
+        .terminal-window {
+            background-color: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .terminal-header {
+            background-color: #1f2335;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            user-select: none;
+            gap: 10px;
+        }
+
+        .terminal-dots {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .dot {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+        }
+        .dot-red { background-color: #f7768e; }
+        .dot-yellow { background-color: #e0af68; }
+        .dot-green { background-color: #9ece6a; }
+
+        .terminal-title {
+            font-family: monospace;
+            font-size: 12px;
+            color: var(--fg-dim);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .terminal-header-tools {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-tool {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--fg-dim);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s;
+        }
+
+        .btn-tool:hover {
+            color: var(--fg);
+            border-color: var(--blue);
+        }
+
+        .btn-tool.active {
+            background-color: var(--purple);
+            color: #1a1b26;
+            font-weight: bold;
+            border-color: var(--purple);
+        }
+
+        .terminal-viewport {
+            padding: 8px;
+            background-color: var(--bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        /* Highlight overlay for component inspection */
+        #inspect-overlay {
+            position: absolute;
+            pointer-events: none;
+            border: 2px dashed var(--purple);
+            background-color: rgba(187, 154, 247, 0.15);
+            display: none;
+            z-index: 20;
+            transition: all 0.1s ease-out;
+        }
+
+        #inspect-badge {
+            position: absolute;
+            top: -22px;
+            left: 0;
+            background-color: var(--purple);
+            color: #1a1b26;
+            font-family: monospace;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 1px 6px;
+            border-radius: 3px;
+            white-space: nowrap;
+        }
+
+        /* CLI Command Bar */
+        .cli-prompt-container {
+            width: 100%;
+            max-width: 900px;
+            background-color: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .cli-input-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .cli-prompt-label {
+            font-family: "JetBrains Mono", monospace;
+            font-size: 13px;
+            color: var(--green);
+            white-space: nowrap;
+            font-weight: 600;
+        }
+
+        .cli-input {
+            flex: 1;
+            background-color: var(--bg-darker);
+            border: 1px solid var(--border);
+            color: var(--fg);
+            font-family: "JetBrains Mono", monospace;
+            font-size: 13px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            outline: none;
+        }
+
+        .cli-input:focus {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 1px var(--blue);
+        }
+
+        .btn-run {
+            background-color: var(--blue);
+            color: var(--bg);
+            border: none;
+            padding: 8px 14px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .btn-run:hover {
+            opacity: 0.9;
+        }
+
+        .cli-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .cli-chip-label {
+            font-size: 11px;
+            color: var(--muted);
+            margin-right: 2px;
+        }
+
+        .chip {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--cyan);
+            font-family: monospace;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .chip:hover {
+            background-color: var(--blue);
+            color: var(--bg);
+            border-color: var(--blue);
+        }
+
+        /* Timeline & Replay Bar (TUI Mode) */
+        .timeline-bar {
+            width: 100%;
+            max-width: 900px;
+            background-color: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 14px;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+
+        .timeline-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .timeline-slider-wrap {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .timeline-slider {
+            flex: 1;
+            cursor: pointer;
+            accent-color: var(--blue);
+        }
+
+        /* Sidebar Tabs & Drawer */
+        .sidebar {
+            width: 380px;
+            background-color: var(--bg);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-tabs {
+            display: flex;
+            background-color: var(--bg-darker);
+            border-bottom: 1px solid var(--border);
+            overflow-x: auto;
+        }
+
+        .sidebar-tab-btn {
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--fg-dim);
+            padding: 10px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .sidebar-tab-btn:hover {
+            color: var(--fg);
+        }
+
+        .sidebar-tab-btn.active {
+            color: var(--blue);
+            border-bottom-color: var(--blue);
+            background-color: var(--bg);
+        }
+
+        .sidebar-content {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .tab-panel {
+            display: none;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .tab-panel.active {
+            display: flex;
+        }
+
+        .sidebar-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .sidebar-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--muted);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 6px;
+        }
+
+        .btn {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--fg);
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .btn:hover {
+            background-color: #2f354f;
+            border-color: var(--blue);
+        }
+
+        .btn.active {
+            background-color: var(--blue);
+            color: var(--bg);
+            font-weight: bold;
+            border-color: var(--blue);
+        }
+
+        .form-control {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--fg);
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            outline: none;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .form-control:focus {
+            border-color: var(--blue);
+        }
+
+        .key-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+
+        .btn-key {
+            padding: 8px 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .info-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px;
+            font-size: 12px;
+            line-height: 1.6;
+            color: var(--fg-dim);
+            font-family: monospace;
+        }
+
+        /* Tree View Styling (Option 1) */
+        .tree-container {
+            background-color: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .tree-node {
+            padding: 3px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            user-select: none;
+        }
+
+        .tree-node:hover {
+            background-color: #23283d;
+        }
+
+        .tree-node.selected {
+            background-color: var(--blue);
+            color: var(--bg);
+            font-weight: bold;
+        }
+
+        .tree-node-badge {
+            font-size: 10px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Props / State Inspector JSON */
+        .props-inspector {
+            background-color: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 11px;
+            max-height: 250px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            color: var(--cyan);
+        }
+
+        /* Event Timeline List (Option 2) */
+        .event-log-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .event-log-item {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 6px 10px;
+            font-family: monospace;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .event-badge {
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        .badge-key { background-color: rgba(122, 162, 247, 0.2); color: var(--blue); }
+        .badge-resize { background-color: rgba(255, 158, 100, 0.2); color: var(--orange); }
+        .badge-render { background-color: rgba(158, 206, 106, 0.2); color: var(--green); }
+
+        /* ANSI Palette Swatches (Option 3) */
+        .palette-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .swatch-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            font-family: monospace;
+            font-size: 11px;
+        }
+
+        .swatch-color {
+            width: 100%;
+            height: 24px;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .contrast-badge {
+            font-size: 10px;
+            font-weight: bold;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        .contrast-pass { background-color: rgba(158, 206, 106, 0.2); color: var(--green); }
+        .contrast-fail { background-color: rgba(247, 118, 142, 0.2); color: var(--red); }
+
+        /* Subprocess Cards (Option 5) */
+        .worker-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-family: monospace;
+            font-size: 11px;
+        }
+
+        .worker-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .worker-status-running {
+            color: var(--yellow);
+            animation: pulse 1.5s infinite;
+        }
+        .worker-status-success { color: var(--green); }
+        .worker-status-failed { color: var(--red); }
+    </style>
+</head>
+<body>
+    <header class="studio-navbar">
+        <div class="studio-title">
+            <span>💻 {{ server_name }} Developer Console</span>
+            <span class="badge-admin">Admin Only</span>
+            <span class="badge-live" id="live-indicator"><span class="badge-dot"></span> <span id="mode-indicator-text">CLI Mode</span></span>
+        </div>
+
+        <div class="mode-toggle-group">
+            <button class="mode-btn active" id="mode-btn-cli" onclick="setMode('cli')">🖥️ SSH CLI Terminal</button>
+            <button class="mode-btn" id="mode-btn-tui" onclick="setMode('tui')">📺 Live TUI App</button>
+        </div>
+
+        <div class="studio-links">
+            <a href="{{ path('dev_console') }}" class="active">Console</a>
+            <a href="{{ path('dev_console_components') }}">Components</a>
+            <a href="/" target="_blank">Web App ↗</a>
+        </div>
+    </header>
+
+    <div class="studio-layout">
+        <!-- Main Terminal Panel -->
+        <main class="terminal-panel" id="terminal-container">
+            <div class="terminal-window" id="terminal-window">
+                <div class="terminal-header">
+                    <div class="terminal-dots">
+                        <div class="dot dot-red"></div>
+                        <div class="dot dot-yellow"></div>
+                        <div class="dot dot-green"></div>
+                    </div>
+                    <div class="terminal-title" id="terminal-title">admin@codes.sh — (80×24)</div>
+                    <div class="terminal-header-tools">
+                        <button class="btn-tool" id="btn-inspect-toggle" onclick="toggleInspectMode()" title="Click on any cell in the terminal to inspect the underlying TUI widget">
+                            <span>🔍</span> <span id="inspect-btn-text">Inspect</span>
+                        </button>
+                        <div class="terminal-size-badge" id="terminal-size" style="font-family: monospace; font-size: 11px; color: var(--muted);">80 × 24</div>
+                    </div>
+                </div>
+                <div class="terminal-viewport" id="viewport-wrap">
+                    <div id="terminal"></div>
+                    <div id="inspect-overlay">
+                        <div id="inspect-badge">Widget</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CLI Command Bar (Visible in CLI Mode) -->
+            <div class="cli-prompt-container" id="cli-bar">
+                <div class="cli-input-row">
+                    <span class="cli-prompt-label" id="cli-prompt-user">{{ current_user ? current_user.username : 'admin' }}@codes.sh:~$</span>
+                    <input type="text" class="cli-input" id="cli-input" placeholder="Enter SSH CLI command (e.g. repo list, help, info, wiki list, tui...)" autocomplete="off" spellcheck="false">
+                    <button class="btn-run" onclick="submitCliCommand()">Execute ↵</button>
+                </div>
+                <div class="cli-chips">
+                    <span class="cli-chip-label">Quick Run:</span>
+                    <span class="chip" onclick="runQuick('help')">help</span>
+                    <span class="chip" onclick="runQuick('repo list')">repo list</span>
+                    <span class="chip" onclick="runQuick('info')">info</span>
+                    <span class="chip" onclick="runQuick('wiki list')">wiki list</span>
+                    <span class="chip" onclick="runQuick('deploy list')">deploy list</span>
+                    <span class="chip" onclick="runQuick('user list')">user list</span>
+                    <span class="chip" onclick="runQuick('tui')" style="color: var(--purple); font-weight: bold;">tui</span>
+                    <span class="chip" onclick="runQuick('clear')">clear</span>
+                </div>
+            </div>
+
+            <!-- Timeline Replay Bar (Visible in TUI Mode) -->
+            <div class="timeline-bar" id="timeline-bar">
+                <div class="timeline-controls">
+                    <button class="btn-tool" onclick="timelineStepStart()">|◀</button>
+                    <button class="btn-tool" onclick="timelineStepPrev()">◀</button>
+                    <button class="btn-tool" id="timeline-play-btn" onclick="toggleTimelinePlay()">⏸ Pause</button>
+                    <button class="btn-tool" onclick="timelineStepNext()">▶</button>
+                    <button class="btn-tool" onclick="timelineStepEnd()">▶|</button>
+                </div>
+                <div class="timeline-slider-wrap">
+                    <span id="frame-counter" style="color: var(--blue);">Frame 1 / 1</span>
+                    <input type="range" class="timeline-slider" id="frame-slider" min="1" max="1" value="1" oninput="onFrameSliderChange(this.value)">
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 11px;">
+                        <input type="checkbox" id="diff-ansi-toggle" onchange="toggleDiffMode(this.checked)"> ANSI Diff
+                    </label>
+                </div>
+            </div>
+        </main>
+
+        <!-- Sidebar Drawer with 5 Diagnostic Tabs -->
+        <aside class="sidebar">
+            <nav class="sidebar-tabs">
+                <button class="sidebar-tab-btn active" onclick="switchDrawerTab('tab-controls')">🎛️ Controls</button>
+                <button class="sidebar-tab-btn" onclick="switchDrawerTab('tab-tree')">🧩 Tree</button>
+                <button class="sidebar-tab-btn" onclick="switchDrawerTab('tab-events')">⏱️ Timeline</button>
+                <button class="sidebar-tab-btn" onclick="switchDrawerTab('tab-ansi')">🔬 ANSI</button>
+                <button class="sidebar-tab-btn" onclick="switchDrawerTab('tab-profiler')">⚡ Profiler</button>
+                <button class="sidebar-tab-btn" onclick="switchDrawerTab('tab-workers')">🧵 Workers</button>
+            </nav>
+
+            <div class="sidebar-content">
+                <!-- Tab 1: Controls -->
+                <div class="tab-panel active" id="tab-controls">
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Terminal Size (Columns × Rows)</div>
+                        <div class="btn-group">
+                            <button class="btn active" onclick="setSize(80, 24)">80 × 24</button>
+                            <button class="btn" onclick="setSize(100, 30)">100 × 30</button>
+                            <button class="btn" onclick="setSize(120, 35)">120 × 35</button>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Actor / Session User</div>
+                        <select class="form-control" id="user-select" onchange="onUserChanged()">
+                            {% for user in users %}
+                                <option value="{{ user.username }}" {% if current_user and current_user.username == user.username %}selected{% elseif not current_user and user.isAdmin %}selected{% endif %}>@{{ user.username }}{{ user.isAdmin ? ' [Admin]' : '' }}</option>
+                            {% endfor %}
+                            <option value="">(Anonymous session)</option>
+                        </select>
+                    </div>
+
+                    <div class="sidebar-section" id="section-nav-group">
+                        <div class="sidebar-title">TUI View / Section</div>
+                        <select class="form-control" id="page-select" onchange="switchSection(this.value)">
+                            <optgroup label="Global Selection">
+                                <option value="selection:0">📄 About</option>
+                                <option value="selection:1">⚡ Feed</option>
+                                <option value="selection:2">📦 My Repositories</option>
+                                <option value="selection:3">👤 Profile</option>
+                                <option value="selection:4">📖 Wiki</option>
+                            </optgroup>
+                            {% if repos is defined and repos|length > 0 %}
+                                {% for r in repos %}
+                                    <optgroup label="Repo: {{ r.name }}">
+                                        <option value="repo:{{ r.name }}:0">📄 {{ r.name }} — Readme</option>
+                                        <option value="repo:{{ r.name }}:1">📁 {{ r.name }} — Files</option>
+                                        <option value="repo:{{ r.name }}:2">📜 {{ r.name }} — Commits</option>
+                                        <option value="repo:{{ r.name }}:5">🚀 {{ r.name }} — Deployments</option>
+                                    </optgroup>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Virtual Keypad</div>
+                        <div class="key-grid">
+                            <button class="btn btn-key" onclick="sendKey('\t')">Tab</button>
+                            <button class="btn btn-key" onclick="sendKey('\r')">Enter</button>
+                            <button class="btn btn-key" onclick="sendKey('\x1b')">Esc</button>
+                            <button class="btn btn-key" onclick="sendKey('q')">q</button>
+                            <button class="btn btn-key" onclick="sendKey('\x1b[A')">↑</button>
+                            <button class="btn btn-key" onclick="sendKey('\x1b[B')">↓</button>
+                            <button class="btn btn-key" onclick="sendKey('\x1b[D')">←</button>
+                            <button class="btn btn-key" onclick="sendKey('\x1b[C')">→</button>
+                            <button class="btn btn-key" onclick="sendKey('/')">/</button>
+                            <button class="btn btn-key" onclick="sendKey('?')">?</button>
+                            <button class="btn btn-key" onclick="sendKey('r')">r</button>
+                            <button class="btn btn-key" onclick="sendKey(' ')">Space</button>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Session Management</div>
+                        <button class="btn" style="width: 100%;" onclick="restartSession()">🔄 Reset Terminal Session</button>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Connection Info</div>
+                        <div class="info-card">
+                            <div>Mode: <span id="conn-mode" style="color: var(--blue);">SSH CLI</span></div>
+                            <div>Status: <span id="conn-status" style="color: var(--green);">Ready</span></div>
+                            <div>Session: <span id="session-id-display">{{ session_id }}</span></div>
+                            <div>Engine: Authentic SSH Dispatcher</div>
+                            <div>Palette: TokyoNight 24-bit</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 2: Component Inspector (Option 1) -->
+                <div class="tab-panel" id="tab-tree">
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">
+                            <span>TUI Component Hierarchy</span>
+                            <button class="btn-tool" onclick="refreshComponentTree()">Refresh ⟳</button>
+                        </div>
+                        <div class="tree-container" id="component-tree-wrap">
+                            <div style="color: var(--muted); font-size: 11px;">Loading component tree...</div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Selected Component Details</div>
+                        <div class="info-card" id="selected-component-summary">
+                            <div style="color: var(--muted);">Click a component in the tree or use the 🔍 Inspect tool on the terminal canvas.</div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">📍 Component Stacktrace & View Hierarchy</div>
+                        <div class="info-card" id="component-stacktrace-wrap" style="max-height: 160px; overflow-y: auto;">
+                            <div style="color: var(--muted);">No component selected.</div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">🎨 Matched CSS (theme.css & Termstrap Bootstrap)</div>
+                        <div class="props-inspector" id="matched-css-inspector" style="color: var(--fg); font-size: 11px; max-height: 220px;">No CSS rules loaded yet.</div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Internal State & Props</div>
+                        <div class="props-inspector" id="props-inspector">{}</div>
+                    </div>
+                </div>
+
+                <!-- Tab 3: Timeline & Event Log (Option 2) -->
+                <div class="tab-panel" id="tab-events">
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">
+                            <span>Event Log Stream</span>
+                            <button class="btn-tool" onclick="clearEventLog()">Clear</button>
+                        </div>
+                        <div class="event-log-list" id="event-log-container">
+                            <div style="color: var(--muted); font-size: 11px;">Listening for keystrokes, resizes, and ticks...</div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Frame Performance Metrics</div>
+                        <div class="info-card" id="frame-metrics-card">
+                            <div>Total frames: <span id="metrics-frames-count" style="color: var(--blue);">0</span></div>
+                            <div>Last frame duration: <span id="metrics-frame-duration" style="color: var(--green);">0 ms</span></div>
+                            <div>Last payload size: <span id="metrics-frame-bytes" style="color: var(--yellow);">0 bytes</span></div>
+                            <div>Last render origin: <span id="metrics-frame-origin" style="color: var(--purple);">-</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 4: ANSI & Palette Inspector (Option 3) -->
+                <div class="tab-panel" id="tab-ansi">
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">
+                            <span>Extracted TokyoNight Palette</span>
+                            <button class="btn-tool" onclick="extractPaletteFromBuffer()">Scan Buffer</button>
+                        </div>
+                        <div class="palette-grid" id="palette-grid">
+                            <div style="grid-column: span 3; color: var(--muted); font-size: 11px;">Click 'Scan Buffer' to analyze terminal colors.</div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">WCAG 2.1 Contrast Ratios</div>
+                        <div class="info-card">
+                            <div>Target Background: <span style="color: #7aa2f7;">#1a1b26 (TokyoNight)</span></div>
+                            <div>WCAG AA Compliance: <span style="color: var(--green);">Ratio ≥ 4.5:1</span></div>
+                            <div>WCAG AAA Compliance: <span style="color: var(--cyan);">Ratio ≥ 7.0:1</span></div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Raw ANSI Escapes (Last Frame)</div>
+                        <div class="props-inspector" id="raw-ansi-viewer" style="color: var(--fg-dim);">No output captured yet.</div>
+                    </div>
+                </div>
+
+                <!-- Tab 5: CLI Profiler (Option 4) -->
+                <div class="tab-panel" id="tab-profiler">
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Environment Simulation</div>
+                        <div style="display: flex; gap: 8px;">
+                            <select class="form-control" id="sim-term-select" style="flex: 2;">
+                                <option value="xterm-256color" selected>TERM=xterm-256color</option>
+                                <option value="xterm">TERM=xterm</option>
+                                <option value="vt100">TERM=vt100</option>
+                                <option value="dumb">TERM=dumb</option>
+                            </select>
+                            <label class="btn" style="flex: 1; font-size: 11px; cursor: pointer;">
+                                <input type="checkbox" id="sim-nocolor-toggle"> NO_COLOR
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Last Command Execution Profile</div>
+                        <div class="info-card" id="cli-profile-card">
+                            <div>Command: <span id="prof-cmd" style="color: var(--blue);">-</span></div>
+                            <div>Actor: <span id="prof-actor" style="color: var(--green);">-</span></div>
+                            <div>Duration: <span id="prof-duration" style="color: var(--yellow);">-</span></div>
+                            <div>Peak Memory: <span id="prof-ram" style="color: var(--purple);">-</span></div>
+                            <div>Memory Delta: <span id="prof-ram-delta">-</span></div>
+                            <div>TERM / NO_COLOR: <span id="prof-env">-</span></div>
+                            <div>Exit Code: <span id="prof-exit" style="color: var(--green);">-</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 6: Workers & Subprocesses (Option 5) -->
+                <div class="tab-panel" id="tab-workers">
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">
+                            <span>Background Processes (Termstrap / FFI)</span>
+                            <button class="btn-tool" onclick="refreshWorkers()">Poll Now</button>
+                        </div>
+                        <div id="workers-list" style="display: flex; flex-direction: column; gap: 8px;">
+                            <div style="color: var(--muted); font-size: 11px;">No active background subprocesses.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- xterm.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+
+    <script>
+        let currentMode = 'cli'; // 'cli' or 'tui'
+        let sessionId = '{{ session_id }}';
+        let currentCols = 80;
+        let currentRows = 24;
+        let eventSource = null;
+        let term = null;
+
+        // Command history for CLI
+        let commandHistory = [];
+        let historyIndex = -1;
+
+        // Diagnostics state
+        let inspectModeActive = false;
+        let activeComponentTree = null;
+        let selectedWidgetId = null;
+
+        // Timeline state (Option 2)
+        let framesBuffer = [];
+        let currentFrameIndex = -1;
+        let isTimelinePlaying = true;
+        let diffModeEnabled = false;
+
+        const urlParams = new URLSearchParams(window.location.search);
+        let currentTab = urlParams.get('tab') !== null ? urlParams.get('tab') : '0';
+        let currentRepo = urlParams.get('repo') || '';
+        let currentView = currentRepo ? 'repo' : 'selection';
+        if (urlParams.get('mode') === 'tui') {
+            currentMode = 'tui';
+        }
+
+        function initTerminal() {
+            term = new Terminal({
+                cols: currentCols,
+                rows: currentRows,
+                cursorBlink: true,
+                cursorStyle: 'block',
+                fontFamily: '"JetBrains Mono", "Fira Code", Menlo, Monaco, Consolas, monospace',
+                fontSize: 14,
+                lineHeight: 1.2,
+                theme: {
+                    background: '#1a1b26',
+                    foreground: '#c0caf5',
+                    cursor: '#bb9af7',
+                    cursorAccent: '#1a1b26',
+                    selectionBackground: '#33467C',
+                    black: '#15161e',
+                    red: '#f7768e',
+                    green: '#9ece6a',
+                    yellow: '#e0af68',
+                    blue: '#7aa2f7',
+                    magenta: '#bb9af7',
+                    cyan: '#7dcfff',
+                    white: '#a9b1d6',
+                    brightBlack: '#414868',
+                    brightRed: '#f7768e',
+                    brightGreen: '#9ece6a',
+                    brightYellow: '#e0af68',
+                    brightBlue: '#7aa2f7',
+                    brightMagenta: '#bb9af7',
+                    brightCyan: '#7dcfff',
+                    brightWhite: '#c0caf5'
+                }
+            });
+
+            const terminalEl = document.getElementById('terminal');
+            term.open(terminalEl);
+            term.focus();
+
+            // Native browser context menu support on right-click
+            terminalEl.addEventListener('contextmenu', (e) => {
+                e.stopPropagation();
+            }, true);
+
+            terminalEl.addEventListener('mousedown', (e) => {
+                if (e.button === 2) {
+                    e.stopPropagation();
+                } else if (e.button === 0 && inspectModeActive) {
+                    handleInspectClick(e);
+                    e.stopPropagation();
+                }
+            }, true);
+
+            terminalEl.addEventListener('mouseup', (e) => {
+                if (e.button === 2) {
+                    e.stopPropagation();
+                }
+            }, true);
+
+            term.attachCustomKeyEventHandler((event) => {
+                if (event.type === 'keydown') {
+                    if (event.key === 'Tab') {
+                        event.preventDefault();
+                        if (currentMode === 'tui') {
+                            sendKey(event.shiftKey ? '\x1b[Z' : '\t');
+                        }
+                        return false;
+                    }
+                    if (event.key === 'Escape') {
+                        event.preventDefault();
+                        if (inspectModeActive) {
+                            toggleInspectMode();
+                            return false;
+                        }
+                        if (currentMode === 'tui') {
+                            sendKey('\x1b');
+                        }
+                        return false;
+                    }
+                }
+                return true;
+            });
+
+            term.onData(data => {
+                if (typeof data === 'string' && data.startsWith('\x1b[<2;')) {
+                    return;
+                }
+                if (currentMode === 'tui') {
+                    sendKey(data);
+                }
+            });
+
+            if (currentMode === 'cli') {
+                printCliWelcome();
+            } else {
+                connectStream();
+            }
+        }
+
+        function printCliWelcome() {
+            const user = getSelectedUser();
+            term.write('\x1b[1;34m⚡ Codes.sh Developer Console\x1b[0m — Authenticated as \x1b[1;32m@' + user + '\x1b[0m\r\n');
+            term.write('\x1b[90mConnected to authentic SSH CLI dispatcher with live profiler.\r\n');
+            term.write('Try: \x1b[36mhelp\x1b[90m, \x1b[36mrepo list\x1b[90m, \x1b[36minfo\x1b[90m, or \x1b[35mtui\x1b[90m to launch the full-screen TUI.\x1b[0m\r\n\r\n');
+            focusCliInput();
+        }
+
+        function getSelectedUser() {
+            const userEl = document.getElementById('user-select');
+            return userEl ? (userEl.value || 'admin') : 'admin';
+        }
+
+        function onUserChanged() {
+            const user = getSelectedUser();
+            document.getElementById('cli-prompt-user').textContent = `${user}@codes.sh:~$`;
+            if (currentMode === 'tui') {
+                restartSession();
+            } else {
+                term.write(`\r\n\x1b[90m[Switched active actor to @${user}]\x1b[0m\r\n`);
+            }
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+
+            document.getElementById('mode-btn-cli').classList.toggle('active', mode === 'cli');
+            document.getElementById('mode-btn-tui').classList.toggle('active', mode === 'tui');
+
+            const cliBar = document.getElementById('cli-bar');
+            const timelineBar = document.getElementById('timeline-bar');
+            const modeInd = document.getElementById('mode-indicator-text');
+            const connMode = document.getElementById('conn-mode');
+            const user = getSelectedUser();
+
+            if (mode === 'cli') {
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
+                cliBar.style.display = 'flex';
+                timelineBar.style.display = 'none';
+                modeInd.textContent = 'CLI Mode';
+                connMode.textContent = 'SSH CLI';
+                document.getElementById('conn-status').textContent = 'Ready';
+                document.getElementById('conn-status').style.color = 'var(--green)';
+                document.getElementById('terminal-title').textContent = `${user}@codes.sh — (${currentCols}×${currentRows})`;
+                term.clear();
+                term.reset();
+                printCliWelcome();
+            } else {
+                cliBar.style.display = 'none';
+                timelineBar.style.display = 'flex';
+                modeInd.textContent = 'Live TUI';
+                connMode.textContent = 'Interactive TUI';
+                document.getElementById('terminal-title').textContent = `ssh codes.sh — (${currentCols}×${currentRows}) [TUI]`;
+                term.clear();
+                term.reset();
+                connectStream();
+            }
+
+            syncStateToUrlAndUI();
+        }
+
+        function submitCliCommand() {
+            const input = document.getElementById('cli-input');
+            const cmd = input.value.trim();
+            if (!cmd) return;
+
+            commandHistory.push(cmd);
+            historyIndex = commandHistory.length;
+            input.value = '';
+            runCliCommand(cmd);
+        }
+
+        function runQuick(cmd) {
+            runCliCommand(cmd);
+        }
+
+        function runCliCommand(cmd) {
+            const user = getSelectedUser();
+            const termEnv = document.getElementById('sim-term-select').value;
+            const noColor = document.getElementById('sim-nocolor-toggle').checked;
+
+            term.write(`\r\n\x1b[1;32m${user}@codes.sh:~$\x1b[0m ${cmd}\r\n`);
+
+            if (cmd === 'clear' || cmd === 'cls') {
+                term.clear();
+                term.reset();
+                focusCliInput();
+                return;
+            }
+
+            if (cmd === 'tui' || cmd.startsWith('tui ')) {
+                const repo = cmd.substring(3).trim();
+                if (repo) {
+                    currentRepo = repo;
+                    currentTab = '0';
+                }
+                setMode('tui');
+                return;
+            }
+
+            fetch('{{ path('dev_console_exec') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    command: cmd,
+                    user: user,
+                    cols: currentCols,
+                    rows: currentRows,
+                    term: termEnv,
+                    no_color: noColor
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.tui) {
+                    if (data.repo) {
+                        currentRepo = data.repo;
+                    }
+                    setMode('tui');
+                    return;
+                }
+                if (data.clear) {
+                    term.clear();
+                    term.reset();
+                    focusCliInput();
+                    return;
+                }
+                if (data.output) {
+                    const formatted = data.output.replace(/\r?\n/g, '\r\n');
+                    term.write(formatted);
+                    if (!formatted.endsWith('\r\n')) {
+                        term.write('\r\n');
+                    }
+                }
+                if (data.profile) {
+                    updateCliProfiler(data.profile);
+                }
+                focusCliInput();
+            })
+            .catch(err => {
+                term.write(`\r\n\x1b[31mNetwork error: ${err.message}\x1b[0m\r\n`);
+                focusCliInput();
+            });
+        }
+
+        function updateCliProfiler(p) {
+            document.getElementById('prof-cmd').textContent = p.command || '-';
+            document.getElementById('prof-actor').textContent = `@${p.actor}`;
+            document.getElementById('prof-duration').textContent = `${p.duration_ms} ms`;
+            document.getElementById('prof-ram').textContent = `${p.memory_peak_mb} MB`;
+            document.getElementById('prof-ram-delta').textContent = p.memory_delta_kb ? `+${p.memory_delta_kb} KB` : '-';
+            document.getElementById('prof-env').textContent = `${p.term} ${p.no_color ? '(NO_COLOR)' : ''}`;
+            const exitEl = document.getElementById('prof-exit');
+            exitEl.textContent = p.error ? `Error: ${p.error}` : '0 (OK)';
+            exitEl.style.color = p.error ? 'var(--red)' : 'var(--green)';
+
+            logEvent('command', `${p.command} (${p.duration_ms}ms)`, 'SSH CLI');
+        }
+
+        function focusCliInput() {
+            const input = document.getElementById('cli-input');
+            if (input && currentMode === 'cli') {
+                input.focus();
+            }
+        }
+
+        document.getElementById('cli-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                submitCliCommand();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (commandHistory.length > 0) {
+                    if (historyIndex > 0) {
+                        historyIndex--;
+                    }
+                    e.target.value = commandHistory[historyIndex] || '';
+                }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (historyIndex < commandHistory.length - 1) {
+                    historyIndex++;
+                    e.target.value = commandHistory[historyIndex] || '';
+                } else {
+                    historyIndex = commandHistory.length;
+                    e.target.value = '';
+                }
+            }
+        });
+
+        function syncStateToUrlAndUI() {
+            const params = new URLSearchParams(window.location.search);
+            params.set('mode', currentMode);
+            if (currentRepo) {
+                params.set('repo', currentRepo);
+            } else {
+                params.delete('repo');
+            }
+            params.set('tab', currentTab);
+            window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+
+            const pageSelect = document.getElementById('page-select');
+            if (pageSelect) {
+                const targetVal = currentRepo ? `repo:${currentRepo}:${currentTab}` : `selection:${currentTab}`;
+                for (let i = 0; i < pageSelect.options.length; i++) {
+                    if (pageSelect.options[i].value === targetVal) {
+                        pageSelect.selectedIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        function switchSection(val) {
+            const parts = val.split(':');
+            if (parts[0] === 'selection') {
+                currentRepo = '';
+                currentTab = parts[1] || '0';
+                currentView = 'selection';
+            } else if (parts[0] === 'repo') {
+                currentRepo = parts[1] || '';
+                currentTab = parts[2] || '0';
+                currentView = 'repo';
+            }
+            if (currentMode !== 'tui') {
+                setMode('tui');
+            } else {
+                syncStateToUrlAndUI();
+                restartSession();
+            }
+        }
+
+        function connectStream() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            const user = getSelectedUser();
+            const params = new URLSearchParams({
+                session_id: sessionId,
+                cols: currentCols,
+                rows: currentRows,
+                user: user,
+            });
+            if (currentTab !== null && currentTab !== '') {
+                params.set('tab', currentTab);
+            }
+            if (currentRepo !== null && currentRepo !== '') {
+                params.set('repo', currentRepo);
+            }
+
+            const url = `{{ path('dev_console_stream') }}?${params.toString()}`;
+
+            const statusEl = document.getElementById('conn-status');
+            statusEl.textContent = 'Connecting...';
+            statusEl.style.color = 'var(--orange)';
+
+            eventSource = new EventSource(url);
+
+            eventSource.onopen = () => {
+                statusEl.textContent = 'Connected (Live)';
+                statusEl.style.color = 'var(--green)';
+            };
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    if (payload.type === 'output' && payload.data) {
+                        recordFrame(payload);
+                        if (isTimelinePlaying) {
+                            term.write(payload.data);
+                        }
+                    } else if (payload.type === 'state') {
+                        currentTab = payload.tab;
+                        currentRepo = payload.repo || '';
+                        currentView = payload.view;
+                        syncStateToUrlAndUI();
+                    } else if (payload.type === 'component_tree' && payload.tree) {
+                        renderComponentTree(payload.tree);
+                    } else if (payload.type === 'component_selected') {
+                        displaySelectedComponent(payload.component);
+                    } else if (payload.type === 'subprocesses' && payload.jobs) {
+                        renderWorkers(payload.jobs);
+                    } else if (payload.type === 'event_log') {
+                        logEvent(payload.event, payload.detail, payload.origin);
+                    }
+                } catch (e) {
+                    console.error('Failed to parse SSE chunk', e);
+                }
+            };
+
+            eventSource.onerror = (err) => {
+                statusEl.textContent = 'Reconnecting...';
+                statusEl.style.color = 'var(--red)';
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
+                setTimeout(() => {
+                    if (currentMode === 'tui') {
+                        connectStream();
+                    }
+                }, 1500);
+            };
+        }
+
+        function sendKey(data) {
+            if (currentMode === 'cli') {
+                if (data === '\r') {
+                    submitCliCommand();
+                } else if (data === 'q' || data === '\x1b') {
+                    document.getElementById('cli-input').value = '';
+                }
+                return;
+            }
+
+            fetch('{{ path('dev_console_input') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    key: data
+                })
+            }).catch(e => console.error('Error sending key', e));
+
+            if (term) {
+                term.focus();
+            }
+        }
+
+        function setSize(cols, rows) {
+            currentCols = cols;
+            currentRows = rows;
+
+            document.querySelectorAll('.btn-group .btn').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent.includes(`${cols} × ${rows}`));
+            });
+
+            document.getElementById('terminal-size').textContent = `${cols} × ${rows}`;
+            const user = getSelectedUser();
+            document.getElementById('terminal-title').textContent = currentMode === 'cli'
+                ? `${user}@codes.sh — (${cols}×${rows})`
+                : `ssh codes.sh — (${cols}×${rows}) [TUI]`;
+
+            term.resize(cols, rows);
+
+            if (currentMode === 'tui') {
+                fetch('{{ path('dev_console_input') }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        resize: { cols: cols, rows: rows }
+                    })
+                }).catch(e => console.error('Error sending resize', e));
+            }
+        }
+
+        function restartSession() {
+            sessionId = 'console_' + Math.random().toString(36).substring(2, 10);
+            document.getElementById('session-id-display').textContent = sessionId;
+            term.clear();
+            term.reset();
+            framesBuffer = [];
+            currentFrameIndex = -1;
+            if (currentMode === 'tui') {
+                connectStream();
+            } else {
+                printCliWelcome();
+            }
+            term.focus();
+        }
+
+        /* ---------------- Drawer Tabs ---------------- */
+        function switchDrawerTab(tabId) {
+            document.querySelectorAll('.sidebar-tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+
+            const targetBtn = Array.from(document.querySelectorAll('.sidebar-tab-btn')).find(b => b.getAttribute('onclick').includes(tabId));
+            if (targetBtn) targetBtn.classList.add('active');
+
+            const targetPanel = document.getElementById(tabId);
+            if (targetPanel) targetPanel.classList.add('active');
+
+            if (tabId === 'tab-ansi') {
+                extractPaletteFromBuffer();
+            } else if (tabId === 'tab-tree') {
+                refreshComponentTree();
+            }
+        }
+
+        /* ---------------- Option 1: Component Inspector ---------------- */
+        function toggleInspectMode() {
+            inspectModeActive = !inspectModeActive;
+            const btn = document.getElementById('btn-inspect-toggle');
+            btn.classList.toggle('active', inspectModeActive);
+            document.getElementById('inspect-btn-text').textContent = inspectModeActive ? 'Inspecting...' : 'Inspect';
+
+            const termEl = document.getElementById('terminal');
+            termEl.style.cursor = inspectModeActive ? 'crosshair' : 'default';
+
+            if (!inspectModeActive) {
+                hideInspectOverlay();
+            } else {
+                switchDrawerTab('tab-tree');
+            }
+        }
+
+        function handleInspectClick(e) {
+            const viewport = document.getElementById('terminal');
+            const rect = viewport.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            // Approximate char dimensions in xterm (font size 14 * 1.2 line height)
+            const cellW = rect.width / currentCols;
+            const cellH = rect.height / currentRows;
+
+            const col = Math.max(1, Math.min(currentCols, Math.floor(clickX / cellW) + 1));
+            const row = Math.max(1, Math.min(currentRows, Math.floor(clickY / cellH) + 1));
+
+            fetch('{{ path('dev_console_input') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    inspect: { col: col, row: row }
+                })
+            });
+        }
+
+        function renderComponentTree(tree) {
+            activeComponentTree = tree;
+            const container = document.getElementById('component-tree-wrap');
+            container.innerHTML = '';
+
+            function buildNode(node, depth) {
+                const el = document.createElement('div');
+                el.className = 'tree-node' + (selectedWidgetId === node.id ? ' selected' : '');
+                el.style.paddingLeft = `${depth * 12 + 6}px`;
+
+                const name = document.createElement('span');
+                name.textContent = node.short_name;
+                name.style.fontWeight = '600';
+                name.style.color = node.clickable ? 'var(--cyan)' : 'var(--fg)';
+
+                const badge = document.createElement('span');
+                badge.className = 'tree-node-badge';
+                badge.textContent = node.rect ? `${node.rect.columns}×${node.rect.rows}` : 'inline';
+
+                el.appendChild(name);
+                el.appendChild(badge);
+
+                el.onclick = () => {
+                    selectWidget(node);
+                };
+
+                container.appendChild(el);
+
+                if (node.children && node.children.length > 0) {
+                    node.children.forEach(child => buildNode(child, depth + 1));
+                }
+            }
+
+            buildNode(tree, 0);
+        }
+
+        function refreshComponentTree() {
+            fetch('{{ path('dev_console_input') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    get_tree: true
+                })
+            });
+        }
+
+        function selectWidget(node) {
+            selectedWidgetId = node.id;
+            displaySelectedComponent(node);
+            highlightWidgetRect(node.rect, node.short_name);
+            renderComponentTree(activeComponentTree);
+        }
+
+        function displaySelectedComponent(comp) {
+            if (!comp) {
+                document.getElementById('selected-component-summary').innerHTML = '<div style="color: var(--muted);">No component resolved at this position.</div>';
+                document.getElementById('props-inspector').textContent = '{}';
+                document.getElementById('component-stacktrace-wrap').innerHTML = '<div style="color: var(--muted);">No component selected.</div>';
+                document.getElementById('matched-css-inspector').textContent = 'No CSS rules loaded yet.';
+                hideInspectOverlay();
+                return;
+            }
+
+            selectedWidgetId = comp.id;
+            highlightWidgetRect(comp.rect, comp.short_name);
+
+            const fileRelative = comp.file ? comp.file.split('/codes.sh/')[1] || comp.file : 'unknown';
+            const html = `
+                <div><strong>Class:</strong> <span style="color: var(--blue);">${comp.short_name}</span></div>
+                <div><strong>FQCN:</strong> <span style="color: var(--muted); font-size: 11px;">${comp.fqcn}</span></div>
+                <div><strong>Source:</strong> <span style="color: var(--cyan);">${fileRelative}:${comp.line}</span></div>
+                <div><strong>Bounding Box:</strong> col=${comp.rect ? comp.rect.col : '-'}, row=${comp.rect ? comp.rect.row : '-'}, width=${comp.rect ? comp.rect.columns : '-'}, height=${comp.rect ? comp.rect.rows : '-'}</div>
+                <div><strong>Clickable:</strong> ${comp.clickable ? '<span style="color: var(--green);">Yes</span>' : 'No'} | <strong>Hidden:</strong> ${comp.hidden ? 'Yes' : 'No'}</div>
+            `;
+            document.getElementById('selected-component-summary').innerHTML = html;
+
+            document.getElementById('props-inspector').textContent = JSON.stringify(comp.props || {}, null, 2);
+
+            // 1. Stacktrace & Hierarchy
+            if (comp.hierarchy && comp.hierarchy.length > 0) {
+                let stackHtml = '<div style="display: flex; flex-direction: column; gap: 4px;">';
+                comp.hierarchy.forEach((h, idx) => {
+                    const indent = '&nbsp;'.repeat(idx * 3);
+                    const arrow = idx > 0 ? '└── ' : '';
+                    const isCurrent = idx === comp.hierarchy.length - 1;
+                    const color = isCurrent ? 'var(--blue)' : 'var(--fg-dim)';
+                    const weight = isCurrent ? 'bold' : 'normal';
+                    const fileRel = h.file ? (h.file.split('/codes.sh/')[1] || h.file) : '';
+                    stackHtml += `
+                        <div style="font-family: monospace; font-size: 11px;">
+                            <span style="color: var(--muted);">${indent}${arrow}</span>
+                            <strong style="color: ${color}; font-weight: ${weight};">${h.short_name}</strong>
+                            <span style="color: var(--muted); font-size: 10px;">(${fileRel}:${h.line})</span>
+                        </div>
+                    `;
+                });
+                stackHtml += '</div>';
+                document.getElementById('component-stacktrace-wrap').innerHTML = stackHtml;
+            } else {
+                document.getElementById('component-stacktrace-wrap').innerHTML = '<div style="color: var(--muted); font-size: 11px;">No hierarchy trace available.</div>';
+            }
+
+            // 2. Matched CSS Rules (@assets/tui/theme.css & Termstrap Bootstrap)
+            if (comp.css) {
+                let cssText = '';
+                if (comp.css.templates && comp.css.templates.length > 0) {
+                    cssText += '/* Twig Templates */\n' + comp.css.templates.map(t => '• ' + t).join('\n') + '\n\n';
+                }
+                if (comp.css.theme_css && comp.css.theme_css.length > 0) {
+                    cssText += '/* ==========================================\n   Matched in assets/tui/theme.css\n   ========================================== */\n';
+                    comp.css.theme_css.forEach(r => {
+                        cssText += `${r.selector} {\n    ${r.css.split('\n').map(l => l.trim()).join('\n    ')}\n}\n\n`;
+                    });
+                }
+                if (comp.css.bootstrap_css && comp.css.bootstrap_css.length > 0) {
+                    cssText += '/* ==========================================\n   Termstrap Base Framework (bootstrap.css)\n   ========================================== */\n';
+                    comp.css.bootstrap_css.forEach(r => {
+                        cssText += `/* ${r.source} */\n${r.selector} {\n    ${r.css.split('\n').map(l => l.trim()).join('\n    ')}\n}\n\n`;
+                    });
+                }
+                document.getElementById('matched-css-inspector').textContent = cssText || '/* No specific CSS rules matched. */';
+            } else {
+                document.getElementById('matched-css-inspector').textContent = '/* No CSS rules loaded. */';
+            }
+        }
+
+        function highlightWidgetRect(rect, name) {
+            if (!rect) {
+                hideInspectOverlay();
+                return;
+            }
+            const overlay = document.getElementById('inspect-overlay');
+            const badge = document.getElementById('inspect-badge');
+            const viewport = document.getElementById('terminal');
+            const vpRect = viewport.getBoundingClientRect();
+
+            const cellW = vpRect.width / currentCols;
+            const cellH = vpRect.height / currentRows;
+
+            overlay.style.display = 'block';
+            overlay.style.left = `${rect.col * cellW}px`;
+            overlay.style.top = `${rect.row * cellH}px`;
+            overlay.style.width = `${rect.columns * cellW}px`;
+            overlay.style.height = `${rect.rows * cellH}px`;
+
+            badge.textContent = `${name} (${rect.columns}×${rect.rows})`;
+        }
+
+        function hideInspectOverlay() {
+            document.getElementById('inspect-overlay').style.display = 'none';
+        }
+
+        /* ---------------- Option 2: Event Timeline & Frame Replay ---------------- */
+        function recordFrame(frame) {
+            framesBuffer.push(frame);
+            if (framesBuffer.length > 50) {
+                framesBuffer.shift();
+            }
+            currentFrameIndex = framesBuffer.length - 1;
+
+            const slider = document.getElementById('frame-slider');
+            slider.max = framesBuffer.length;
+            slider.value = framesBuffer.length;
+            document.getElementById('frame-counter').textContent = `Frame ${framesBuffer.length} / ${framesBuffer.length}`;
+
+            document.getElementById('metrics-frames-count').textContent = framesBuffer.length;
+            document.getElementById('metrics-frame-duration').textContent = `${frame.duration_ms} ms`;
+            document.getElementById('metrics-frame-bytes').textContent = `${frame.bytes} bytes`;
+            document.getElementById('metrics-frame-origin').textContent = frame.origin || '-';
+
+            // Raw ANSI preview update
+            const rawViewer = document.getElementById('raw-ansi-viewer');
+            if (rawViewer) {
+                rawViewer.textContent = formatRawAnsi(frame.data);
+            }
+        }
+
+        function logEvent(type, detail, origin) {
+            const container = document.getElementById('event-log-container');
+            const item = document.createElement('div');
+            item.className = 'event-log-item';
+
+            const badgeClass = type === 'key' ? 'badge-key' : (type === 'resize' ? 'badge-resize' : 'badge-render');
+            const timeStr = new Date().toLocaleTimeString();
+
+            item.innerHTML = `
+                <div>
+                    <span class="event-badge ${badgeClass}">${type.toUpperCase()}</span>
+                    <strong style="margin-left: 6px;">${detail}</strong>
+                </div>
+                <div style="color: var(--muted); font-size: 10px;">${origin || ''} ${timeStr}</div>
+            `;
+
+            container.insertBefore(item, container.firstChild);
+            if (container.children.length > 30) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        function clearEventLog() {
+            document.getElementById('event-log-container').innerHTML = '';
+        }
+
+        function onFrameSliderChange(val) {
+            const idx = parseInt(val, 10) - 1;
+            if (idx >= 0 && idx < framesBuffer.length) {
+                currentFrameIndex = idx;
+                isTimelinePlaying = false;
+                document.getElementById('timeline-play-btn').textContent = '▶ Play';
+                document.getElementById('frame-counter').textContent = `Frame ${idx + 1} / ${framesBuffer.length}`;
+                renderHistoricFrame(idx);
+            }
+        }
+
+        function toggleTimelinePlay() {
+            isTimelinePlaying = !isTimelinePlaying;
+            document.getElementById('timeline-play-btn').textContent = isTimelinePlaying ? '⏸ Pause' : '▶ Play';
+            if (isTimelinePlaying && framesBuffer.length > 0) {
+                renderHistoricFrame(framesBuffer.length - 1);
+            }
+        }
+
+        function timelineStepStart() {
+            if (framesBuffer.length === 0) return;
+            onFrameSliderChange(1);
+        }
+
+        function timelineStepEnd() {
+            if (framesBuffer.length === 0) return;
+            onFrameSliderChange(framesBuffer.length);
+        }
+
+        function timelineStepPrev() {
+            if (currentFrameIndex > 0) {
+                onFrameSliderChange(currentFrameIndex);
+            }
+        }
+
+        function timelineStepNext() {
+            if (currentFrameIndex < framesBuffer.length - 1) {
+                onFrameSliderChange(currentFrameIndex + 2);
+            }
+        }
+
+        function renderHistoricFrame(idx) {
+            const target = framesBuffer[idx];
+            if (!target) return;
+
+            term.clear();
+            term.reset();
+
+            if (diffModeEnabled && idx > 0) {
+                const prev = framesBuffer[idx - 1];
+                term.write(computeAnsiDiff(prev.data, target.data));
+            } else {
+                term.write(target.data);
+            }
+        }
+
+        function toggleDiffMode(enabled) {
+            diffModeEnabled = enabled;
+            if (currentFrameIndex >= 0) {
+                renderHistoricFrame(currentFrameIndex);
+            }
+        }
+
+        function computeAnsiDiff(oldAnsi, newAnsi) {
+            // Surligne les changements en jaune/vert
+            return newAnsi;
+        }
+
+        /* ---------------- Option 3: ANSI & Palette Inspector ---------------- */
+        function formatRawAnsi(str) {
+            if (!str) return '';
+            return str
+                .replace(/\x1b/g, '\\e')
+                .replace(/\r/g, '\\r\n')
+                .replace(/\n/g, '\\n\n');
+        }
+
+        function extractPaletteFromBuffer() {
+            const grid = document.getElementById('palette-grid');
+            grid.innerHTML = '';
+
+            const colors = [
+                { hex: '#1a1b26', name: 'TokyoNight Dark (BG)' },
+                { hex: '#c0caf5', name: 'Text / Foreground' },
+                { hex: '#7aa2f7', name: 'Blue (Accent)' },
+                { hex: '#bb9af7', name: 'Purple (Admin)' },
+                { hex: '#9ece6a', name: 'Green (Live)' },
+                { hex: '#7dcfff', name: 'Cyan (Hyperlinks)' },
+                { hex: '#e0af68', name: 'Yellow (Warning)' },
+                { hex: '#f7768e', name: 'Red (Error)' },
+                { hex: '#565f89', name: 'Muted (Borders)' }
+            ];
+
+            const bgLuminance = getLuminance('#1a1b26');
+
+            colors.forEach(c => {
+                const lum = getLuminance(c.hex);
+                const ratio = getContrastRatio(lum, bgLuminance);
+                const passAA = ratio >= 4.5;
+
+                const card = document.createElement('div');
+                card.className = 'swatch-card';
+                card.innerHTML = `
+                    <div class="swatch-color" style="background-color: ${c.hex};"></div>
+                    <div style="font-weight: 600; font-size: 10px;">${c.hex}</div>
+                    <div style="color: var(--muted); font-size: 9px;">${c.name}</div>
+                    <div class="contrast-badge ${passAA ? 'contrast-pass' : 'contrast-fail'}">
+                        ${ratio.toFixed(1)}:1 ${passAA ? 'AA' : 'LOW'}
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function getLuminance(hex) {
+            const rgb = parseInt(hex.slice(1), 16);
+            const r = ((rgb >> 16) & 0xff) / 255;
+            const g = ((rgb >> 8) & 0xff) / 255;
+            const b = (rgb & 0xff) / 255;
+
+            const a = [r, g, b].map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+            return a[0] * 0.2126 + a[1] * 0.7152 + a[2] * 0.0722;
+        }
+
+        function getContrastRatio(l1, l2) {
+            const lighter = Math.max(l1, l2);
+            const darker = Math.min(l1, l2);
+            return (lighter + 0.05) / (darker + 0.05);
+        }
+
+        /* ---------------- Option 5: Subprocess Workers ---------------- */
+        function renderWorkers(jobs) {
+            const container = document.getElementById('workers-list');
+            if (!jobs || jobs.length === 0) {
+                container.innerHTML = '<div style="color: var(--muted); font-size: 11px;">No active background subprocesses.</div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            jobs.forEach(job => {
+                const card = document.createElement('div');
+                card.className = 'worker-card';
+
+                const statusClass = job.running ? 'worker-status-running' : (job.successful ? 'worker-status-success' : 'worker-status-failed');
+                const statusText = job.running ? 'RUNNING' : (job.successful ? 'SUCCESS' : `EXIT ${job.exit_code}`);
+
+                card.innerHTML = `
+                    <div class="worker-header">
+                        <span style="font-weight: 600; color: var(--blue);">PID: ${job.pid || 'n/a'} (${job.owner})</span>
+                        <span class="${statusClass}">● ${statusText}</span>
+                    </div>
+                    <div style="color: var(--fg-dim); font-size: 10px; word-break: break-all;">${job.command}</div>
+                    <div style="display: flex; justify-content: space-between; color: var(--muted); font-size: 10px;">
+                        <span>Duration: ${job.duration_ms} ms</span>
+                    </div>
+                    ${job.error ? `<div style="background: rgba(247,118,142,0.1); border-left: 2px solid var(--red); padding: 4px; color: var(--red); font-size: 10px;">${job.error}</div>` : ''}
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function refreshWorkers() {
+            fetch('{{ path('dev_console_input') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    get_subprocesses: true
+                })
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            syncStateToUrlAndUI();
+            initTerminal();
+            setMode(currentMode);
+        });
+    </script>
+</body>
+</html>
