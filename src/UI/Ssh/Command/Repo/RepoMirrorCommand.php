@@ -50,7 +50,7 @@ final class RepoMirrorCommand extends AbstractSshCommand
 
         if (null === $mirrorArg) {
             $repo = $this->repoQuery->get($this->actor(), $name);
-            $this->line($output, $repo->isMirror() ? 'true' : 'false');
+            $this->line($output, $this->formatBoolean($output, $repo->isMirror()));
 
             return Command::SUCCESS;
         }

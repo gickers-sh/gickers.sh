@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -460,6 +461,9 @@ func (s *server) handleSession(
 					continue
 				}
 				state.env[p.Name] = p.Value
+				if p.Name == "COLORTERM" {
+					state.env["SSH_CLIENT_COLORTERM"] = p.Value
+				}
 				_ = req.Reply(true, nil)
 
 			case "pty-req":
@@ -579,7 +583,7 @@ func (s *server) runPTYSession(
 		args = append(args, "--user="+u)
 	}
 	cmd := exec.Command(s.phpBin, args...)
-	cmd.Env = buildChildEnv(os.Environ(), state.env, sshConn.RemoteAddr(), sshConn.LocalAddr(), state.ptyTerm, ttyName, isExec, execCmd, sshConn.User())
+	cmd.Env = buildChildEnv(os.Environ(), state.env, sshConn.RemoteAddr(), sshConn.LocalAddr(), state.ptyTerm, ttyName, isExec, execCmd, sshConn.User(), string(sshConn.ClientVersion()), state.width, state.height)
 	cmd.Stdin = tty
 	cmd.Stdout = tty
 	cmd.Stderr = tty
@@ -669,7 +673,7 @@ func (s *server) runPipeSession(
 		args = append(args, "--user="+u)
 	}
 	cmd := exec.Command(s.phpBin, args...)
-	cmd.Env = buildChildEnv(os.Environ(), state.env, sshConn.RemoteAddr(), sshConn.LocalAddr(), "", "", isExec, execCmd, sshConn.User())
+	cmd.Env = buildChildEnv(os.Environ(), state.env, sshConn.RemoteAddr(), sshConn.LocalAddr(), "", "", isExec, execCmd, sshConn.User(), string(sshConn.ClientVersion()), 0, 0)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
 	}
@@ -821,7 +825,7 @@ func isAllowedEnvVar(name string) bool {
 		return false
 	}
 	switch name {
-	case "TERM", "COLORTERM", "LANG":
+	case "TERM", "COLORTERM", "LANG", "COLUMNS", "LINES":
 		return true
 	}
 	if !strings.HasPrefix(name, "LC_") || len(name) <= 3 {
@@ -850,8 +854,11 @@ func buildChildEnv(
 	isExec bool,
 	execCmd string,
 	sshUser string,
+	clientVersion string,
+	cols uint32,
+	lines uint32,
 ) []string {
-	overrides := make(map[string]string, len(sessionEnv)+6)
+	overrides := make(map[string]string, len(sessionEnv)+10)
 	for k, v := range sessionEnv {
 		overrides[k] = v
 	}
@@ -860,12 +867,26 @@ func buildChildEnv(
 		if ptyTerm != "" {
 			overrides["TERM"] = ptyTerm
 		}
+	} else {
+		overrides["SSH_PIPED"] = "1"
 	}
 	if isExec {
 		overrides["SSH_ORIGINAL_COMMAND"] = execCmd
 	}
 	if u := strings.TrimSpace(sshUser); u != "" {
 		overrides["SSH_USER"] = u
+	}
+	if strings.Contains(clientVersion, "for_Windows") || strings.Contains(clientVersion, "Windows") {
+		overrides["SSH_CLIENT_OS"] = "windows"
+	}
+	if clientVersion != "" {
+		overrides["SSH_CLIENT_VERSION"] = clientVersion
+	}
+	if cols > 0 {
+		overrides["COLUMNS"] = strconv.Itoa(int(cols))
+	}
+	if lines > 0 {
+		overrides["LINES"] = strconv.Itoa(int(lines))
 	}
 
 	clientIP, clientPort := splitHostPort(remoteAddr)

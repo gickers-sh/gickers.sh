@@ -69,15 +69,30 @@ final class RepoDeployDomainAddCommand extends AbstractSshCommand
         );
 
         $smoke = null !== $domain->lastSmokeStatus() ? sprintf(' (smoke HTTP %d)', $domain->lastSmokeStatus()) : '';
-        $this->line($output, sprintf(
-            'Domain %s bound to %s@%s -> %s:%d%s',
-            $domain->domain(),
-            $domain->environment()->repo()->nameString(),
-            $domain->environment()->refName(),
-            $domain->serviceName(),
-            $domain->targetPort(),
-            $smoke,
-        ));
+        if ($this->isDecorated($output)) {
+            $this->line($output, sprintf(
+                '%s %s bound to %s@%s %s %s%s%s%s',
+                \App\UI\Tui\Render\Theme::style('✔ Domain', \App\UI\Tui\Render\Theme::GREEN, bold: true),
+                \App\UI\Tui\Render\Theme::style($domain->domain(), \App\UI\Tui\Render\Theme::BLUE, bold: true, underline: true),
+                \App\UI\Tui\Render\Theme::style($domain->environment()->repo()->nameString(), \App\UI\Tui\Render\Theme::CYAN, bold: true),
+                \App\UI\Tui\Render\Theme::style($domain->environment()->refName(), \App\UI\Tui\Render\Theme::CYAN),
+                \App\UI\Tui\Render\Theme::style('->', \App\UI\Tui\Render\Theme::MUTED),
+                \App\UI\Tui\Render\Theme::style($domain->serviceName(), \App\UI\Tui\Render\Theme::TEAL),
+                \App\UI\Tui\Render\Theme::style(':', \App\UI\Tui\Render\Theme::MUTED),
+                \App\UI\Tui\Render\Theme::style((string) $domain->targetPort(), \App\UI\Tui\Render\Theme::ORANGE),
+                \App\UI\Tui\Render\Theme::style($smoke, \App\UI\Tui\Render\Theme::MUTED),
+            ));
+        } else {
+            $this->line($output, sprintf(
+                'Domain %s bound to %s@%s -> %s:%d%s',
+                $domain->domain(),
+                $domain->environment()->repo()->nameString(),
+                $domain->environment()->refName(),
+                $domain->serviceName(),
+                $domain->targetPort(),
+                $smoke,
+            ));
+        }
 
         return Command::SUCCESS;
     }

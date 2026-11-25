@@ -45,16 +45,36 @@ final class RepoDeployDomainGetCommand extends AbstractSshCommand
         $dns = null !== $domain->dnsVerifiedAt() ? 'verified' : 'unverified';
         $smoke = null !== $domain->lastSmokeStatus() ? (string) $domain->lastSmokeStatus() : 'none';
 
-        $this->line($output, sprintf(
-            'domain=%s ref=%s service=%s port=%d tls=%s dns=%s smoke_http=%s',
-            $domain->domain(),
-            $domain->environment()->refName(),
-            $domain->serviceName(),
-            $domain->targetPort(),
-            $domain->isTlsEnabled() ? 'true' : 'false',
-            $dns,
-            $smoke,
-        ));
+        if ($this->isDecorated($output)) {
+            $this->line($output, sprintf(
+                '%s%s %s%s %s%s %s%s %s%s %s%s %s%s',
+                \App\UI\Tui\Render\Theme::style('domain=', \App\UI\Tui\Render\Theme::BLUE),
+                \App\UI\Tui\Render\Theme::style($domain->domain(), \App\UI\Tui\Render\Theme::BLUE, bold: true, underline: true),
+                \App\UI\Tui\Render\Theme::style('ref=', \App\UI\Tui\Render\Theme::BLUE),
+                \App\UI\Tui\Render\Theme::style($domain->environment()->refName(), \App\UI\Tui\Render\Theme::CYAN),
+                \App\UI\Tui\Render\Theme::style('service=', \App\UI\Tui\Render\Theme::BLUE),
+                \App\UI\Tui\Render\Theme::style($domain->serviceName(), \App\UI\Tui\Render\Theme::TEAL),
+                \App\UI\Tui\Render\Theme::style('port=', \App\UI\Tui\Render\Theme::BLUE),
+                \App\UI\Tui\Render\Theme::style((string) $domain->targetPort(), \App\UI\Tui\Render\Theme::ORANGE),
+                \App\UI\Tui\Render\Theme::style('tls=', \App\UI\Tui\Render\Theme::BLUE),
+                \App\UI\Tui\Render\Theme::style($domain->isTlsEnabled() ? 'true' : 'false', $domain->isTlsEnabled() ? \App\UI\Tui\Render\Theme::GREEN : \App\UI\Tui\Render\Theme::MUTED, bold: true),
+                \App\UI\Tui\Render\Theme::style('dns=', \App\UI\Tui\Render\Theme::BLUE),
+                \App\UI\Tui\Render\Theme::style($dns, 'verified' === $dns ? \App\UI\Tui\Render\Theme::GREEN : \App\UI\Tui\Render\Theme::SELECTOR, bold: true),
+                \App\UI\Tui\Render\Theme::style('smoke_http=', \App\UI\Tui\Render\Theme::BLUE),
+                \App\UI\Tui\Render\Theme::style($smoke, 'none' === $smoke ? \App\UI\Tui\Render\Theme::MUTED : \App\UI\Tui\Render\Theme::ORANGE),
+            ));
+        } else {
+            $this->line($output, sprintf(
+                'domain=%s ref=%s service=%s port=%d tls=%s dns=%s smoke_http=%s',
+                $domain->domain(),
+                $domain->environment()->refName(),
+                $domain->serviceName(),
+                $domain->targetPort(),
+                $domain->isTlsEnabled() ? 'true' : 'false',
+                $dns,
+                $smoke,
+            ));
+        }
 
         return Command::SUCCESS;
     }

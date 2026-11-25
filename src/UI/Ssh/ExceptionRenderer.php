@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\UI\Ssh;
 
 use App\Shared\Domain\Exception\DomainException;
+use App\UI\Tui\Render\Theme;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Exception\ExceptionInterface as ConsoleExceptionInterface;
 use Symfony\Component\Console\Output\ConsoleOutputInterface;
@@ -22,7 +23,7 @@ final readonly class ExceptionRenderer
         $errOutput = $output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output;
 
         if ($exception instanceof DomainException || $exception instanceof ConsoleExceptionInterface) {
-            $errOutput->writeln(sprintf('Error: %s', $exception->getMessage()), OutputInterface::OUTPUT_RAW);
+            $this->writeError($errOutput, $exception->getMessage());
 
             return 1;
         }
@@ -31,8 +32,18 @@ final readonly class ExceptionRenderer
             'exception' => $exception,
         ]);
 
-        $errOutput->writeln(sprintf('Error: %s', $exception->getMessage()), OutputInterface::OUTPUT_RAW);
+        $this->writeError($errOutput, $exception->getMessage());
 
         return 1;
+    }
+
+    private function writeError(OutputInterface $errOutput, string $message): void
+    {
+        if ($errOutput->isDecorated()) {
+            $prefix = Theme::style('Error:', Theme::SELECTOR, bold: true);
+            $errOutput->writeln(sprintf('%s %s', $prefix, Theme::style($message, Theme::FG)), OutputInterface::OUTPUT_RAW);
+        } else {
+            $errOutput->writeln(sprintf('Error: %s', $message), OutputInterface::OUTPUT_RAW);
+        }
     }
 }

@@ -65,18 +65,44 @@ final class RepoDeployStatusCommand extends AbstractSshCommand
             );
             $domainsStr = [] !== $domains ? implode(',', $domains) : 'none';
 
-            $this->line($output, sprintf(
-                '%s (%s) status=%s enabled=%s sha=%s domains=[%s] quota=[cpus=%.2f,mem=%dm,pids=%d]',
-                $env->refName(),
-                $env->refType()->value,
-                $env->status()->value,
-                $env->isEnabled() ? 'true' : 'false',
-                $sha,
-                $domainsStr,
-                $quota->cpus,
-                $quota->memoryMb,
-                $quota->pids,
-            ));
+            if ($this->isDecorated($output)) {
+                $statusVal = $env->status()->value;
+                $statusColor = match ($env->status()) {
+                    \App\Deploy\Domain\DeployStatus::Running => \App\UI\Tui\Render\Theme::GREEN,
+                    \App\Deploy\Domain\DeployStatus::Building, \App\Deploy\Domain\DeployStatus::Queued => \App\UI\Tui\Render\Theme::ORANGE,
+                    \App\Deploy\Domain\DeployStatus::Failed => \App\UI\Tui\Render\Theme::SELECTOR,
+                    \App\Deploy\Domain\DeployStatus::Idle, \App\Deploy\Domain\DeployStatus::Stopped => \App\UI\Tui\Render\Theme::MUTED,
+                };
+                $statusStyled = \App\UI\Tui\Render\Theme::style('status=', \App\UI\Tui\Render\Theme::BLUE) . \App\UI\Tui\Render\Theme::style($statusVal, $statusColor, bold: true);
+                $enabledStyled = \App\UI\Tui\Render\Theme::style('enabled=', \App\UI\Tui\Render\Theme::BLUE) . \App\UI\Tui\Render\Theme::style($env->isEnabled() ? 'true' : 'false', $env->isEnabled() ? \App\UI\Tui\Render\Theme::GREEN : \App\UI\Tui\Render\Theme::MUTED, bold: true);
+                $shaStyled = \App\UI\Tui\Render\Theme::style('sha=', \App\UI\Tui\Render\Theme::BLUE) . ('-' === $sha ? \App\UI\Tui\Render\Theme::style('-', \App\UI\Tui\Render\Theme::MUTED) : \App\UI\Tui\Render\Theme::style($sha, \App\UI\Tui\Render\Theme::HASH, bold: true));
+                $domainsStyled = \App\UI\Tui\Render\Theme::style('domains=[', \App\UI\Tui\Render\Theme::BLUE) . \App\UI\Tui\Render\Theme::style($domainsStr, 'none' === $domainsStr ? \App\UI\Tui\Render\Theme::MUTED : \App\UI\Tui\Render\Theme::BLUE, underline: 'none' !== $domainsStr) . \App\UI\Tui\Render\Theme::style(']', \App\UI\Tui\Render\Theme::BLUE);
+                $quotaStyled = \App\UI\Tui\Render\Theme::style(sprintf('quota=[cpus=%.2f,mem=%dm,pids=%d]', $quota->cpus, $quota->memoryMb, $quota->pids), \App\UI\Tui\Render\Theme::ORANGE);
+
+                $this->line($output, sprintf(
+                    '%s (%s) %s %s %s %s %s',
+                    \App\UI\Tui\Render\Theme::style($env->refName(), \App\UI\Tui\Render\Theme::CYAN, bold: true),
+                    \App\UI\Tui\Render\Theme::style($env->refType()->value, \App\UI\Tui\Render\Theme::TEAL),
+                    $statusStyled,
+                    $enabledStyled,
+                    $shaStyled,
+                    $domainsStyled,
+                    $quotaStyled,
+                ));
+            } else {
+                $this->line($output, sprintf(
+                    '%s (%s) status=%s enabled=%s sha=%s domains=[%s] quota=[cpus=%.2f,mem=%dm,pids=%d]',
+                    $env->refName(),
+                    $env->refType()->value,
+                    $env->status()->value,
+                    $env->isEnabled() ? 'true' : 'false',
+                    $sha,
+                    $domainsStr,
+                    $quota->cpus,
+                    $quota->memoryMb,
+                    $quota->pids,
+                ));
+            }
         }
 
         return Command::SUCCESS;

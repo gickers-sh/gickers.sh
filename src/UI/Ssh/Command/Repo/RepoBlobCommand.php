@@ -56,7 +56,7 @@ final class RepoBlobCommand extends AbstractSshCommand
         $arg1 = $this->nullableStringArgument($input, 'ref_or_path');
         $arg2 = $this->nullableStringArgument($input, 'path');
         $raw = (bool) $input->getOption('raw');
-        $color = (bool) $input->getOption('color');
+        $color = (bool) $input->getOption('color') || $this->isDecorated($output);
         $lineNumber = (bool) $input->getOption('linenumber');
 
         if (null === $arg1) {

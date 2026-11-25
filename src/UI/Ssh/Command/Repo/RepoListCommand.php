@@ -59,7 +59,21 @@ final class RepoListCommand extends AbstractSshCommand
         }
 
         foreach ($repos as $repo) {
-            $this->line($output, $repo->nameString());
+            if ($this->isDecorated($output)) {
+                $line = \App\UI\Tui\Render\Theme::style($repo->nameString(), \App\UI\Tui\Render\Theme::CYAN, bold: true);
+                if ($repo->isPrivate()) {
+                    $line .= ' ' . \App\UI\Tui\Render\Theme::style('[private]', \App\UI\Tui\Render\Theme::SELECTOR);
+                }
+                if ($repo->isHidden()) {
+                    $line .= ' ' . \App\UI\Tui\Render\Theme::style('[hidden]', \App\UI\Tui\Render\Theme::MUTED);
+                }
+                if ($repo->isMirror()) {
+                    $line .= ' ' . \App\UI\Tui\Render\Theme::style('[mirror]', \App\UI\Tui\Render\Theme::TEAL);
+                }
+                $this->line($output, $line);
+            } else {
+                $this->line($output, $repo->nameString());
+            }
         }
 
         return Command::SUCCESS;

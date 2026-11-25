@@ -47,7 +47,7 @@ final class RepoDeployAllowCommand extends AbstractSshCommand
         $effective = ($this->manageAllow)($this->actor(), $repo, $allowed, $ref);
 
         if (null === $allowedArg) {
-            $this->line($output, $effective ? 'true' : 'false');
+            $this->line($output, $this->formatBoolean($output, $effective));
         }
 
         return Command::SUCCESS;

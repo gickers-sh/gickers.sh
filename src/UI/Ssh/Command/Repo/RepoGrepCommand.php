@@ -60,7 +60,21 @@ final class RepoGrepCommand extends AbstractSshCommand
         }
 
         foreach ($matches as $match) {
-            $this->line($output, $match);
+            if ($this->isDecorated($output)) {
+                $parts = explode(':', $match, 4);
+                if (4 === count($parts)) {
+                    [$mRef, $mPath, $mLine, $mContent] = $parts;
+                    $refStyled = \App\UI\Tui\Render\Theme::style($mRef, \App\UI\Tui\Render\Theme::HASH, bold: true);
+                    $pathStyled = \App\UI\Tui\Render\Theme::style($mPath, \App\UI\Tui\Render\Theme::CYAN, bold: true);
+                    $lineStyled = \App\UI\Tui\Render\Theme::style($mLine, \App\UI\Tui\Render\Theme::ORANGE);
+                    $sep = \App\UI\Tui\Render\Theme::style(':', \App\UI\Tui\Render\Theme::MUTED);
+                    $this->line($output, sprintf('%s%s%s%s%s%s%s', $refStyled, $sep, $pathStyled, $sep, $lineStyled, $sep, $mContent));
+                } else {
+                    $this->line($output, $match);
+                }
+            } else {
+                $this->line($output, $match);
+            }
         }
 
         return Command::SUCCESS;

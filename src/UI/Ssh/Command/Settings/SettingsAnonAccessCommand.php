@@ -43,7 +43,8 @@ final class SettingsAnonAccessCommand extends AbstractSshCommand
 
         $levelArg = $this->nullableStringArgument($input, 'access_level');
         if (null === $levelArg) {
-            $this->line($output, $this->serverPolicy->anonAccess()->toString());
+            $str = $this->serverPolicy->anonAccess()->toString();
+            $this->line($output, $this->style($output, $str, \App\UI\Tui\Render\Theme::TEAL, bold: true));
 
             return Command::SUCCESS;
         }

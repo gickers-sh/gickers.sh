@@ -36,7 +36,7 @@ final class UsernameCommand extends AbstractSshCommand
         }
 
         // Deliberate addition: preserved from legacy test / TECH §2.5 pt 4, though absent in Go upstream.
-        $this->line($output, sprintf('Username: %s', $actor->username()));
+        $this->line($output, $this->formatKeyValue($output, 'Username', $actor->username(), \App\UI\Tui\Render\Theme::CYAN, true));
 
         return Command::SUCCESS;
     }

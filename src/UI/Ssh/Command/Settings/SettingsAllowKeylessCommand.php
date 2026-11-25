@@ -41,7 +41,7 @@ final class SettingsAllowKeylessCommand extends AbstractSshCommand
 
         $allowArg = $this->nullableStringArgument($input, 'allow');
         if (null === $allowArg) {
-            $this->line($output, $this->serverPolicy->allowKeyless() ? 'true' : 'false');
+            $this->line($output, $this->formatBoolean($output, $this->serverPolicy->allowKeyless()));
 
             return Command::SUCCESS;
         }

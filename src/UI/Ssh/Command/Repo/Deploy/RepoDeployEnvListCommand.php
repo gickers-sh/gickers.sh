@@ -49,7 +49,15 @@ final class RepoDeployEnvListCommand extends AbstractSshCommand
 
         $vars = $this->manageEnvVars->list($this->actor(), $repo, $ref);
         foreach ($vars as $var) {
-            $this->line($output, sprintf('%s=********', $var->name()));
+            if ($this->isDecorated($output)) {
+                $this->line($output, sprintf(
+                    '%s=%s',
+                    \App\UI\Tui\Render\Theme::style($var->name(), \App\UI\Tui\Render\Theme::TEAL, bold: true),
+                    \App\UI\Tui\Render\Theme::style('********', \App\UI\Tui\Render\Theme::MUTED),
+                ));
+            } else {
+                $this->line($output, sprintf('%s=********', $var->name()));
+            }
         }
 
         return Command::SUCCESS;

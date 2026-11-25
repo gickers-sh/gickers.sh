@@ -9,6 +9,12 @@ require dirname(__DIR__).'/vendor/autoload.php';
 
 (new Dotenv())->bootEnv(dirname(__DIR__).'/.env');
 
+// Clean ambient host terminal vars so tests run in reproducible non-decorated mode by default
+unset($_SERVER['COLORTERM'], $_ENV['COLORTERM']);
+putenv('COLORTERM');
+unset($_SERVER['SSH_CLIENT_COLORTERM'], $_ENV['SSH_CLIENT_COLORTERM']);
+putenv('SSH_CLIENT_COLORTERM');
+
 // Fresh schema and data directory for the test environment, built once per run.
 if ('test' === ($_SERVER['APP_ENV'] ?? null)) {
     $projectDir = dirname(__DIR__);

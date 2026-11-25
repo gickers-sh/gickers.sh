@@ -40,7 +40,17 @@ final class RepoDeployEnableCommand extends AbstractSshCommand
         $ref = $this->nullableStringArgument($input, 'ref');
 
         $env = ($this->enableEnvironment)($this->actor(), $repo, $ref);
-        $this->line($output, sprintf('Deployment enabled for %s@%s (%s)', $env->repo()->nameString(), $env->refName(), $env->status()->value));
+        if ($this->isDecorated($output)) {
+            $this->line($output, sprintf(
+                '%s %s@%s (%s)',
+                \App\UI\Tui\Render\Theme::style('✔ Deployment enabled for', \App\UI\Tui\Render\Theme::GREEN, bold: true),
+                \App\UI\Tui\Render\Theme::style($env->repo()->nameString(), \App\UI\Tui\Render\Theme::CYAN, bold: true),
+                \App\UI\Tui\Render\Theme::style($env->refName(), \App\UI\Tui\Render\Theme::CYAN),
+                \App\UI\Tui\Render\Theme::style($env->status()->value, \App\UI\Tui\Render\Theme::TEAL),
+            ));
+        } else {
+            $this->line($output, sprintf('Deployment enabled for %s@%s (%s)', $env->repo()->nameString(), $env->refName(), $env->status()->value));
+        }
 
         return Command::SUCCESS;
     }

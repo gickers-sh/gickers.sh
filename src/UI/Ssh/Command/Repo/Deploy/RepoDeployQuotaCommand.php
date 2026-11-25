@@ -73,14 +73,30 @@ final class RepoDeployQuotaCommand extends AbstractSshCommand
             maxServices: $maxServices,
         );
 
-        $this->line($output, sprintf(
-            'cpus=%.2f memory=%dm pids=%d max-envs=%d max-services=%d',
-            $quota->cpus,
-            $quota->memoryMb,
-            $quota->pids,
-            $quota->maxEnvironments,
-            $quota->maxServices,
-        ));
+        if ($this->isDecorated($output)) {
+            $this->line($output, sprintf(
+                '%s%s %s%s %s%s %s%s %s%s',
+                \App\UI\Tui\Render\Theme::style('cpus=', \App\UI\Tui\Render\Theme::BLUE),
+                \App\UI\Tui\Render\Theme::style(sprintf('%.2f', $quota->cpus), \App\UI\Tui\Render\Theme::ORANGE),
+                \App\UI\Tui\Render\Theme::style('memory=', \App\UI\Tui\Render\Theme::BLUE),
+                \App\UI\Tui\Render\Theme::style(sprintf('%dm', $quota->memoryMb), \App\UI\Tui\Render\Theme::ORANGE),
+                \App\UI\Tui\Render\Theme::style('pids=', \App\UI\Tui\Render\Theme::BLUE),
+                \App\UI\Tui\Render\Theme::style((string) $quota->pids, \App\UI\Tui\Render\Theme::ORANGE),
+                \App\UI\Tui\Render\Theme::style('max-envs=', \App\UI\Tui\Render\Theme::BLUE),
+                \App\UI\Tui\Render\Theme::style((string) $quota->maxEnvironments, \App\UI\Tui\Render\Theme::ORANGE),
+                \App\UI\Tui\Render\Theme::style('max-services=', \App\UI\Tui\Render\Theme::BLUE),
+                \App\UI\Tui\Render\Theme::style((string) $quota->maxServices, \App\UI\Tui\Render\Theme::ORANGE),
+            ));
+        } else {
+            $this->line($output, sprintf(
+                'cpus=%.2f memory=%dm pids=%d max-envs=%d max-services=%d',
+                $quota->cpus,
+                $quota->memoryMb,
+                $quota->pids,
+                $quota->maxEnvironments,
+                $quota->maxServices,
+            ));
+        }
 
         return Command::SUCCESS;
     }

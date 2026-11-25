@@ -41,7 +41,7 @@ final class UserDeployAllowCommand extends AbstractSshCommand
 
         if (null === $allowedArg) {
             $user = ($this->setDeployAllowed)($this->actor(), $username, null);
-            $this->line($output, $user->isDeployAllowed() ? 'true' : 'false');
+            $this->line($output, $this->formatBoolean($output, $user->isDeployAllowed()));
 
             return Command::SUCCESS;
         }

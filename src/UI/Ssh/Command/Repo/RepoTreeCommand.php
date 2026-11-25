@@ -62,8 +62,17 @@ final class RepoTreeCommand extends AbstractSshCommand
 
         foreach ($entries as $entry) {
             $sizeStr = (null === $entry->size || 0 === $entry->size) ? '-' : $this->humanizeBytes($entry->size);
-            // Go format: cmd.Printf("%s\t%s\t %s\n", ent.Mode(), ssize, ent.Name())
-            $this->line($output, sprintf("%s\t%s\t %s", $entry->mode, $sizeStr, $entry->name));
+            if ($this->isDecorated($output)) {
+                $modeStyled = \App\UI\Tui\Render\Theme::style($entry->mode, \App\UI\Tui\Render\Theme::MUTED);
+                $sizeStyled = \App\UI\Tui\Render\Theme::style($sizeStr, \App\UI\Tui\Render\Theme::ORANGE);
+                $nameStyled = $entry->isDirectory()
+                    ? \App\UI\Tui\Render\Theme::style($entry->name . '/', \App\UI\Tui\Render\Theme::CYAN, bold: true)
+                    : \App\UI\Tui\Render\Theme::style($entry->name, \App\UI\Tui\Render\Theme::FG);
+                $this->line($output, sprintf("%s\t%s\t %s", $modeStyled, $sizeStyled, $nameStyled));
+            } else {
+                // Go format: cmd.Printf("%s\t%s\t %s\n", ent.Mode(), ssize, ent.Name())
+                $this->line($output, sprintf("%s\t%s\t %s", $entry->mode, $sizeStr, $entry->name));
+            }
         }
 
         return Command::SUCCESS;

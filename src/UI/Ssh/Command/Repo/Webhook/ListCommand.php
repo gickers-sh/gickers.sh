@@ -39,13 +39,27 @@ final class ListCommand extends AbstractSshCommand
         $webhooks = $this->webhookQuery->list($this->actor(), $repoName);
 
         if ([] === $webhooks) {
-            $this->line($output, 'No webhooks found.');
+            $this->line($output, $this->formatMuted($output, 'No webhooks found.'));
 
             return Command::SUCCESS;
         }
 
+        if ($this->isDecorated($output)) {
+            $header = sprintf("#%-4s  %-40s  %-10s\n", 'ID', 'URL', 'STATUS');
+            $output->write(\App\UI\Tui\Render\Theme::style($header, \App\UI\Tui\Render\Theme::BLUE, bold: true, underline: true));
+        }
+
         foreach ($webhooks as $h) {
-            $output->write(sprintf("#%-4d  %-40s  %-10s\n", $h->id(), $h->url(), $h->isActive() ? 'active' : 'inactive'));
+            if ($this->isDecorated($output)) {
+                $idCol = \App\UI\Tui\Render\Theme::style(sprintf('#%-4d', $h->id()), \App\UI\Tui\Render\Theme::ORANGE);
+                $urlCol = \App\UI\Tui\Render\Theme::style(sprintf('%-40s', $h->url()), \App\UI\Tui\Render\Theme::BLUE, underline: true);
+                $statusCol = $h->isActive()
+                    ? \App\UI\Tui\Render\Theme::style(sprintf('%-10s', 'active'), \App\UI\Tui\Render\Theme::GREEN, bold: true)
+                    : \App\UI\Tui\Render\Theme::style(sprintf('%-10s', 'inactive'), \App\UI\Tui\Render\Theme::MUTED);
+                $output->write(sprintf("%s  %s  %s\n", $idCol, $urlCol, $statusCol));
+            } else {
+                $output->write(sprintf("#%-4d  %-40s  %-10s\n", $h->id(), $h->url(), $h->isActive() ? 'active' : 'inactive'));
+            }
         }
 
         return Command::SUCCESS;

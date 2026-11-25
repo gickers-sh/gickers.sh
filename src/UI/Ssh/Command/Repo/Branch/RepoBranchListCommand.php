@@ -52,7 +52,14 @@ final class RepoBranchListCommand extends AbstractSshCommand
         $refs = $this->gitReader->getRefs($gitRepo);
 
         foreach ($refs->branches as $branch) {
-            $this->line($output, $branch);
+            if ($this->isDecorated($output)) {
+                $styled = $branch === $refs->currentBranch
+                    ? \App\UI\Tui\Render\Theme::style('* ' . $branch, \App\UI\Tui\Render\Theme::GREEN, bold: true)
+                    : \App\UI\Tui\Render\Theme::style('  ' . $branch, \App\UI\Tui\Render\Theme::CYAN);
+                $this->line($output, $styled);
+            } else {
+                $this->line($output, $branch);
+            }
         }
 
         return Command::SUCCESS;

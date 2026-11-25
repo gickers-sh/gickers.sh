@@ -49,13 +49,25 @@ final class RepoDeployDomainListCommand extends AbstractSshCommand
 
         $domains = $this->manageDomains->list($this->actor(), $repo, $ref);
         foreach ($domains as $domain) {
-            $this->line($output, sprintf(
-                '%s (%s) -> %s:%d',
-                $domain->domain(),
-                $domain->environment()->refName(),
-                $domain->serviceName(),
-                $domain->targetPort(),
-            ));
+            if ($this->isDecorated($output)) {
+                $this->line($output, sprintf(
+                    '%s (%s) %s %s%s%s',
+                    \App\UI\Tui\Render\Theme::style($domain->domain(), \App\UI\Tui\Render\Theme::BLUE, bold: true, underline: true),
+                    \App\UI\Tui\Render\Theme::style($domain->environment()->refName(), \App\UI\Tui\Render\Theme::CYAN),
+                    \App\UI\Tui\Render\Theme::style('->', \App\UI\Tui\Render\Theme::MUTED),
+                    \App\UI\Tui\Render\Theme::style($domain->serviceName(), \App\UI\Tui\Render\Theme::TEAL),
+                    \App\UI\Tui\Render\Theme::style(':', \App\UI\Tui\Render\Theme::MUTED),
+                    \App\UI\Tui\Render\Theme::style((string) $domain->targetPort(), \App\UI\Tui\Render\Theme::ORANGE),
+                ));
+            } else {
+                $this->line($output, sprintf(
+                    '%s (%s) -> %s:%d',
+                    $domain->domain(),
+                    $domain->environment()->refName(),
+                    $domain->serviceName(),
+                    $domain->targetPort(),
+                ));
+            }
         }
 
         return Command::SUCCESS;

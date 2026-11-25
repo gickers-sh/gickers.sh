@@ -11,6 +11,8 @@
         <ini name="error_reporting" value="-1"/>
         <server name="APP_ENV" value="test" force="true"/>
         <server name="SHELL_VERBOSITY" value="-1"/>
+        <server name="COLORTERM" value="" force="true"/>
+        <server name="SSH_CLIENT_COLORTERM" value="" force="true"/>
     </php>
     <testsuites>
         <testsuite name="codes.sh">

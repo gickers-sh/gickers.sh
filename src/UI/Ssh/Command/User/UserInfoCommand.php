@@ -47,12 +47,12 @@ final class UserInfoCommand extends AbstractSshCommand
             throw new NotFound(sprintf('user "%s" not found', $username));
         }
 
-        $this->line($output, sprintf('Username: %s', $user->username()));
-        $this->line($output, sprintf('Admin: %s', $user->isAdmin() ? 'true' : 'false'));
-        $this->line($output, 'Public keys:');
+        $this->line($output, $this->formatKeyValue($output, 'Username', $user->username(), \App\UI\Tui\Render\Theme::CYAN, true));
+        $this->line($output, $this->formatKeyValue($output, 'Admin', $user->isAdmin()));
+        $this->line($output, $this->formatHeader($output, 'Public keys:'));
 
         foreach ($user->publicKeys() as $key) {
-            $this->line($output, sprintf('  %s', $key->authorizedKey()));
+            $this->line($output, '  ' . $this->formatPublicKey($output, $key->authorizedKey()));
         }
 
         return Command::SUCCESS;

@@ -139,20 +139,20 @@ MD;
         self::assertStringContainsString('about [flags]', $display);
     }
 
-    public function testAboutAutoDetectsWidthOnEnterWithCpr(): void
+    public function testAboutAutoDetectsWidthWithoutInteractionWithCpr(): void
     {
         $this->createSoftServeRepo();
 
         self::assertNotNull(self::$kernel);
 
         $tester = new CommandTester((new Application(self::$kernel))->find('soft:ssh:dispatch'));
-        // Simulate terminal emulator CPR response \e[1;135R followed by \n from [Enter]
+        // Simulate terminal emulator CPR response \e[1;135R
         $tester->setInputs(["\x1b[1;135R"]);
         $tester->execute(['original-command' => 'about'], ['capture_stderr_separately' => true]);
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
         $display = $tester->getDisplay();
         self::assertStringContainsString('codes.sh', $display);
-        self::assertStringContainsString('Press [Enter] to view...', $display);
+        self::assertStringNotContainsString('Press [Enter]', $display);
     }
 }

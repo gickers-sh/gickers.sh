@@ -40,7 +40,16 @@ final class RepoDeployDisableCommand extends AbstractSshCommand
         $ref = $this->stringArgument($input, 'ref');
 
         $env = ($this->disableEnvironment)($this->actor(), $repo, $ref);
-        $this->line($output, sprintf('Deployment disabled for %s@%s', $env->repo()->nameString(), $env->refName()));
+        if ($this->isDecorated($output)) {
+            $this->line($output, sprintf(
+                '%s %s@%s',
+                \App\UI\Tui\Render\Theme::style('✔ Deployment disabled for', \App\UI\Tui\Render\Theme::SELECTOR, bold: true),
+                \App\UI\Tui\Render\Theme::style($env->repo()->nameString(), \App\UI\Tui\Render\Theme::CYAN, bold: true),
+                \App\UI\Tui\Render\Theme::style($env->refName(), \App\UI\Tui\Render\Theme::CYAN),
+            ));
+        } else {
+            $this->line($output, sprintf('Deployment disabled for %s@%s', $env->repo()->nameString(), $env->refName()));
+        }
 
         return Command::SUCCESS;
     }

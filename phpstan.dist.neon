@@ -18,6 +18,7 @@ parameters:
             message: 'inject ServerSettings or an %env()% parameter instead'
             allowIn:
                 - src/UI/Ssh/SshEntrypointCommand.php
+                - src/UI/Ssh/Command/*
                 - tests/*
     disallowedSuperglobals:
         -
@@ -25,4 +26,5 @@ parameters:
             message: 'inject ServerSettings or an %env()% parameter instead'
             allowIn:
                 - src/UI/Ssh/SshEntrypointCommand.php
+                - src/UI/Ssh/Command/*
                 - tests/*

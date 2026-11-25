@@ -61,40 +61,51 @@ final class RepoInfoCommand extends AbstractSshCommand
         }
 
         // Mirror Go soft serve formatting exactly (codes.sh.src/pkg/ssh/cmd/repo.go:81-106)
-        $this->line($output, trim(sprintf('Project Name: %s', $repo->projectName())));
-        $this->line($output, sprintf('Repository: %s', $repo->nameString()));
-        $this->line($output, trim(sprintf('Description: %s', $repo->description())));
-        $this->line($output, sprintf('Private: %s', $repo->isPrivate() ? 'true' : 'false'));
-        $this->line($output, sprintf('Hidden: %s', $repo->isHidden() ? 'true' : 'false'));
-        $this->line($output, sprintf('Mirror: %s', $repo->isMirror() ? 'true' : 'false'));
+        $this->line($output, trim($this->formatKeyValue($output, 'Project Name', $repo->projectName(), \App\UI\Tui\Render\Theme::FG, true)));
+        $this->line($output, $this->formatKeyValue($output, 'Repository', $repo->nameString(), \App\UI\Tui\Render\Theme::CYAN, true));
+        $this->line($output, trim($this->formatKeyValue($output, 'Description', $repo->description(), \App\UI\Tui\Render\Theme::FG_DIM)));
+        $this->line($output, $this->formatKeyValue($output, 'Private', $repo->isPrivate()));
+        $this->line($output, $this->formatKeyValue($output, 'Hidden', $repo->isHidden()));
+        $this->line($output, $this->formatKeyValue($output, 'Mirror', $repo->isMirror()));
 
         $forkParent = $repo->forkOf();
         if (null !== $forkParent) {
-            $this->line($output, sprintf('Fork of: %s', $forkParent->nameString()));
+            $this->line($output, $this->formatKeyValue($output, 'Fork of', $forkParent->nameString(), \App\UI\Tui\Render\Theme::CYAN));
         }
 
         $owner = $repo->owner();
-        $this->line($output, trim(sprintf('Owner: %s', $owner->username())));
-        $this->line($output, sprintf('Default Branch: %s', $defaultBranch));
+        $this->line($output, trim($this->formatKeyValue($output, 'Owner', $owner->username(), \App\UI\Tui\Render\Theme::CYAN, true)));
+        $this->line($output, $this->formatKeyValue($output, 'Default Branch', $defaultBranch, \App\UI\Tui\Render\Theme::HASH, true));
 
         $stats = $this->stats->forRepo($repo);
-        $this->line($output, sprintf('Clones: %d', $stats->clones));
-        $this->line($output, sprintf('Fetches: %d', $stats->fetches));
+        $this->line($output, $this->formatKeyValue($output, 'Clones', $stats->clones, \App\UI\Tui\Render\Theme::ORANGE));
+        $this->line($output, $this->formatKeyValue($output, 'Fetches', $stats->fetches, \App\UI\Tui\Render\Theme::ORANGE));
         if (null !== $stats->diskUsageBytes) {
-            $this->line($output, sprintf('Disk Usage: %s', self::humanBytes($stats->diskUsageBytes)));
+            $this->line($output, $this->formatKeyValue($output, 'Disk Usage', self::humanBytes($stats->diskUsageBytes), \App\UI\Tui\Render\Theme::ORANGE));
         }
 
         if (count($branches) > 0) {
-            $this->line($output, 'Branches:');
+            $this->line($output, $this->formatHeader($output, 'Branches:'));
             foreach ($branches as $b) {
-                $this->line($output, sprintf('  - %s', $b));
+                if ($this->isDecorated($output)) {
+                    $bStyle = $b === $defaultBranch
+                        ? \App\UI\Tui\Render\Theme::style('* ' . $b, \App\UI\Tui\Render\Theme::GREEN, bold: true)
+                        : \App\UI\Tui\Render\Theme::style('  ' . $b, \App\UI\Tui\Render\Theme::CYAN);
+                    $this->line($output, '  ' . $bStyle);
+                } else {
+                    $this->line($output, sprintf('  - %s', $b));
+                }
             }
         }
 
         if (count($tags) > 0) {
-            $this->line($output, 'Tags:');
+            $this->line($output, $this->formatHeader($output, 'Tags:'));
             foreach ($tags as $t) {
-                $this->line($output, sprintf('  - %s', $t));
+                if ($this->isDecorated($output)) {
+                    $this->line($output, '  ' . \App\UI\Tui\Render\Theme::style('- ' . $t, \App\UI\Tui\Render\Theme::ORANGE, bold: true));
+                } else {
+                    $this->line($output, sprintf('  - %s', $t));
+                }
             }
         }
 

@@ -44,7 +44,7 @@ final class RepoSignaturesCommand extends AbstractSshCommand
 
         if (null === $value) {
             $repo = $this->repoQuery->get($this->actor(), $name);
-            $this->line($output, $repo->requireSignedCommits() ? 'true' : 'false');
+            $this->line($output, $this->formatBoolean($output, $repo->requireSignedCommits()));
 
             return Command::SUCCESS;
         }

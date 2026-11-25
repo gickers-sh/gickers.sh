@@ -49,7 +49,7 @@ final class RepoDescriptionCommand extends AbstractSshCommand
 
         if ([] === $descArgs) {
             $repo = $this->repoQuery->get($this->actor(), $name);
-            $this->line($output, $repo->description());
+            $this->line($output, $this->style($output, $repo->description(), \App\UI\Tui\Render\Theme::FG_DIM));
 
             return Command::SUCCESS;
         }

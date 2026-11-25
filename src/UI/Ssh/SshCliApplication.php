@@ -67,9 +67,19 @@ class SshCliApplication extends Application
 
     protected function configureIO(InputInterface $input, OutputInterface $output): void
     {
+        $initialDecorated = $output->isDecorated();
+
         $output->setVerbosity(OutputInterface::VERBOSITY_NORMAL);
         if ($input->hasParameterOption(['--quiet', '-q'], true)) {
             $output->setVerbosity(OutputInterface::VERBOSITY_QUIET);
+        }
+
+        if ($initialDecorated || $input->hasParameterOption(['--color', '--color=always', '--ansi'], true)) {
+            $output->setDecorated(true);
+        }
+
+        if ($input->hasParameterOption(['--no-color', '--color=never', '--no-ansi', '--raw'], true)) {
+            $output->setDecorated(false);
         }
     }
 
@@ -93,7 +103,15 @@ class SshCliApplication extends Application
             throw new InvalidInput('Unknown command');
         }
 
-        $argv = ['ssh', $resolved->name, ...$resolved->arguments];
+        $command = $this->find($resolved->name);
+        $hasRawOption = $command->getDefinition()->hasOption('raw');
+
+        $args = $resolved->arguments;
+        if (!$hasRawOption) {
+            $args = array_values(array_filter($args, static fn (string $a): bool => '--raw' !== $a));
+        }
+
+        $argv = ['ssh', $resolved->name, ...$args];
         $input = new ArgvInput($argv);
         if ($parentInput instanceof StreamableInputInterface && null !== $parentInput->getStream()) {
             $input->setStream($parentInput->getStream());

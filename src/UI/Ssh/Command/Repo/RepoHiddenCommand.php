@@ -51,7 +51,7 @@ final class RepoHiddenCommand extends AbstractSshCommand
 
         if (null === $hiddenArg) {
             $repo = $this->repoQuery->get($this->actor(), $name);
-            $this->line($output, $repo->isHidden() ? 'true' : 'false');
+            $this->line($output, $this->formatBoolean($output, $repo->isHidden()));
 
             return Command::SUCCESS;
         }

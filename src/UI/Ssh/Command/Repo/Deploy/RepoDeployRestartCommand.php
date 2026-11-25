@@ -40,7 +40,16 @@ final class RepoDeployRestartCommand extends AbstractSshCommand
         $ref = $this->stringArgument($input, 'ref');
 
         $env = ($this->restartEnvironment)($this->actor(), $repo, $ref);
-        $this->line($output, sprintf('Restarted containers for %s@%s', $env->repo()->nameString(), $env->refName()));
+        if ($this->isDecorated($output)) {
+            $this->line($output, sprintf(
+                '%s %s@%s',
+                \App\UI\Tui\Render\Theme::style('✔ Restarted containers for', \App\UI\Tui\Render\Theme::GREEN, bold: true),
+                \App\UI\Tui\Render\Theme::style($env->repo()->nameString(), \App\UI\Tui\Render\Theme::CYAN, bold: true),
+                \App\UI\Tui\Render\Theme::style($env->refName(), \App\UI\Tui\Render\Theme::CYAN),
+            ));
+        } else {
+            $this->line($output, sprintf('Restarted containers for %s@%s', $env->repo()->nameString(), $env->refName()));
+        }
 
         return Command::SUCCESS;
     }

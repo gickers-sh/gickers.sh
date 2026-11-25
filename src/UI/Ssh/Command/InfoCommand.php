@@ -35,12 +35,12 @@ final class InfoCommand extends AbstractSshCommand
             throw new AccessDenied('unauthorized');
         }
 
-        $this->line($output, sprintf('Username: %s', $actor->username()));
-        $this->line($output, sprintf('Admin: %s', $actor->isAdmin() ? 'true' : 'false'));
-        $this->line($output, 'Public keys:');
+        $this->line($output, $this->formatKeyValue($output, 'Username', $actor->username(), \App\UI\Tui\Render\Theme::CYAN, true));
+        $this->line($output, $this->formatKeyValue($output, 'Admin', $actor->isAdmin()));
+        $this->line($output, $this->formatHeader($output, 'Public keys:'));
 
         foreach ($actor->publicKeys() as $key) {
-            $this->line($output, sprintf('  %s', $key->authorizedKey()));
+            $this->line($output, '  ' . $this->formatPublicKey($output, $key->authorizedKey()));
         }
 
         return Command::SUCCESS;

@@ -42,7 +42,8 @@ final class SettingsDeployPolicyCommand extends AbstractSshCommand
 
         $policyArg = $this->nullableStringArgument($input, 'policy');
         if (null === $policyArg) {
-            $this->line($output, $this->serverPolicy->deployPolicy()->value);
+            $val = $this->serverPolicy->deployPolicy()->value;
+            $this->line($output, $this->style($output, $val, \App\UI\Tui\Render\Theme::TEAL, bold: true));
 
             return Command::SUCCESS;
         }

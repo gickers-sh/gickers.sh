@@ -40,7 +40,18 @@ final class RepoDeployTriggerCommand extends AbstractSshCommand
         $ref = $this->stringArgument($input, 'ref');
 
         $release = ($this->triggerDeploy)($this->actor(), $repo, $ref);
-        $this->line($output, sprintf('Queued release #%d for %s@%s (commit %s)', $release->id(), $release->environment()->repo()->nameString(), $release->environment()->refName(), substr($release->commitSha(), 0, 7)));
+        if ($this->isDecorated($output)) {
+            $this->line($output, sprintf(
+                '%s %s for %s@%s (commit %s)',
+                \App\UI\Tui\Render\Theme::style('✔ Queued release', \App\UI\Tui\Render\Theme::GREEN, bold: true),
+                \App\UI\Tui\Render\Theme::style(sprintf('#%d', $release->id()), \App\UI\Tui\Render\Theme::ORANGE, bold: true),
+                \App\UI\Tui\Render\Theme::style($release->environment()->repo()->nameString(), \App\UI\Tui\Render\Theme::CYAN, bold: true),
+                \App\UI\Tui\Render\Theme::style($release->environment()->refName(), \App\UI\Tui\Render\Theme::CYAN),
+                \App\UI\Tui\Render\Theme::style(substr($release->commitSha(), 0, 7), \App\UI\Tui\Render\Theme::HASH, bold: true),
+            ));
+        } else {
+            $this->line($output, sprintf('Queued release #%d for %s@%s (commit %s)', $release->id(), $release->environment()->repo()->nameString(), $release->environment()->refName(), substr($release->commitSha(), 0, 7)));
+        }
 
         return Command::SUCCESS;
     }

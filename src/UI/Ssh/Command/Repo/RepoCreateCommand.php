@@ -57,8 +57,13 @@ final class RepoCreateCommand extends AbstractSshCommand
         );
 
         // Go soft serve outputs notice to stderr and clone url to stdout
-        $this->errLine($output, sprintf('Created repository %s', $repo->nameString()));
-        $this->line($output, sprintf('%s/%s.git', $this->serverSettings->sshPublicUrl, $repo->nameString()));
+        if ($this->isDecorated($output)) {
+            $this->errLine($output, \App\UI\Tui\Render\Theme::style('✔ Created repository ', \App\UI\Tui\Render\Theme::GREEN, bold: true) . \App\UI\Tui\Render\Theme::style($repo->nameString(), \App\UI\Tui\Render\Theme::CYAN, bold: true));
+            $this->line($output, \App\UI\Tui\Render\Theme::style(sprintf('%s/%s.git', $this->serverSettings->sshPublicUrl, $repo->nameString()), \App\UI\Tui\Render\Theme::BLUE, underline: true));
+        } else {
+            $this->errLine($output, sprintf('Created repository %s', $repo->nameString()));
+            $this->line($output, sprintf('%s/%s.git', $this->serverSettings->sshPublicUrl, $repo->nameString()));
+        }
 
         return Command::SUCCESS;
     }

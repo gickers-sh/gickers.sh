@@ -47,7 +47,7 @@ final class RepoCollabListCommand extends AbstractSshCommand
         $collabs = $this->repoQuery->collaborators($this->actor(), $name);
 
         foreach ($collabs as $collab) {
-            $this->line($output, $collab->user()->username());
+            $this->line($output, $this->style($output, $collab->user()->username(), \App\UI\Tui\Render\Theme::CYAN, bold: true));
         }
 
         return Command::SUCCESS;

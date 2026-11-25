@@ -43,7 +43,7 @@ final class RepoPrivateCommand extends AbstractSshCommand
 
         if (null === $privArg) {
             $repo = $this->repoQuery->get($this->actor(), $name);
-            $this->line($output, $repo->isPrivate() ? 'true' : 'false');
+            $this->line($output, $this->formatBoolean($output, $repo->isPrivate()));
 
             return Command::SUCCESS;
         }

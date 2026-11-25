@@ -49,7 +49,27 @@ final class RepoDiffCommand extends AbstractSshCommand
         $gitRepo = $this->storage->open($repo->name());
 
         $diff = $this->gitReader->getDiff($gitRepo, $from, $to);
-        $this->writeRaw($output, $diff->rawDiff);
+        if ($this->isDecorated($output)) {
+            $coloredLines = [];
+            foreach (explode("\n", $diff->rawDiff) as $line) {
+                if (str_starts_with($line, 'diff --git')) {
+                    $coloredLines[] = \App\UI\Tui\Render\Theme::style($line, \App\UI\Tui\Render\Theme::BLUE, bold: true);
+                } elseif (str_starts_with($line, '---') || str_starts_with($line, '+++')) {
+                    $coloredLines[] = \App\UI\Tui\Render\Theme::style($line, \App\UI\Tui\Render\Theme::MUTED, bold: true);
+                } elseif (str_starts_with($line, '@@')) {
+                    $coloredLines[] = \App\UI\Tui\Render\Theme::style($line, \App\UI\Tui\Render\Theme::HASH, bold: true);
+                } elseif (str_starts_with($line, '+')) {
+                    $coloredLines[] = \App\UI\Tui\Render\Theme::style($line, \App\UI\Tui\Render\Theme::GREEN);
+                } elseif (str_starts_with($line, '-')) {
+                    $coloredLines[] = \App\UI\Tui\Render\Theme::style($line, \App\UI\Tui\Render\Theme::SELECTOR);
+                } else {
+                    $coloredLines[] = $line;
+                }
+            }
+            $this->writeRaw($output, implode("\n", $coloredLines));
+        } else {
+            $this->writeRaw($output, $diff->rawDiff);
+        }
 
         return Command::SUCCESS;
     }

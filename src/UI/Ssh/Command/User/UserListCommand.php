@@ -46,7 +46,7 @@ final class UserListCommand extends AbstractSshCommand
         sort($usernames);
 
         foreach ($usernames as $username) {
-            $this->line($output, $username);
+            $this->line($output, $this->style($output, $username, \App\UI\Tui\Render\Theme::CYAN, bold: true));
         }
 
         return Command::SUCCESS;

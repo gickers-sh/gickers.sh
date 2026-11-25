@@ -734,7 +734,7 @@ func TestBuildChildEnvIncludesSSHUser(t *testing.T) {
 	remoteAddr, _ := net.ResolveTCPAddr("tcp", "127.0.0.1:12345")
 	localAddr, _ := net.ResolveTCPAddr("tcp", "127.0.0.1:2223")
 
-	env := buildChildEnv(base, sessionEnv, remoteAddr, localAddr, "xterm-256color", "/dev/pts/1", true, "whoami", "alice")
+	env := buildChildEnv(base, sessionEnv, remoteAddr, localAddr, "xterm-256color", "/dev/pts/1", true, "whoami", "alice", "SSH-2.0-OpenSSH_9.0", 80, 24)
 
 	hasUser := false
 	hasSpoofed := false

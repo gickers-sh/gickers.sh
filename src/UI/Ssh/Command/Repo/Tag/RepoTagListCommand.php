@@ -52,7 +52,7 @@ final class RepoTagListCommand extends AbstractSshCommand
         $refs = $this->gitReader->getRefs($gitRepo);
 
         foreach ($refs->tags as $tag) {
-            $this->line($output, $tag);
+            $this->line($output, $this->style($output, $tag, \App\UI\Tui\Render\Theme::ORANGE, bold: true));
         }
 
         return Command::SUCCESS;

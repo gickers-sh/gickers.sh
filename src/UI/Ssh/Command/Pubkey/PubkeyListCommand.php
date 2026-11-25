@@ -42,7 +42,7 @@ final class PubkeyListCommand extends AbstractSshCommand
         }
 
         foreach ($actor->publicKeys() as $key) {
-            $this->line($output, $key->authorizedKey());
+            $this->line($output, $this->formatPublicKey($output, $key->authorizedKey()));
         }
 
         return Command::SUCCESS;

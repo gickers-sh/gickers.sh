@@ -52,7 +52,7 @@ final class RepoProjectNameCommand extends AbstractSshCommand
 
         if ([] === $nameArgs) {
             $repo = $this->repoQuery->get($this->actor(), $name);
-            $this->line($output, $repo->projectName());
+            $this->line($output, $this->style($output, $repo->projectName(), \App\UI\Tui\Render\Theme::FG, bold: true));
 
             return Command::SUCCESS;
         }

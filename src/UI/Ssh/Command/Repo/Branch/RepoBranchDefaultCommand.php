@@ -50,7 +50,7 @@ final class RepoBranchDefaultCommand extends AbstractSshCommand
             $gitRepo = $this->storage->open($repo->name());
             $refs = $this->gitReader->getRefs($gitRepo);
 
-            $this->line($output, $refs->currentBranch);
+            $this->line($output, $this->style($output, $refs->currentBranch, \App\UI\Tui\Render\Theme::HASH, bold: true));
 
             return Command::SUCCESS;
         }

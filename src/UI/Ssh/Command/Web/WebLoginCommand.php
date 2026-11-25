@@ -62,10 +62,17 @@ final class WebLoginCommand extends AbstractSshCommand
         // Format the link with OSC 8 to make it directly clickable in modern terminals
         $hyperlink = $this->osc8Link($url, $url);
 
-        $this->line($output, 'Open this link in your browser to sign in (valid for 10 minutes):');
-        $this->line($output);
-        $this->line($output, '  '.$hyperlink);
-        $this->line($output);
+        if ($this->isDecorated($output)) {
+            $this->line($output, \App\UI\Tui\Render\Theme::style('Open this link in your browser to sign in (valid for 10 minutes):', \App\UI\Tui\Render\Theme::BLUE, bold: true));
+            $this->line($output);
+            $this->line($output, '  '.\App\UI\Tui\Render\Theme::style($hyperlink, \App\UI\Tui\Render\Theme::BLUE, underline: true));
+            $this->line($output);
+        } else {
+            $this->line($output, 'Open this link in your browser to sign in (valid for 10 minutes):');
+            $this->line($output);
+            $this->line($output, '  '.$hyperlink);
+            $this->line($output);
+        }
 
         $copied = $this->promptAndCopy($input, $output, $url);
 
