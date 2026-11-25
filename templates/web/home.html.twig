@@ -34,7 +34,7 @@
                             <span class="onboarding-badge">Registration</span>
                         </div>
                         <span class="cli-card-desc">
-                            Register your account with your public SSH key in one command:
+                            Unified registration &amp; client configuration in one command:
                         </span>
                     </div>
                     <div class="cli-card-action" title="Click to copy signup command">
@@ -42,7 +42,9 @@
                         {{ ui.copy_btn(sshSignupCommand, 'Copy', 'copy-btn-sm', 'Copy signup command') }}
                     </div>
                     <div class="onboarding-tip">
-                        <span class="onboarding-tip-label">Tip:</span> You can specify your username directly: <code>{{ sshSignupUserExample }}</code>
+                        <span class="onboarding-tip-label">Windows (PowerShell):</span> <code>{{ sshSignupIexCommand }}</code>
+                        <span style="margin: 0 6px; opacity: 0.5;">&bull;</span>
+                        <span class="onboarding-tip-label">Custom handle:</span> <code>{{ sshSignupUserExample }}</code>
                     </div>
                 </div>
 
@@ -122,7 +124,7 @@
             <div class="cli-command-card">
                 <div class="cli-card-info">
                     <span class="cli-card-title">✨ 1. Self-Service Signup</span>
-                    <span class="cli-card-desc">No forms or passwords. Bind your SSH key to your handle. You can also specify your username directly: <code>{{ sshSignupUserExample }}</code>.</span>
+                    <span class="cli-card-desc">Unified registration &amp; client onboarding. Run <code>{{ sshSignupCommand }}</code> (or <code>{{ sshSignupIexCommand }}</code> on Windows).</span>
                 </div>
                 <div class="cli-card-action">
                     <code class="cli-code">{{ sshSignupCommand }}</code>

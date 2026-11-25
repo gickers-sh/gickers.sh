@@ -45,6 +45,7 @@ final class SshEntrypointCommand extends Command
         private readonly \App\Shared\Infrastructure\Config\ServerSettings $serverSettings,
         private readonly \App\Identity\Application\AuthenticateAccessToken $authenticateAccessToken,
         private readonly \App\Identity\Domain\UserStore $userStore,
+        private readonly \App\Identity\Infrastructure\Security\LoginThrottler $loginThrottler,
     ) {
         parent::__construct();
     }
@@ -105,28 +106,44 @@ final class SshEntrypointCommand extends Command
             $rawKey = $this->resolveRawKey($input);
             $user = null;
 
+            $clientIdentifier = $this->resolveClientIdentifier($fingerprint);
+
             if (null !== $tokenSecret && '' !== $tokenSecret) {
+                $throttleTarget = $targetUsername ?? 'token:' . substr(hash('sha256', $tokenSecret), 0, 16);
+                $this->loginThrottler->assertNotLocked($throttleTarget, $clientIdentifier);
+
                 $tokenUser = ($this->authenticateAccessToken)($tokenSecret);
                 if (null === $tokenUser) {
+                    $this->loginThrottler->recordFailure($throttleTarget, $clientIdentifier);
                     $errOutput->writeln('<error>Invalid or expired personal access token.</error>');
 
                     return Command::FAILURE;
                 }
                 if (null !== $targetUsername && $tokenUser->username() !== strtolower($targetUsername)) {
+                    $this->loginThrottler->recordFailure($throttleTarget, $clientIdentifier);
                     $errOutput->writeln(sprintf('<error>Personal access token belongs to @%s, not requested @%s.</error>', $tokenUser->username(), $targetUsername));
 
                     return Command::FAILURE;
                 }
+                $this->loginThrottler->recordSuccess($throttleTarget, $clientIdentifier);
                 $user = $tokenUser;
             } elseif (null !== $fingerprint && '' !== $fingerprint) {
+                if (null !== $targetUsername) {
+                    $this->loginThrottler->assertNotLocked($targetUsername, $clientIdentifier);
+                }
+
                 $user = ($this->authenticateSshKey)($fingerprint, $targetUsername);
                 if (null === $user && null !== $targetUsername) {
                     $targetUser = $this->userStore->byUsername($targetUsername);
                     if (null !== $targetUser) {
+                        $this->loginThrottler->recordFailure($targetUsername, $clientIdentifier);
                         $errOutput->writeln(sprintf('<error>The presented SSH key is not authorized for account @%s.</error>', $targetUsername));
 
                         return Command::FAILURE;
                     }
+                }
+                if (null !== $user && null !== $targetUsername) {
+                    $this->loginThrottler->recordSuccess($targetUsername, $clientIdentifier);
                 }
             }
 
@@ -161,8 +178,23 @@ final class SshEntrypointCommand extends Command
                 return $this->runTui(null, $output, $errOutput);
             }
 
+            $scriptOption = null;
+            if (preg_match('/\s*\|\s*(bash|sh|iex|powershell)\b/i', $commandLine, $pipeMatches)) {
+                $pipeTarget = strtolower($pipeMatches[1]);
+                $commandLine = trim((string) preg_replace('/\s*\|\s*(bash|sh|iex|powershell)\b.*$/i', '', $commandLine));
+                if (in_array($pipeTarget, ['iex', 'powershell'], true)) {
+                    $scriptOption = '--ps1';
+                } else {
+                    $scriptOption = '--bash';
+                }
+            }
+
             $stringInput = new StringInput($commandLine);
             $tokens = $stringInput->getRawTokens(false);
+            if (null !== $scriptOption) {
+                $tokens[] = $scriptOption;
+                $tokens[] = '--install';
+            }
 
             if ([] === $tokens) {
                 if ($unknownKey) {
@@ -178,9 +210,18 @@ final class SshEntrypointCommand extends Command
                 return $this->denyUnknownKey($errOutput, $targetUsername);
             }
 
-            if ('signup' === $firstToken && 1 === count($tokens) && null !== $targetUsername) {
-                $tokens[] = $targetUsername;
-                $commandLine .= ' '.escapeshellarg($targetUsername);
+            if (('signup' === $firstToken || 'recover' === $firstToken) && null !== $targetUsername) {
+                $hasPositional = false;
+                for ($i = 1; $i < count($tokens); ++$i) {
+                    if (!str_starts_with($tokens[$i], '-')) {
+                        $hasPositional = true;
+                        break;
+                    }
+                }
+                if (!$hasPositional) {
+                    $tokens[] = $targetUsername;
+                    $commandLine .= ' '.escapeshellarg($targetUsername);
+                }
             }
             // TUI routing
             if ('tui' === $firstToken || '-t' === $firstToken || '--target' === $firstToken || str_starts_with($firstToken, '-t=')) {
@@ -226,6 +267,12 @@ final class SshEntrypointCommand extends Command
                 return Command::SUCCESS;
             }
 
+            $decorated = $this->shouldDecorate($tokens, $output);
+            $output->setDecorated($decorated);
+            if ($output instanceof ConsoleOutputInterface) {
+                $output->getErrorOutput()->setDecorated($decorated);
+            }
+
             // Help routing: `help [path…]`, a trailing `--help`/`-h`, or a bare
             // command group all render cobra-style usage, matching upstream.
             $isAdmin = null !== $user && $user->isAdmin();
@@ -236,8 +283,14 @@ final class SshEntrypointCommand extends Command
                 return Command::SUCCESS;
             }
 
+            // Strip global color flags before passing to CLI subcommands
+            $cliTokens = array_values(array_filter(
+                $tokens,
+                static fn (string $t): bool => !in_array($t, ['--color', '--color=always', '--color=never', '--no-color'], true)
+            ));
+
             // CLI application routing
-            return $this->cliApplication->runWithTokens($tokens, $output, $input);
+            return $this->cliApplication->runWithTokens($cliTokens, $output, $input);
         } catch (\Throwable $e) {
             return $this->exceptionRenderer->render($e, $output);
         }
@@ -254,11 +307,11 @@ final class SshEntrypointCommand extends Command
      */
     private function renderHelp(array $tokens, string $firstToken, bool $unknownKey, bool $isAdmin, OutputInterface $output, ?string $targetUsername = null): ?string
     {
-        $decorated = $this->shouldDecorateHelp($tokens, $output);
+        $decorated = $output->isDecorated();
 
         $cleanTokens = array_values(array_filter(
             $tokens,
-            static fn (string $t): bool => !in_array($t, ['--color', '--color=always', '--color=never', '--no-color'], true)
+            static fn (string $t): bool => !in_array($t, ['--color', '--color=always', '--color=never', '--no-color', '--raw'], true)
         ));
 
         $cleanFirstToken = $cleanTokens[0] ?? '';
@@ -301,22 +354,17 @@ final class SshEntrypointCommand extends Command
     /**
      * @param list<string> $tokens
      */
-    private function shouldDecorateHelp(array $tokens, OutputInterface $output): bool
+    public function shouldDecorate(array $tokens, OutputInterface $output): bool
     {
         if (in_array('--color', $tokens, true) || in_array('--color=always', $tokens, true)) {
             return true;
         }
-        if (in_array('--no-color', $tokens, true) || in_array('--color=never', $tokens, true)) {
+        if (in_array('--no-color', $tokens, true) || in_array('--color=never', $tokens, true) || in_array('--raw', $tokens, true)) {
             return false;
         }
 
         $noColor = $_SERVER['NO_COLOR'] ?? $_ENV['NO_COLOR'] ?? getenv('NO_COLOR');
         if (false !== $noColor && '' !== $noColor) {
-            return false;
-        }
-
-        $term = $_SERVER['TERM'] ?? $_ENV['TERM'] ?? getenv('TERM');
-        if ('dumb' === $term) {
             return false;
         }
 
@@ -327,6 +375,26 @@ final class SshEntrypointCommand extends Command
 
         $sshTty = $_SERVER['SSH_TTY'] ?? $_ENV['SSH_TTY'] ?? getenv('SSH_TTY');
         if (false !== $sshTty && '' !== $sshTty) {
+            return true;
+        }
+
+        // COLORTERM sent via SendEnv / AcceptEnv (e.g. from `codes.sh setup` ~/.ssh/config)
+        $clientColorTerm = $_SERVER['SSH_CLIENT_COLORTERM'] ?? $_ENV['SSH_CLIENT_COLORTERM'] ?? getenv('SSH_CLIENT_COLORTERM');
+        if (false !== $clientColorTerm && '' !== $clientColorTerm) {
+            return true;
+        }
+
+        $colorTerm = $_SERVER['COLORTERM'] ?? $_ENV['COLORTERM'] ?? getenv('COLORTERM');
+        if (false !== $colorTerm && '' !== $colorTerm) {
+            return true;
+        }
+
+        $term = $_SERVER['TERM'] ?? $_ENV['TERM'] ?? getenv('TERM');
+        if ('dumb' === $term) {
+            return false;
+        }
+
+        if (is_string($term) && (str_contains($term, 'color') || str_contains($term, '256') || str_contains($term, 'xterm') || str_contains($term, 'vt100') || str_contains($term, 'screen') || str_contains($term, 'tmux') || str_contains($term, 'alacritty') || str_contains($term, 'kitty'))) {
             return true;
         }
 
@@ -346,19 +414,39 @@ final class SshEntrypointCommand extends Command
             return false;
         }
 
-        if ('signup' === $tokens[0]) {
+        if (in_array($tokens[0], ['signup', 'setup', 'config', 'recover'], true)) {
             return true;
         }
 
         $filtered = array_values(array_filter(
             $tokens,
-            static fn (string $t): bool => !in_array($t, ['--color', '--color=always', '--color=never', '--no-color'], true)
+            static fn (string $t): bool => !in_array($t, ['--color', '--color=always', '--color=never', '--no-color', '--raw'], true)
         ));
 
         return ['help'] === $filtered
             || ['help', 'signup'] === $filtered
+            || ['help', 'setup'] === $filtered
+            || ['help', 'config'] === $filtered
+            || ['help', 'recover'] === $filtered
             || ['-h'] === $filtered
             || ['--help'] === $filtered;
+    }
+
+    private function resolveClientIdentifier(?string $fingerprint): string
+    {
+        $sshClient = getenv('SSH_CLIENT') ?: ($_SERVER['SSH_CLIENT'] ?? null);
+        if (is_string($sshClient) && '' !== trim($sshClient)) {
+            $parts = explode(' ', trim($sshClient));
+            if ('' !== $parts[0]) {
+                return $parts[0];
+            }
+        }
+
+        if (null !== $fingerprint && '' !== trim($fingerprint)) {
+            return $fingerprint;
+        }
+
+        return '127.0.0.1';
     }
 
     private function resolveFingerprint(InputInterface $input): ?string
@@ -387,10 +475,20 @@ final class SshEntrypointCommand extends Command
 
     private function denyUnknownKey(OutputInterface $errOutput, ?string $targetUsername = null): int
     {
-        if (null !== $targetUsername && null === $this->userStore->byUsername($targetUsername)) {
+        if (null !== $targetUsername) {
+            $user = $this->userStore->byUsername($targetUsername);
             $sshCommand = Help\HelpRenderer::sshCommandFromPublicUrl($this->serverSettings->sshPublicUrl, $targetUsername);
+            if (null === $user) {
+                $errOutput->writeln(
+                    sprintf("Account @%s does not exist. Claim this username with:\n  %s signup | bash    # Linux / macOS\n  %s signup | iex     # Windows", $targetUsername, $sshCommand, $sshCommand),
+                    OutputInterface::OUTPUT_RAW,
+                );
+
+                return Command::FAILURE;
+            }
+
             $errOutput->writeln(
-                sprintf('Account @%s does not exist. Claim this username with: %s signup', $targetUsername, $sshCommand),
+                sprintf("Your SSH key is not registered for @%s. If this is your account, recover access with:\n  %s recover", $targetUsername, $sshCommand),
                 OutputInterface::OUTPUT_RAW,
             );
 
@@ -399,7 +497,7 @@ final class SshEntrypointCommand extends Command
 
         $sshCommand = Help\HelpRenderer::sshCommandFromPublicUrl($this->serverSettings->sshPublicUrl);
         $errOutput->writeln(
-            sprintf('Your SSH key is not registered. Claim a username with: %s signup <username>', $sshCommand),
+            sprintf("Your SSH key is not registered. Claim a username with:\n  %s signup | bash    # Linux / macOS\n  %s signup | iex     # Windows", $sshCommand, $sshCommand),
             OutputInterface::OUTPUT_RAW,
         );
 
@@ -462,14 +560,26 @@ final class SshEntrypointCommand extends Command
         }
 
         if (preg_match('/(?:^|\s)--token=(?:"([^"]+)"|\'([^\']+)\'|(\S+))/', $commandLine, $matches, \PREG_OFFSET_CAPTURE)) {
-            $val = $matches[1][0] ?: ($matches[2][0] ?: $matches[3][0]);
+            $val = '';
+            for ($i = 1; $i <= 3; ++$i) {
+                if (isset($matches[$i]) && '' !== $matches[$i][0]) {
+                    $val = $matches[$i][0];
+                    break;
+                }
+            }
             $clean = substr_replace($commandLine, '', $matches[0][1], strlen($matches[0][0]));
 
             return [trim($clean), trim($val)];
         }
 
         if (preg_match('/(?:^|\s)--token\s+(?:"([^"]+)"|\'([^\']+)\'|(\S+))/', $commandLine, $matches, \PREG_OFFSET_CAPTURE)) {
-            $val = $matches[1][0] ?: ($matches[2][0] ?: $matches[3][0]);
+            $val = '';
+            for ($i = 1; $i <= 3; ++$i) {
+                if (isset($matches[$i]) && '' !== $matches[$i][0]) {
+                    $val = $matches[$i][0];
+                    break;
+                }
+            }
             $clean = substr_replace($commandLine, '', $matches[0][1], strlen($matches[0][0]));
 
             return [trim($clean), trim($val)];

@@ -46,6 +46,12 @@ final class SshEntrypointCommandTest extends KernelTestCase
         $serverPolicy->setAllowKeyless(true);
         $serverPolicy->setAnonAccess(AccessLevel::ReadOnlyAccess);
 
+        /** @var \App\Identity\Infrastructure\Security\LoginThrottler $throttler */
+        $throttler = $container->get(\App\Identity\Infrastructure\Security\LoginThrottler::class);
+        $throttler->reset('charlie', '127.0.0.1');
+        $throttler->reset('alice', '127.0.0.1');
+        $throttler->reset('bob', '127.0.0.1');
+
         // Bootstrap admin
         $admin = $userStore->byUsername('admin');
         if (null === $admin) {
@@ -679,7 +685,7 @@ final class SshEntrypointCommandTest extends KernelTestCase
         $this->assertStringContainsString('Personal access token belongs to @alice, not requested @bob', $this->getOutputText($mismatchTester));
 
         // Invalid token is rejected
-        $invalidTester = $this->dispatch('info', null, null, null, 'sec_invalid_token_12345');
+        $invalidTester = $this->dispatch('info', null, null, null, 'sec_invalid_token_' . bin2hex(random_bytes(6)));
         $this->assertSame(1, $invalidTester->getStatusCode());
         $this->assertStringContainsString('Invalid or expired personal access token', $this->getOutputText($invalidTester));
 
@@ -707,10 +713,18 @@ final class SshEntrypointCommandTest extends KernelTestCase
         $this->assertSame(1, $infoTester->getStatusCode());
         $this->assertStringContainsString("Account @{$newUsername} does not exist", $this->getOutputText($infoTester));
 
-        // 3. Running `signup` without argument but with --user=<target> signs up as that target
+        // 3. Running `signup` without pipe or --register proposes signup | bash and does not auto-register
         $tester = $this->dispatch('signup', $newKey, null, $newUsername);
         $this->assertSame(0, $tester->getStatusCode());
-        $this->assertStringContainsString('Welcome, ' . $newUsername, $this->getOutputText($tester));
+        $this->assertStringContainsString('signup', $this->getOutputText($tester));
+        $this->assertStringContainsString('| bash', $this->getOutputText($tester));
+        $userStore = self::getContainer()->get(UserStore::class);
+        $this->assertNull($userStore->byUsername($newUsername));
+
+        // 3b. Registering with --register (as called by the onboarding script) completes the registration
+        $regTester = $this->dispatch('signup --register', $newKey, null, $newUsername);
+        $this->assertSame(0, $regTester->getStatusCode());
+        $this->assertStringContainsString('registered successfully', $this->getOutputText($regTester));
 
         // 4. Now that $newUsername exists, connecting with another key says unauthorized
         $otherKp = sodium_crypto_sign_keypair();
@@ -736,5 +750,114 @@ final class SshEntrypointCommandTest extends KernelTestCase
         // Upload-pack with unqualified repo name resolves to actor namespace
         $tester = $this->dispatch("git-upload-pack '{$repoName}.git'", $this->adminFp, "0000\n");
         $this->assertContains($tester->getStatusCode(), [0, 128]);
+    }
+
+    public function testCliCommandsColorizationWithColorFlagAndTty(): void
+    {
+        // 1. Plain uncolored execution by default in pipe/test mode
+        $plainInfo = $this->dispatch('info', $this->aliceFp);
+        $this->assertSame(0, $plainInfo->getStatusCode());
+        $plainText = $this->getOutputText($plainInfo);
+        $this->assertStringNotContainsString("\e[", $plainText);
+        $this->assertStringContainsString('Username: alice', $plainText);
+        $this->assertStringContainsString('Admin: false', $plainText);
+
+        // 2. Explicit --color flag enables TokyoNight ANSI colorization
+        $coloredInfo = $this->dispatch('info --color', $this->aliceFp);
+        $this->assertSame(0, $coloredInfo->getStatusCode());
+        $coloredText = $this->getOutputText($coloredInfo);
+        $this->assertStringContainsString("\e[", $coloredText);
+        $this->assertStringContainsString('Username:', $coloredText);
+        $this->assertStringContainsString('alice', $coloredText);
+        // Label in bold blue, value in bold cyan
+        $this->assertStringContainsString("\e[38;2;122;162;247m\e[1mUsername:\e[0m \e[38;2;125;207;255m\e[1malice\e[0m", $coloredText);
+
+        // 3. Explicit --no-color and --raw flags suppress ANSI escape codes
+        $noColorInfo = $this->dispatch('info --no-color', $this->aliceFp);
+        $this->assertSame(0, $noColorInfo->getStatusCode());
+        $noColorText = $this->getOutputText($noColorInfo);
+        $this->assertStringNotContainsString("\e[", $noColorText);
+        $this->assertSame($plainText, $noColorText);
+
+        $rawInfo = $this->dispatch('info --raw', $this->aliceFp);
+        $this->assertSame(0, $rawInfo->getStatusCode());
+        $rawText = $this->getOutputText($rawInfo);
+        $this->assertStringNotContainsString("\e[", $rawText);
+        $this->assertSame($plainText, $rawText);
+
+        // 3b. COLORTERM enables colorization by default even without PTY, but --raw overrides it
+        $oldColorTerm = $_SERVER['COLORTERM'] ?? null;
+        $oldTermForColor = $_SERVER['TERM'] ?? null;
+        $_SERVER['TERM'] = 'xterm-256color';
+        putenv('TERM=xterm-256color');
+        $_SERVER['COLORTERM'] = 'truecolor';
+        putenv('COLORTERM=truecolor');
+        try {
+            $colorTermInfo = $this->dispatch('info', $this->aliceFp);
+            $this->assertSame(0, $colorTermInfo->getStatusCode());
+            $this->assertStringContainsString("\e[", $this->getOutputText($colorTermInfo));
+
+            $colorTermRaw = $this->dispatch('info --raw', $this->aliceFp);
+            $this->assertSame(0, $colorTermRaw->getStatusCode());
+            $this->assertStringNotContainsString("\e[", $this->getOutputText($colorTermRaw));
+        } finally {
+            if (null !== $oldColorTerm) {
+                $_SERVER['COLORTERM'] = $oldColorTerm;
+                putenv('COLORTERM=' . $oldColorTerm);
+            } else {
+                unset($_SERVER['COLORTERM']);
+                putenv('COLORTERM');
+            }
+            if (null !== $oldTermForColor) {
+                $_SERVER['TERM'] = $oldTermForColor;
+                putenv('TERM=' . $oldTermForColor);
+            } else {
+                unset($_SERVER['TERM']);
+                putenv('TERM');
+            }
+        }
+
+        // 4. SSH_TTY simulates interactive auto-TTY session and enables colorization
+        $oldTerm = $_SERVER['TERM'] ?? null;
+        $oldPiped = $_SERVER['SSH_PIPED'] ?? null;
+        unset($_SERVER['SSH_PIPED']);
+        putenv('SSH_PIPED');
+        $_SERVER['TERM'] = 'xterm-256color';
+        putenv('TERM=xterm-256color');
+        $_SERVER['SSH_TTY'] = '/dev/pts/1';
+        putenv('SSH_TTY=/dev/pts/1');
+        try {
+            $ttyInfo = $this->dispatch('info', $this->aliceFp);
+            $this->assertSame(0, $ttyInfo->getStatusCode());
+            $ttyText = $this->getOutputText($ttyInfo);
+            $this->assertStringContainsString("\e[", $ttyText);
+            $this->assertStringContainsString("\e[38;2;122;162;247m\e[1mUsername:\e[0m", $ttyText);
+        } finally {
+            unset($_SERVER['SSH_TTY']);
+            putenv('SSH_TTY');
+            if (null !== $oldTerm) {
+                $_SERVER['TERM'] = $oldTerm;
+                putenv('TERM=' . $oldTerm);
+            } else {
+                unset($_SERVER['TERM']);
+                putenv('TERM');
+            }
+            if (null !== $oldPiped) {
+                $_SERVER['SSH_PIPED'] = $oldPiped;
+                putenv('SSH_PIPED=' . $oldPiped);
+            }
+        }
+
+        // 5. User list and repo list support colorization
+        $userList = $this->dispatch('user list --color', $this->adminFp);
+        $this->assertSame(0, $userList->getStatusCode());
+        $userListText = $this->getOutputText($userList);
+        $this->assertStringContainsString("\e[38;2;125;207;255m\e[1madmin\e[0m", $userListText);
+
+        // 6. Error output is colorized when decorated
+        $errorOut = $this->dispatch('repo info nonexistent --color', $this->aliceFp);
+        $this->assertSame(1, $errorOut->getStatusCode());
+        $errorText = $this->getOutputText($errorOut);
+        $this->assertStringContainsString("\e[38;2;247;118;142m\e[1mError:\e[0m", $errorText);
     }
 }

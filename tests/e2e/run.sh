@@ -67,7 +67,7 @@ $ALICE_SSH -l nimporte-qui 127.0.0.1 help >"$WORK/unknown-help.log"
 grep -q 'signup' "$WORK/unknown-help.log"
 ! grep -q 'repo ' "$WORK/unknown-help.log"
 ! $ALICE_SSH 127.0.0.1 repo list >/dev/null 2>&1
-$ALICE_SSH 127.0.0.1 signup alice | grep -q 'Welcome, alice'
+$ALICE_SSH 127.0.0.1 signup alice --register | grep -q 'registered successfully'
 $ALICE_SSH 127.0.0.1 info | grep -q 'Username: alice'
 
 SSH_CMD="ssh -i $WORK/id_ed25519 -p $SSH_PORT -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"

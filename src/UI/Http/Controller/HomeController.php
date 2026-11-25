@@ -31,15 +31,17 @@ final readonly class HomeController
     {
         $user = $this->domainUser();
         $sshPrefix = $this->sshPrefix();
-        $sshSignupCommand = $sshPrefix . ' signup';
+        $sshSignupCommand = $sshPrefix . ' signup | bash';
+        $sshSignupIexCommand = $sshPrefix . ' signup | iex';
         $sshUserExample = $this->sshUserCommand('<username>');
-        $sshSignupUserExample = $this->sshUserCommand('<username>', 'signup');
+        $sshSignupUserExample = $this->sshUserCommand('<username>', 'signup | bash');
 
         $html = $this->twig->render('home.html.twig', [
             'serverName' => $this->settings->name ?: 'codes.sh',
             'currentUsername' => $user?->username(),
             'sshPrefix' => $sshPrefix,
             'sshSignupCommand' => $sshSignupCommand,
+            'sshSignupIexCommand' => $sshSignupIexCommand,
             'sshUserExample' => $sshUserExample,
             'sshSignupUserExample' => $sshSignupUserExample,
             'publicRepositoriesCount' => $this->publicRepositoriesCount(),

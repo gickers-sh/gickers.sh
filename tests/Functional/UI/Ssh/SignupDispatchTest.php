@@ -26,6 +26,21 @@ final class SignupDispatchTest extends KernelTestCase
         $this->serverPolicy->setAllowSignup(true);
         // Keyless disabled: an unknown *key* must still reach signup.
         $this->serverPolicy->setAllowKeyless(false);
+
+        /** @var \App\Identity\Infrastructure\Security\SignupThrottler $throttler */
+        $throttler = $container->get(\App\Identity\Infrastructure\Security\SignupThrottler::class);
+        $throttler->reset('127.0.0.1');
+    }
+
+    protected function tearDown(): void
+    {
+        if (self::$booted) {
+            $container = self::getContainer();
+            /** @var \App\Identity\Infrastructure\Security\SignupThrottler $throttler */
+            $throttler = $container->get(\App\Identity\Infrastructure\Security\SignupThrottler::class);
+            $throttler->reset('127.0.0.1');
+        }
+        parent::tearDown();
     }
 
     private static function generateKey(): string
@@ -66,7 +81,7 @@ final class SignupDispatchTest extends KernelTestCase
         $key = self::generateKey();
         $username = 'disp'.bin2hex(random_bytes(5));
 
-        $tester = $this->dispatch('signup '.$username, $key);
+        $tester = $this->dispatch('signup '.$username.' --register', $key);
 
         self::assertSame(0, $tester->getStatusCode(), self::text($tester));
         self::assertStringContainsString('registered', self::text($tester));
@@ -83,11 +98,11 @@ final class SignupDispatchTest extends KernelTestCase
         $user2 = 'user2'.bin2hex(random_bytes(4));
 
         // First signup
-        $tester1 = $this->dispatch('signup '.$user1, $key);
+        $tester1 = $this->dispatch('signup '.$user1.' --register', $key);
         self::assertSame(0, $tester1->getStatusCode(), self::text($tester1));
 
         // Second signup with the exact same key
-        $tester2 = $this->dispatch('signup '.$user2, $key);
+        $tester2 = $this->dispatch('signup '.$user2.' --register', $key);
         self::assertSame(0, $tester2->getStatusCode(), self::text($tester2));
         self::assertStringContainsString('registered', self::text($tester2));
 
@@ -119,7 +134,7 @@ final class SignupDispatchTest extends KernelTestCase
         $explicitKey = self::generateKey();
         $username = 'disp'.bin2hex(random_bytes(5));
 
-        $tester = $this->dispatch(sprintf('signup %s -k %s', $username, escapeshellarg($explicitKey)), $sessionKey);
+        $tester = $this->dispatch(sprintf('signup %s -k %s --register', $username, escapeshellarg($explicitKey)), $sessionKey);
 
         self::assertSame(0, $tester->getStatusCode(), self::text($tester));
 
@@ -130,6 +145,18 @@ final class SignupDispatchTest extends KernelTestCase
         self::assertNull($this->userStore->byFingerprint(SshKey::parse($sessionKey)->fingerprint));
     }
 
+    public function testSignupWithoutPipeOrRegisterDoesNotSignUp(): void
+    {
+        $key = self::generateKey();
+        $username = 'noreg'.bin2hex(random_bytes(4));
+
+        $tester = $this->dispatch('signup '.$username, $key);
+        self::assertSame(0, $tester->getStatusCode());
+        self::assertStringContainsString('signup', self::text($tester));
+        self::assertStringContainsString('| bash', self::text($tester));
+        self::assertNull($this->userStore->byFingerprint(SshKey::parse($key)->fingerprint));
+    }
+
     public function testUnknownKeyHelpOnlyShowsSignup(): void
     {
         foreach (['help', '-h', '--help'] as $cmd) {
@@ -138,7 +165,7 @@ final class SignupDispatchTest extends KernelTestCase
             $out = $tester->getDisplay();
             self::assertStringContainsString('Available Commands:', $out);
             self::assertStringContainsString('signup', $out);
-            foreach (['repo', 'user', 'settings', 'token', 'pubkey', 'jwt', 'set-username'] as $hiddenCmd) {
+            foreach (['repo', 'user', 'settings', 'token', 'pubkey', 'set-username'] as $hiddenCmd) {
                 self::assertStringNotContainsString("\n  ".$hiddenCmd, $out, sprintf('"%s" exposed "%s"', $cmd, $hiddenCmd));
             }
         }
@@ -193,5 +220,86 @@ final class SignupDispatchTest extends KernelTestCase
         }
 
         self::assertNull($this->userStore->byFingerprint(SshKey::parse($key)->fingerprint));
+    }
+
+    public function testUnknownKeyCanGetBashSignupScriptWhenPiped(): void
+    {
+        $key = self::generateKey();
+        $_SERVER['SSH_PIPED'] = '1';
+        try {
+            $tester = $this->dispatch('signup', $key);
+            self::assertSame(0, $tester->getStatusCode(), self::text($tester));
+            $out = $tester->getDisplay();
+            self::assertStringContainsString('#!/usr/bin/env bash', $out);
+            self::assertStringContainsString('Gestion de votre clé SSH', $out);
+            self::assertStringContainsString('IS_SIGNUP="1"', $out);
+            self::assertStringContainsString('ALREADY_REGISTERED="0"', $out);
+        } finally {
+            unset($_SERVER['SSH_PIPED']);
+        }
+    }
+
+    public function testUnknownKeyCanGetPs1SignupScriptWhenPipedOnWindows(): void
+    {
+        $key = self::generateKey();
+        $_SERVER['SSH_PIPED'] = '1';
+        $_SERVER['SSH_CLIENT_OS'] = 'windows';
+        try {
+            $tester = $this->dispatch('signup', $key);
+            self::assertSame(0, $tester->getStatusCode(), self::text($tester));
+            $out = $tester->getDisplay();
+            self::assertStringContainsString('PowerShell', $out);
+            self::assertStringContainsString('Gum-Choose', $out);
+            self::assertStringContainsString('$isSignup = "1"', $out);
+            self::assertStringContainsString('$alreadyRegistered = "0"', $out);
+        } finally {
+            unset($_SERVER['SSH_PIPED'], $_SERVER['SSH_CLIENT_OS']);
+        }
+    }
+
+    public function testUnknownKeyDirectRegisterWithFlag(): void
+    {
+        $key = self::generateKey();
+        $username = 'flag'.bin2hex(random_bytes(4));
+
+        $tester = $this->dispatch(sprintf('signup %s --register', $username), $key);
+        self::assertSame(0, $tester->getStatusCode(), self::text($tester));
+        self::assertStringContainsString('registered successfully', self::text($tester));
+
+        $user = $this->userStore->byFingerprint(SshKey::parse($key)->fingerprint);
+        self::assertNotNull($user);
+        self::assertSame($username, $user->username());
+    }
+
+    public function testSignupWithoutArgumentsShowsUnifiedInstructionsInInteractiveMode(): void
+    {
+        $key = self::generateKey();
+        $tester = $this->dispatch('signup', $key);
+        self::assertSame(0, $tester->getStatusCode(), self::text($tester));
+        $out = self::text($tester);
+        self::assertStringContainsString('signup | bash', $out);
+        self::assertStringContainsString('signup | iex', $out);
+    }
+
+    public function testSignupRateLimitBlocksMassReservation(): void
+    {
+        $key = self::generateKey();
+        $fp = SshKey::parse($key)->fingerprint;
+
+        /** @var \App\Identity\Infrastructure\Security\SignupThrottler $throttler */
+        $throttler = self::getContainer()->get(\App\Identity\Infrastructure\Security\SignupThrottler::class);
+        $throttler->reset('127.0.0.1', $fp);
+
+        // 3 signups succeed for this key (maxPerKey = 3)
+        for ($i = 1; $i <= 3; ++$i) {
+            $u = 'squat'.$i.bin2hex(random_bytes(4));
+            $tester = $this->dispatch('signup '.$u.' --register', $key);
+            self::assertSame(0, $tester->getStatusCode(), self::text($tester));
+        }
+
+        // 4th signup with the same key is blocked by key rate limit
+        $blockedTester = $this->dispatch('signup squat4'.bin2hex(random_bytes(4)).' --register', $key);
+        self::assertSame(1, $blockedTester->getStatusCode());
+        self::assertStringContainsString('Signup rate limit exceeded for this SSH key', self::text($blockedTester));
     }
 }
