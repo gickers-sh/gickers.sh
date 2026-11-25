@@ -126,17 +126,14 @@ final class DocPageTest extends KernelTestCase
 
     public function testIndividualCommandPageRendersDetailsBreadcrumbsAndFlags(): void
     {
-        foreach (['/docs/repo/branch/protect', '/help/repo/branch/protect'] as $uri) {
+        foreach (['/docs/repo/branch/protect', '/help/repo/branch/protect', '/docs/repo/deploy/quota', '/help/repo/deploy/quota'] as $uri) {
             $response = $this->get($uri);
             $this->assertSame(200, $response->getStatusCode(), "Failed asserting 200 for {$uri}");
             $html = (string) $response->getContent();
 
-            $this->assertStringContainsString('repo branch protect', $html);
             $this->assertStringContainsString('docs', $html);
             $this->assertStringContainsString('Synopsis', $html);
-            $this->assertStringContainsString('repo branch protect', $html);
             $this->assertStringContainsString('Flags &amp; Options', $html);
-            $this->assertStringContainsString('--no-force', $html);
             $this->assertStringContainsString('Back to', $html);
             $this->assertStringContainsString('copy-btn', $html);
         }

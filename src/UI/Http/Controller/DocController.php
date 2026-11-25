@@ -27,8 +27,8 @@ final readonly class DocController
         private \Twig\Environment $twig,
     ) {}
 
-    #[Route('/docs', name: 'app_docs_index', methods: ['GET'])]
-    #[Route('/help', methods: ['GET'])]
+    #[Route('/docs', name: 'app_docs_index', methods: ['GET'], priority: 20)]
+    #[Route('/help', methods: ['GET'], priority: 20)]
     public function __invoke(): Response
     {
         $user = $this->domainUser();
@@ -56,8 +56,8 @@ final readonly class DocController
         );
     }
 
-    #[Route('/docs/{path}', name: 'app_docs_show', requirements: ['path' => '.+'], methods: ['GET'])]
-    #[Route('/help/{path}', requirements: ['path' => '.+'], methods: ['GET'])]
+    #[Route('/docs/{path}', name: 'app_docs_show', requirements: ['path' => '.+'], methods: ['GET'], priority: 20)]
+    #[Route('/help/{path}', requirements: ['path' => '.+'], methods: ['GET'], priority: 20)]
     public function show(string $path): Response
     {
         $user = $this->domainUser();

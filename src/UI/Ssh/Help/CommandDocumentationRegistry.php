@@ -452,6 +452,9 @@ final readonly class CommandDocumentationRegistry
         if (str_starts_with($path, ' token')) {
             return 'tokens';
         }
+        if (str_starts_with($path, ' wiki')) {
+            return 'wiki';
+        }
 
         return 'explore';
     }

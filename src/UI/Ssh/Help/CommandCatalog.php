@@ -35,6 +35,8 @@ Codes.sh is a self-hostable Git server for the command line. Your SSH key is not
 DESC;
         $root = new CommandSpec('', '', '', $rootLong, [], [], false);
         $root->addChild($this->signupSpec());
+        $root->addChild($this->recoverSpec());
+        $root->addChild($this->setupSpec());
 
         return $root;
     }
@@ -221,36 +223,6 @@ EX;
             order: 4,
         ));
 
-        $jwtLong = <<<'DESC'
-Generates an Ed25519 JSON Web Token (JWT) valid for 1 hour to authenticate Git Large File Storage (LFS) operations over HTTP/HTTPS.
-
-Scope:
-  Authenticated user with read access to the specified repositories.
-
-Arguments:
-  repository    One or more repository names the token will grant LFS access for.
-
-Output:
-  Prints the encoded JWT bearer string directly to stdout for use with HTTP Authorization headers or git-lfs credential helpers.
-DESC;
-        $jwtExample = <<<'EX'
-  # Generate an LFS token for a single repository
-  {ssh} jwt my-repo
-
-  # Generate an LFS token valid for multiple repositories
-  {ssh} jwt repo1 repo2 repo3
-EX;
-        $root->addChild($this->leaf('jwt [repository1 repository2...]', 'Generate a JSON Web Token', $jwtLong, [], [], $jwtExample)->withUi(
-            category: 'tokens',
-            title: 'Generate LFS JWT',
-            tier: 'read',
-            description: 'Generate an Ed25519 JSON Web Token (JWT) for Git LFS',
-            baseTemplate: 'jwt',
-            fields: [FieldSpec::arg('repository', 'Repository', 'my-repo', true)],
-            scope: 'global',
-            order: 5,
-        ));
-
         $root->addChild($this->pubkey());
         $root->addChild($this->repo());
         $root->addChild($this->web());
@@ -283,6 +255,8 @@ EX;
         ));
 
         $root->addChild($this->signupSpec());
+        $root->addChild($this->recoverSpec());
+        $root->addChild($this->setupSpec());
         if ($includeAdmin) {
             $root->addChild($this->settings());
         }
@@ -290,8 +264,187 @@ EX;
         if ($includeAdmin) {
             $root->addChild($this->user());
         }
+        $root->addChild($this->wiki($includeAdmin));
 
         return $root;
+    }
+
+    private function wiki(bool $includeAdmin = true): CommandSpec
+    {
+        $wikiLong = <<<'DESC'
+Browse, search, and manage the server-wide Wiki knowledge base. All users can list, search, and read Markdown wiki pages rendered in the terminal; server administrators can also create, update, and delete pages.
+
+Scope:
+  Public (read commands); Server Admin (set and delete commands).
+DESC;
+        $wikiExample = <<<'EX'
+  # List all wiki pages
+  {ssh} wiki list
+
+  # Read a wiki page in the terminal
+  {ssh} wiki show getting-started
+
+  # Search across all wiki pages
+  {ssh} wiki search "ssh key"
+EX;
+        $wiki = $this->group('wiki', 'Browse and manage the server wiki', [], $wikiLong, $wikiExample);
+
+        $listLong = <<<'DESC'
+Lists all wiki pages ordered by position, category, and title.
+
+Scope:
+  Public (accessible to all callers).
+
+Flags:
+  -c, --category string    Filter pages by category name.
+DESC;
+        $listExample = <<<'EX'
+  # List all wiki pages
+  {ssh} wiki list
+
+  # Filter wiki pages by category
+  {ssh} wiki list --category Guides
+EX;
+        $wiki->addChild($this->leaf('list', 'List all wiki pages', $listLong, ['ls'], [
+            new FlagSpec('c', 'category', 'string', 'filter pages by category'),
+        ], $listExample)->withUi(
+            category: 'wiki',
+            title: 'List Wiki Pages',
+            tier: 'read',
+            description: 'List all pages in the server wiki',
+            baseTemplate: 'wiki list',
+            fields: [FieldSpec::opt('category', 'Category filter', '-c', '')],
+            scope: 'global',
+            order: 60,
+        ));
+
+        $showLong = <<<'DESC'
+Displays a wiki page rendered as ANSI Markdown in the terminal using Termstrap (or raw Markdown with --raw).
+
+Scope:
+  Public (accessible to all callers).
+
+Arguments:
+  SLUG    Unique slug of the wiki page to read.
+
+Flags:
+  -r, --raw          Print raw Markdown without terminal rendering.
+  -w, --width int    Terminal width in columns (0 = auto-detect).
+DESC;
+        $showExample = <<<'EX'
+  # Read a wiki page rendered in the terminal
+  {ssh} wiki show getting-started
+
+  # Print the raw Markdown of a wiki page
+  {ssh} wiki show getting-started --raw
+EX;
+        $wiki->addChild($this->leaf('show SLUG', 'Display a wiki page', $showLong, ['view', 'get', 'cat', 'read'], [
+            new FlagSpec('r', 'raw', '', 'print raw Markdown instead of terminal-rendered output'),
+            new FlagSpec('w', 'width', 'int', 'terminal width in columns (0 = auto-detect)'),
+        ], $showExample)->withUi(
+            category: 'wiki',
+            title: 'Show Wiki Page',
+            tier: 'read',
+            description: 'Read a wiki page rendered in your terminal',
+            baseTemplate: 'wiki show',
+            fields: [FieldSpec::arg('slug', 'Page slug', 'getting-started', true), FieldSpec::boolOpt('raw', 'Raw Markdown', '--raw', false)],
+            scope: 'global',
+            order: 61,
+        ));
+
+        $searchLong = <<<'DESC'
+Searches wiki pages by keyword across title, slug, category, and Markdown content.
+
+Scope:
+  Public (accessible to all callers).
+
+Arguments:
+  QUERY    Keyword or phrase to search for.
+DESC;
+        $searchExample = <<<'EX'
+  # Search wiki pages for deployment guides
+  {ssh} wiki search deploy
+EX;
+        $wiki->addChild($this->leaf('search QUERY', 'Search wiki pages by keyword', $searchLong, ['grep', 'find'], [], $searchExample)->withUi(
+            category: 'wiki',
+            title: 'Search Wiki',
+            tier: 'read',
+            description: 'Search wiki pages by keyword or phrase',
+            baseTemplate: 'wiki search',
+            fields: [FieldSpec::arg('query', 'Search query', 'deploy', true)],
+            scope: 'global',
+            order: 62,
+        ));
+
+        if ($includeAdmin) {
+            $setLong = <<<'DESC'
+Creates or updates a wiki page identified by SLUG. Content can be passed as arguments or piped via standard input.
+
+Scope:
+  Server Admin.
+
+Arguments:
+  SLUG       Unique URL-friendly slug (e.g. "getting-started", "guides/deploy").
+  CONTENT    Markdown body (or omit and pipe via stdin).
+
+Flags:
+  -c, --category string    Category name (defaults to General).
+  -p, --position int       Display sort order position (defaults to 0).
+  -t, --title string       Page title (defaults to first # Heading or formatted slug).
+DESC;
+            $setExample = <<<'EX'
+  # Create or update a wiki page inline
+  {ssh} wiki set getting-started "# Getting Started\n\nWelcome to codes.sh!" --title "Getting Started" --category "Guides"
+
+  # Pipe a local Markdown file into the wiki
+  cat docs/guide.md | {ssh} wiki set guides/deploy --title "Deployment Guide" --category "Operations"
+EX;
+            $wiki->addChild($this->leaf('set SLUG [CONTENT]', 'Create or update a wiki page', $setLong, ['edit', 'create', 'save', 'write'], [
+                new FlagSpec('c', 'category', 'string', 'page category (defaults to General)'),
+                new FlagSpec('p', 'position', 'int', 'display sort order position'),
+                new FlagSpec('t', 'title', 'string', 'page title'),
+            ], $setExample)->withUi(
+                category: 'wiki',
+                title: 'Set Wiki Page',
+                tier: 'admin',
+                description: 'Create or update a wiki page (Server Admin)',
+                baseTemplate: 'wiki set',
+                fields: [
+                    FieldSpec::arg('slug', 'Page slug', 'getting-started', true),
+                    FieldSpec::opt('title', 'Title', '-t', 'Getting Started'),
+                    FieldSpec::opt('category', 'Category', '-c', 'General'),
+                    FieldSpec::arg('content', 'Markdown content', '# Getting Started', true),
+                ],
+                scope: 'global',
+                order: 63,
+            ));
+
+            $deleteLong = <<<'DESC'
+Permanently deletes a wiki page by its slug.
+
+Scope:
+  Server Admin.
+
+Arguments:
+  SLUG    Slug of the wiki page to delete.
+DESC;
+            $deleteExample = <<<'EX'
+  # Delete a wiki page
+  {ssh} wiki delete old-guide
+EX;
+            $wiki->addChild($this->leaf('delete SLUG', 'Delete a wiki page', $deleteLong, ['rm', 'del', 'remove'], [], $deleteExample)->withUi(
+                category: 'wiki',
+                title: 'Delete Wiki Page',
+                tier: 'admin',
+                description: 'Delete a wiki page (Server Admin)',
+                baseTemplate: 'wiki delete',
+                fields: [FieldSpec::arg('slug', 'Page slug', 'old-guide', true)],
+                scope: 'global',
+                order: 64,
+            ));
+        }
+
+        return $wiki;
     }
 
     private function web(): CommandSpec
@@ -351,11 +504,12 @@ Flags:
   -k, --key string    Register a specific public key instead of the key you connected with.
 DESC;
         $signupExample = <<<'EX'
-  # Register yourself using the SSH key from your current connection
-  {ssh} signup alice
+  # Unified self-service signup & client onboarding (recommended)
+  {ssh} signup | bash             # Linux / macOS
+  {ssh} signup | iex              # Windows (PowerShell)
 
-  # Register yourself with an explicit public key
-  {ssh} signup alice -k "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG... alice@laptop"
+  # Signup with a predefined username in the installer wizard
+  {ssh} signup alice | bash
 EX;
 
         return $this->leaf('signup USERNAME', 'Register yourself as a new user with your SSH key', $signupLong, [], [
@@ -369,6 +523,86 @@ EX;
             fields: [FieldSpec::arg('username', 'Desired username', 'alice', true)],
             scope: 'global',
             order: 12,
+        );
+    }
+
+    private function recoverSpec(): CommandSpec
+    {
+        $recoverLong = <<<'DESC'
+Recovers account access when an SSH key has been lost, using your backup password. Associates the incoming SSH key with your existing user account so you can immediately resume using codes.sh.
+
+Scope:
+  Unregistered or recovery SSH keys. Requires a backup password to have been configured on the account.
+
+Arguments:
+  USERNAME    Your username.
+DESC;
+        $recoverExample = <<<'EX'
+  # Recover your account and register this machine's SSH key
+  {ssh} recover alice
+EX;
+
+        return $this->leaf('recover USERNAME', 'Recover account access with your backup password', $recoverLong, [], [
+            new FlagSpec('k', 'key', 'string', 'public key to register instead of the one you connected with'),
+        ], $recoverExample)->withUi(
+            category: 'identity',
+            title: 'Recover Account',
+            tier: 'read',
+            description: 'Recover account access with your backup password',
+            baseTemplate: 'recover',
+            fields: [FieldSpec::arg('username', 'Target username', 'alice', true)],
+            scope: 'global',
+            order: 13,
+        );
+    }
+
+    private function setupSpec(): CommandSpec
+    {
+        $setupLong = <<<'DESC'
+Generates a recommended OpenSSH client configuration (~/.ssh/config) or an interactive setup wizard.
+
+Enables automatic TTY allocation (RequestTTY auto) for proper terminal width, connection multiplexing (5ms execution), and per-user key binding (Match host codes.sh user <username>).
+
+Scope:
+  Public (all authenticated users and unregistered keys during onboarding).
+
+Arguments:
+  USERNAME    Target username to configure (optional, defaults to your account).
+
+Flags:
+      --bash              force Bash installer script
+  -k, --key-path string   predefined private key path
+      --ps1               force PowerShell installer script
+  -r, --raw               print raw ~/.ssh/config snippet only
+DESC;
+        $setupExample = <<<'EX'
+  # Run interactive client configuration wizard
+  {ssh} setup | bash
+
+  # Run wizard for a specific user
+  {ssh} setup alice | bash
+
+  # On Windows PowerShell
+  {ssh} setup | iex
+
+  # Output raw ~/.ssh/config block
+  {ssh} setup --raw >> ~/.ssh/config
+EX;
+
+        return $this->leaf('setup [USERNAME]', 'Generate client SSH config or setup wizard', $setupLong, ['config'], [
+            new FlagSpec('', 'bash', 'bool', 'force Bash installer script'),
+            new FlagSpec('k', 'key-path', 'string', 'predefined private key path'),
+            new FlagSpec('', 'ps1', 'bool', 'force PowerShell installer script'),
+            new FlagSpec('r', 'raw', 'bool', 'print raw ~/.ssh/config snippet only'),
+        ], $setupExample)->withUi(
+            category: 'identity',
+            title: 'Setup Client',
+            tier: 'read',
+            description: 'Generate client SSH config or setup wizard',
+            baseTemplate: 'setup',
+            fields: [FieldSpec::arg('username', 'Target username', 'alice', false)],
+            scope: 'global',
+            order: 13,
         );
     }
 
@@ -938,6 +1172,36 @@ EX;
             fields: [FieldSpec::arg('username', 'Username', 'alice', true), FieldSpec::choiceArg('allowed', 'Allowed', ['true', 'false'], 'true')],
             scope: 'global',
             order: 58,
+        ));
+
+        $passwordLong = <<<'DESC'
+Sets or updates the backup password for a user account. Used for account recovery and sudo-mode elevation.
+
+Scope:
+  Account Owner or Server Admin.
+
+Arguments:
+  USERNAME    Target username (defaults to current user).
+DESC;
+        $passwordExample = <<<'EX'
+  # Set your own backup password
+  {ssh} user password
+
+  # Set backup password for another user (admin only)
+  {ssh} user password alice
+EX;
+        $user->addChild($this->leaf('password [USERNAME]', 'Set or update backup password for a user', $passwordLong, [], [
+            new FlagSpec('p', 'password', 'string', 'plain password'),
+            new FlagSpec(null, 'stdin', 'bool', 'read password from stdin'),
+        ], $passwordExample)->withUi(
+            category: 'identity',
+            title: 'Set Password',
+            tier: 'write',
+            description: 'Set or update backup password for a user',
+            baseTemplate: 'user password',
+            fields: [FieldSpec::arg('username', 'Target username', 'alice', false)],
+            scope: 'global',
+            order: 59,
         ));
 
         return $user;

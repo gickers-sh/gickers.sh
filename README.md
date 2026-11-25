@@ -474,26 +474,56 @@ SOFT_SERVE_ALLOW_KEYLESS=true \
 
 Soft Serve doesn't allow duplicate SSH public keys for users. A public key can be associated with one user only. This makes SSH authentication simple and straight forward, add your public key to your Soft Serve user to be able to access Soft Serve.
 
-#### HTTP
+#### HTTP & Unified Tokens
 
-You can generate user access tokens through the SSH command line interface. Access tokens can have an optional expiration date. Use your access token as the basic auth user to access your Soft Serve repos through HTTP.
+codes.sh provides a unified **Token** system for all operations (Git clone/push, Git Large File Storage (LFS), automated CI/CD pipelines, and web authentication).
 
-```sh
-# Create a user token
-ssh -p 23231 localhost token create 'my new token'
-ss_1234abc56789012345678901234de246d798fghi
-
-# Or with an expiry date
-ssh -p 23231 localhost token create --expires-in 1y 'my other token'
-ss_98fghi1234abc56789012345678901234de246d7
-```
-
-Now you can access to repos that require `read-write` access.
+You can generate tokens with granular control over expiration, permissions (scopes), repository restrictions, and single-use constraints:
 
 ```sh
-git clone http://ss_98fghi1234abc56789012345678901234de246d7@localhost:23232/my-private-repo.git my-private-repo
-# Make changes and push
+# Create a standard token
+ssh -p 23231 localhost token create "ci-pipeline"
+
+# Create a token with an expiration time
+ssh -p 23231 localhost token create --expires-in 30d "ci-runner"
+
+# Create a scoped token restricted to Git LFS and read access on a specific repository
+ssh -p 23231 localhost token create --scope lfs,repo:read --repo my-repo "lfs-sync"
+
+# Create a single-use token (automatically revoked after first successful use)
+ssh -p 23231 localhost token create --single-use "deploy-job"
+
+# Add an optional description
+ssh -p 23231 localhost token create -d "GitHub Actions deploy key" "gha-deploy"
 ```
+
+##### Using your token:
+Tokens work interchangeably across protocols:
+
+- **Git over HTTP**:
+```sh
+git clone http://ss_98fghi1234abc56789012345678901234de246d7@localhost:23232/my-private-repo.git
+```
+- **Git LFS transfers**:
+Tokens are accepted in `Authorization: Bearer <token>` headers by all LFS batch and object transfer endpoints.
+
+- **Listing & Instant Revocation**:
+```sh
+# List all your tokens with their scopes, repository restrictions, and expiry status
+ssh -p 23231 localhost token list
+
+# Instantly revoke a token by its name or numeric ID
+ssh -p 23231 localhost token delete "ci-runner"
+ssh -p 23231 localhost token delete 1
+```
+
+#### Web Login (Single-Use Magic Link)
+
+To log into the web interface, generate a temporary magic link from SSH:
+```sh
+ssh -p 23231 localhost web login
+```
+Opening this link sets a secure `codes_session` cookie in your browser. For maximum security, the magic link token is **strictly single-use**: it is permanently consumed and invalidated upon first click. Run `web logout` anytime to invalidate all active web sessions.
 
 ### Authorization
 
@@ -510,16 +540,23 @@ no-access, read-only, read-write, and admin-access.
 
 ## Self-service signup
 
-A brand-new user does not need an admin to get started. Connecting with an SSH
-key that is not yet registered drops you into a restricted session whose only
-command is `signup`: pick a username and the key you connected with is bound to
-your new account.
+A brand-new user does not need an admin to get started. Everything is unified into a single command that handles account registration and client configuration (`~/.ssh/config`, multiplexing, multi-account setup):
 
 ```sh
-# Register yourself; the key you connect with becomes your account key
+# Unified signup & client onboarding in one command:
+# Linux / macOS:
+ssh codes.sh signup | bash
+
+# Windows (PowerShell):
+ssh codes.sh signup | iex
+
+# You can also pass your desired username directly:
+ssh codes.sh signup beatrice | bash
+
+# Or direct non-interactive CLI registration:
 ssh -p 23231 localhost signup beatrice
 
-# Or register a different public key than the one you connected with
+# Or register a different public key than the one you connected with:
 ssh -p 23231 localhost signup beatrice -k "ssh-ed25519 AAAA..."
 ```
 
