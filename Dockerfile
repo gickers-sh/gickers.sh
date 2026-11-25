@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 # ---- Stage 1: build the static codes-ssh gateway (pure Go, no CGO) ----
 FROM golang:1.26-bookworm AS ssh-build
 WORKDIR /src

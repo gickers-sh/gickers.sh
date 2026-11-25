@@ -2,7 +2,7 @@
 #
 # One shared image (PHP app + FrankenPHP + the Go codes-ssh gateway) runs four
 # roles against one shared `.data` volume and a Postgres database:
-#   init    one-shot: data dir, migrations, cache warmup, bootstrap, JWT keys
+#   init    one-shot: data dir, migrations, cache warmup, bootstrap, host keys
 #   http    FrankenPHP worker mode (binds :80 inside the container)
 #   ssh     codes-ssh gateway
 #   worker  Messenger consumer (async + scheduler)
@@ -38,7 +38,9 @@ x-app: &app
     SOFT_SERVE_ALLOW_KEYLESS: ${SOFT_SERVE_ALLOW_KEYLESS:-true}
     SOFT_SERVE_INITIAL_ADMIN_KEYS: ${SOFT_SERVE_INITIAL_ADMIN_KEYS:-}
     SOFT_SERVE_WEBHOOK_ALLOW_LIST: ${SOFT_SERVE_WEBHOOK_ALLOW_LIST:-}
-    DOCKER_HOST: ${DOCKER_HOST:-tcp://docker-socket-proxy:2375}
+    DOCKER_HOST: ${DOCKER_HOST:-tcp://deploy-dockerd:2375}
+    DEPLOY_GATEWAY_HOST: ${DEPLOY_GATEWAY_HOST:-deploy-dockerd}
+    DEPLOY_DOCKER_RUNTIME: ${DEPLOY_DOCKER_RUNTIME:-runsc}
     CADDY_TLS: ${CADDY_TLS:-}
   volumes:
     - ./:/app
@@ -48,9 +50,25 @@ x-app: &app
   develop:
     watch:
       - action: rebuild
+        path: ./Dockerfile
+      - action: rebuild
+        path: ./composer.json
+      - action: rebuild
         path: ./composer.lock
       - action: rebuild
         path: ./cmd/codes-ssh
+      - action: rebuild
+        path: ./migrations
+      - action: rebuild
+        path: ./src/Wiki/Application/DefaultWikiPages.php
+      - action: rebuild
+        path: ./src/Identity/Application/BootstrapServer.php
+      - action: restart
+        path: ./Caddyfile
+      - action: restart
+        path: ./.env
+      - action: restart
+        path: ./.env.docker
 
 services:
   postgres:
@@ -87,13 +105,15 @@ services:
       - "${HTTPS_PORT:-443}:443"
     networks:
       - codes-internal
-      - codes-proxy
+      - codes-deploy-gateway
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       init:
         condition: service_completed_successfully
+      deploy-dockerd:
+        condition: service_healthy
 
   ssh:
     <<: *app
@@ -105,36 +125,39 @@ services:
       CADDY_ADMIN_ADDR: http:2019
     networks:
       - codes-internal
-      - codes-proxy
+      - codes-deploy-gateway
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       init:
         condition: service_completed_successfully
-      docker-socket-proxy:
-        condition: service_started
+      deploy-dockerd:
+        condition: service_healthy
 
-  docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:latest
+  deploy-dockerd:
+    build:
+      context: .
+      dockerfile: docker/deploy-engine/Dockerfile
+    image: codes-sh-deploy-engine:latest
+    privileged: true
     environment:
-      PING: 1
-      VERSION: 1
-      CONTAINERS: 1
-      IMAGES: 1
-      NETWORKS: 1
-      VOLUMES: 1
-      BUILD: 1
-      SESSION: 1
-      COMMIT: 1
-      EXEC: 1
-      INFO: 1
-      POST: 1
+      DEPLOY_GVISOR_PLATFORM: ${DEPLOY_GVISOR_PLATFORM:-systrap}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - codes-deploy-engine:/var/lib/docker
     networks:
-      - codes-internal
+      - codes-deploy-gateway
     restart: unless-stopped
+    develop:
+      watch:
+        - action: rebuild
+          path: ./docker/deploy-engine
+    healthcheck:
+      test: ["CMD-SHELL", "docker info >/dev/null 2>&1"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
 
   worker:
     <<: *app
@@ -144,24 +167,41 @@ services:
       CADDY_ADMIN_ADDR: http:2019
     networks:
       - codes-internal
-      - codes-proxy
+      - codes-deploy-gateway
     restart: unless-stopped
+    develop:
+      watch:
+        - action: restart
+          path: ./src
+        - action: restart
+          path: ./config
+        - action: restart
+          path: ./.env
+        - action: restart
+          path: ./.env.docker
+        - action: rebuild
+          path: ./Dockerfile
+        - action: rebuild
+          path: ./composer.json
+        - action: rebuild
+          path: ./composer.lock
     depends_on:
       postgres:
         condition: service_healthy
       init:
         condition: service_completed_successfully
-      docker-socket-proxy:
-        condition: service_started
+      deploy-dockerd:
+        condition: service_healthy
 
 networks:
   codes-internal:
     driver: bridge
-  codes-proxy:
-    name: codes-proxy
+  codes-deploy-gateway:
+    name: codes-deploy-gateway
     driver: bridge
 
 volumes:
   codes-data:
   codes-db:
   codes-var:
+  codes-deploy-engine:

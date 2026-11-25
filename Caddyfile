@@ -17,7 +17,10 @@ codes.sh, *.codes.sh {
 		worker {
 			file public/index.php
 			env FRANKENPHP_WORKER true
-			watch
+			watch ./src/**/*.php
+			watch ./config/**/*.{yaml,yml,php}
+			watch ./templates/**/*.twig
+			watch ./.env*
 		}
 	}
 }
@@ -32,7 +35,10 @@ codes.sh, *.codes.sh {
 		worker {
 			file public/index.php
 			env FRANKENPHP_WORKER true
-			watch
+			watch ./src/**/*.php
+			watch ./config/**/*.{yaml,yml,php}
+			watch ./templates/**/*.twig
+			watch ./.env*
 		}
 	}
 }

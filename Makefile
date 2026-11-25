@@ -129,23 +129,27 @@ docker-env:
 
 ## docker-build: Build the shared container image (Go gateway + PHP app)
 docker-build: docker-env
-	$(DC) build
+	$(DC) build init deploy-dockerd
 
 ## docker-up: Start the full stack (postgres, init, http, ssh, worker) in the background
 docker-up: docker-env
-	$(DC) up -d --build
+	$(DC) build init deploy-dockerd
+	$(DC) up -d --no-build --remove-orphans
 	@set -a; . ./$(DOCKER_ENV_FILE); set +a; \
 		echo ">> HTTP: $${SOFT_SERVE_HTTP_PUBLIC_URL:-http://localhost:$${HTTP_PORT:-80}} (host port $${HTTP_PORT:-80})"; \
 		echo ">> SSH:  $${SOFT_SERVE_SSH_PUBLIC_URL:-ssh://localhost:$${SSH_PORT:-2223}} (host port $${SSH_PORT:-2223})"
 
 ## docker-watch: Start stack and follow with docker compose watch for hot reload
 docker-watch: docker-env
-	$(DC) up -d --build
-	$(DC) watch
+	@pkill -f "docker.*compose.*watch" 2>/dev/null || true
+	$(DC) build init deploy-dockerd
+	$(DC) up -d --no-build --remove-orphans
+	$(DC) watch --no-up
 
 ## docker-down: Stop the stack (add ARGS=-v to also drop volumes/data)
 docker-down:
-	$(DC) down $(ARGS)
+	@pkill -f "docker.*compose.*watch" 2>/dev/null || true
+	$(DC) down --remove-orphans $(ARGS)
 
 ## docker-logs: Follow logs (optionally SERVICE=http|ssh|worker|init|postgres)
 docker-logs:
