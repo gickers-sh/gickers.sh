@@ -1,0 +1,14 @@
+<div class="wiki-header" style="width: 100%;">
+    <div class="breadcrumbs" style="padding-left: 1;">
+        <span style="color: #565f89;">Wiki</span>
+        <span style="color: #3b4261;"> / </span>
+        <span style="color: #7dcfff;">{{ category }}</span>
+        <span style="color: #3b4261;"> / </span>
+        <span style="color: #7aa2f7; font-weight: bold;">{{ title }}</span>
+        <span style="color: #565f89;"> ({{ slug }})</span>
+        {% if updated is defined and updated != '' %}
+            <span style="color: #565f89;"> · Updated {{ updated }}</span>
+        {% endif %}
+    </div>
+    <div style="border-bottom: 1px solid #3b4261; width: 100%; margin-top: 1;"></div>
+</div>

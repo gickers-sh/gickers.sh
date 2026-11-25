@@ -12,7 +12,10 @@ use App\Repo\Application\Query\RepoQuery;
 use App\Repo\Domain\RepoDirectory;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
 use App\Shared\Infrastructure\Config\ServerSettings;
+use App\UI\Tui\Builder\TuiViewBuilder;
 use App\UI\Tui\Render\TermstrapRenderer;
+use App\UI\Tui\Render\TwigTuiRenderer;
+use App\Wiki\Application\Query\WikiQuery;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Tui\Terminal\TerminalInterface;
 
@@ -32,6 +35,9 @@ final class TuiAppFactory
         private readonly RepoDirectory $repoDirectory,
         private readonly ?LoggerInterface $logger = null,
         private readonly ?QueryDeployments $queryDeployments = null,
+        private readonly ?WikiQuery $wikiQuery = null,
+        private readonly ?TwigTuiRenderer $twigTui = null,
+        private readonly ?TuiViewBuilder $builder = null,
     ) {
     }
 
@@ -54,6 +60,9 @@ final class TuiAppFactory
                 $this->repoDirectory,
                 $this->logger,
                 $this->queryDeployments,
+                $this->wikiQuery,
+                $this->twigTui,
+                $this->builder,
             ),
             $this->logger,
         );

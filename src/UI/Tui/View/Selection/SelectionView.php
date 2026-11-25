@@ -14,7 +14,7 @@ use Symfony\Component\Tui\Input\Key;
 
 final class SelectionView extends View
 {
-    public const TABS = ['About', 'Feed', 'My Repositories', 'Profile'];
+    public const TABS = ['About', 'Feed', 'My Repositories', 'Profile', 'Wiki'];
 
     private int $activeTab = 0;
     private readonly TabBarWidget $tabBar;
@@ -23,6 +23,7 @@ final class SelectionView extends View
     private readonly array $panes;
     private readonly RepoListPane $feedPane;
     private readonly RepoListPane $ownedPane;
+    private readonly WikiPane $wikiPane;
     private ?string $flash = null;
 
     public function __construct(private readonly Views $views)
@@ -43,11 +44,13 @@ final class SelectionView extends View
 
         $this->feedPane = new RepoListPane($this->views, false, $onTab, $onFlash);
         $this->ownedPane = new RepoListPane($this->views, true, $onTab, $onFlash);
+        $this->wikiPane = new WikiPane($this->views, $onTab, $onFlash);
         $this->panes = [
             new AboutPane($this->views),
             $this->feedPane,
             $this->ownedPane,
-            new ProfilePane($this->views->session()->actor),
+            new ProfilePane($this->views->session()->actor, $this->views->twigTui),
+            $this->wikiPane,
         ];
 
         $this->chrome = new ChromeWidget($this->tabBar, $this->panes[0]);
@@ -129,6 +132,11 @@ final class SelectionView extends View
         return $this->panes[$this->activeTab]->keyHints();
     }
 
+    public function activeTab(): int
+    {
+        return $this->activeTab;
+    }
+
     public function selectTab(int $index): void
     {
         if ($index < 0 || $index >= \count($this->panes) || $index === $this->activeTab) {
@@ -136,7 +144,7 @@ final class SelectionView extends View
         }
 
         $currentPane = $this->panes[$this->activeTab];
-        if ($currentPane instanceof RepoListPane) {
+        if ($currentPane instanceof RepoListPane || $currentPane instanceof WikiPane) {
             $currentPane->leave();
         }
 

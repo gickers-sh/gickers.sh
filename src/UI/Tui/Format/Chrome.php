@@ -13,11 +13,23 @@ use App\UI\Tui\Render\Theme;
  */
 final class Chrome
 {
+    private static ?\App\UI\Tui\Render\TwigTuiRenderer $defaultTwigTui = null;
+
+    public static function setDefaultRenderer(?\App\UI\Tui\Render\TwigTuiRenderer $renderer): void
+    {
+        self::$defaultTwigTui = $renderer;
+    }
+
     /**
      * A single-line fuzzy search input bar (`"  / <query>▏"`).
      */
     public static function fuzzySearchBar(string $query, int $width): string
     {
+        if (null !== self::$defaultTwigTui) {
+            $lines = self::$defaultTwigTui->renderLines('@tui/chrome/search_bar.html.twig', ['query' => $query], $width);
+            return $lines[0] ?? '';
+        }
+
         $prefix = '  '.Theme::style('/', Theme::HIGHLIGHT, bold: true).' ';
         $text = Theme::style($query, Theme::FG, bold: true).'▏';
 
@@ -33,6 +45,11 @@ final class Chrome
      */
     public static function tabBar(array $labels, int $active, int $width): string
     {
+        if (null !== self::$defaultTwigTui) {
+            $lines = self::$defaultTwigTui->renderLines('@tui/chrome/tab_bar.html.twig', ['labels' => $labels, 'active' => $active], $width);
+            return $lines[0] ?? '';
+        }
+
         $sep = Theme::style(' │ ', Theme::BORDER2);
         $parts = [];
         foreach ($labels as $i => $label) {
@@ -52,6 +69,11 @@ final class Chrome
      */
     public static function tabBarDots(array $labels, int $active, int $width): string
     {
+        if (null !== self::$defaultTwigTui) {
+            $lines = self::$defaultTwigTui->renderLines('@tui/chrome/tab_bar_dots.html.twig', ['labels' => $labels, 'active' => $active], $width);
+            return $lines[0] ?? '';
+        }
+
         $parts = [];
         foreach ($labels as $i => $label) {
             $parts[] = $i === $active
@@ -69,6 +91,11 @@ final class Chrome
      */
     public static function helpLine(array $pairs, int $width): string
     {
+        if (null !== self::$defaultTwigTui) {
+            $lines = self::$defaultTwigTui->renderLines('@tui/chrome/footer.html.twig', ['pairs' => $pairs], $width);
+            return $lines[0] ?? '';
+        }
+
         $divider = Theme::style(' • ', Theme::BORDER2);
         $segs = [];
         foreach ($pairs as [$k, $d]) {
@@ -99,33 +126,58 @@ final class Chrome
      */
     public static function serverBadge(string $text): string
     {
+        if (null !== self::$defaultTwigTui) {
+            $lines = self::$defaultTwigTui->renderLines('@tui/chrome/server_badge.html.twig', ['text' => $text], 40);
+            return $lines[0] ?? '';
+        }
+
         return self::badge($text, Theme::FG, Theme::SERVER_BG);
     }
 
     /**
      * Repository header: name (bold blue) with a right-aligned clone command
-     * (purple), an optional italic description, then a horizontal rule.
+     * (purple, or wrapped onto its own line when the terminal is too narrow),
+     * an optional italic description (wrapped across lines), then a horizontal rule.
      *
      * @return list<string>
      */
     public static function repoHeader(string $name, string $desc, string $cloneCmd, int $width): array
     {
+        if (null !== self::$defaultTwigTui) {
+            return self::$defaultTwigTui->renderLines('@tui/pages/user/repo/header.html.twig', [
+                'name' => $name,
+                'desc' => $desc,
+                'clone' => $cloneCmd,
+            ], $width);
+        }
+
         $nameR = Theme::style($name, Theme::BLUE, bold: true);
         $nameW = Ansi::width($nameR);
-        $top = $nameR;
         $cloneCmd = trim($cloneCmd);
+        $out = [];
+
         if ('' !== $cloneCmd) {
-            $url = Ansi::truncate($cloneCmd, max(0, $width - $nameW - 1));
-            $urlR = Theme::style($url, Theme::HIGHLIGHT);
-            $pad = max(1, $width - $nameW - Ansi::width($urlR));
-            $top = $nameR.str_repeat(' ', $pad).$urlR;
+            $cloneW = mb_strwidth($cloneCmd, 'UTF-8');
+            if ($nameW + 2 + $cloneW <= $width) {
+                $urlR = Theme::style($cloneCmd, Theme::HIGHLIGHT);
+                $pad = max(1, $width - $nameW - $cloneW);
+                $out[] = Ansi::fit($nameR.str_repeat(' ', $pad).$urlR, $width);
+            } else {
+                $out[] = Ansi::fit($nameR, $width);
+                foreach (Ansi::wrap($cloneCmd, $width) as $wLine) {
+                    $out[] = Ansi::fit(Theme::style($wLine, Theme::HIGHLIGHT), $width);
+                }
+            }
+        } else {
+            $out[] = Ansi::fit($nameR, $width);
         }
-        $out = [Ansi::fit($top, $width)];
 
         $desc = trim($desc);
         if ('' !== $desc) {
             $desc = preg_split('/\r\n|\r|\n/', $desc)[0] ?? $desc;
-            $out[] = Ansi::fit(Theme::style(Ansi::truncate($desc, $width), Theme::FG_DIM, italic: true), $width);
+            foreach (Ansi::wrap($desc, $width) as $wDesc) {
+                $out[] = Ansi::fit(Theme::style($wDesc, Theme::FG_DIM, italic: true), $width);
+            }
         }
         $out[] = self::rule($width);
 

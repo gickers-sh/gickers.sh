@@ -1,0 +1,25 @@
+{# User Profile Pane #}
+<div class="profile-pane" style="width: 100%; padding: 1;">
+    <div style="margin-bottom: 1;">
+        <span style="color: #565f89;">Username: </span>
+        <span style="color: #7aa2f7; font-weight: bold;">{{ user.username }}</span>
+        {% if user.isAdmin %}
+            <span class="badge badge-selector" style="margin-left: 1;">ADMIN</span>
+        {% endif %}
+    </div>
+
+    <div style="margin-bottom: 1; color: #a9b1d6;">
+        <div><span style="color: #565f89;">Role: </span>{{ user.isAdmin ? 'administrator' : 'user' }}</div>
+        <div><span style="color: #565f89;">Keys: </span>{{ user.publicKeys|length }}</div>
+        <div><span style="color: #565f89;">Repositories: </span>{{ repo_count|default(0) }}</div>
+    </div>
+
+    <div style="border-top: 1px solid #292e42; padding-top: 1;">
+        <div style="color: #7dcfff; font-weight: bold; margin-bottom: 1;">Authorized SSH Keys:</div>
+        {% for key in user.publicKeys %}
+            <div style="color: #565f89; font-family: monospace;">{{ key.fingerprint }} ({{ key.type }})</div>
+        {% else %}
+            <div style="color: #565f89; font-style: italic;">No public keys registered yet.</div>
+        {% endfor %}
+    </div>
+</div>

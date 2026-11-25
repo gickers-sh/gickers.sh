@@ -17,6 +17,33 @@ use App\UI\Tui\Render\Theme;
  */
 final class HelpRenderer
 {
+    public function __construct(
+        private readonly ?\Twig\Environment $twig = null,
+        private readonly ?\App\UI\Tui\Render\TwigTuiRenderer $twigTui = null,
+    ) {
+    }
+
+    public function renderTemplate(CommandSpec $command, string $sshCommand, int $width = 80): string
+    {
+        if (null !== $this->twigTui) {
+            return $this->twigTui->render('@cli/help/command.html.twig', [
+                'command' => $command,
+                'ssh_command' => $sshCommand,
+                'flags' => $command->flags,
+            ], $width);
+        }
+
+        if (null !== $this->twig) {
+            return (string) $this->twig->render('@cli/help/command.html.twig', [
+                'command' => $command,
+                'ssh_command' => $sshCommand,
+                'flags' => $command->flags,
+            ]);
+        }
+
+        return $this->render($command, $sshCommand, decorated: true);
+    }
+
     /**
      * @param string $sshCommand the "ssh [-p PORT] HOST" prefix, derived from the SSH public URL
      */

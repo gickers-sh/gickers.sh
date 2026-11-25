@@ -123,6 +123,118 @@ final class Ansi
     }
 
     /**
+     * Responsive word-wrapper for plain-text strings: wraps on natural separators
+     * (`" · "`, `", "`, `" "`) when possible, falling back to character-level
+     * wrapping only for single tokens wider than $maxWidth (such as long URLs or SHAs).
+     *
+     * @param string $continuationIndent prefix added to wrapped lines after line 0
+     *
+     * @return list<string>
+     */
+    public static function wrap(string $text, int $maxWidth, string $continuationIndent = ''): array
+    {
+        $text = trim($text);
+        if ($maxWidth <= 0 || '' === $text) {
+            return [''];
+        }
+        if (mb_strwidth($text, 'UTF-8') <= $maxWidth) {
+            return [$text];
+        }
+
+        // Split by spaces while preserving punctuation and middots
+        $words = preg_split('/(\s+)/u', $text, -1, \PREG_SPLIT_NO_EMPTY);
+        if (false === $words) {
+            return [$text];
+        }
+
+        $indentWidth = mb_strwidth($continuationIndent, 'UTF-8');
+        $contMax = max(8, $maxWidth - $indentWidth);
+
+        $lines = [];
+        $current = '';
+        $limit = $maxWidth;
+
+        foreach ($words as $word) {
+            $wordWidth = mb_strwidth($word, 'UTF-8');
+            $curWidth = mb_strwidth($current, 'UTF-8');
+
+            if ('' === $current) {
+                if ($wordWidth <= $limit) {
+                    $current = $word;
+                } else {
+                    foreach (self::hardSplit($word, $limit, $contMax) as $idx => $chunk) {
+                        if ($idx > 0) {
+                            $lines[] = ([] === $lines ? '' : $continuationIndent).$current;
+                            $limit = $contMax;
+                        }
+                        $current = $chunk;
+                    }
+                }
+                continue;
+            }
+
+            if ($curWidth + 1 + $wordWidth <= $limit) {
+                $current .= ' '.$word;
+                continue;
+            }
+
+            $lines[] = ([] === $lines ? '' : $continuationIndent).$current;
+            $limit = $contMax;
+
+            // Skip leading bullet separator on a fresh wrapped line for cleaner visual alignment
+            if ('·' === $word) {
+                $current = '';
+                continue;
+            }
+
+            if ($wordWidth <= $limit) {
+                $current = $word;
+            } else {
+                foreach (self::hardSplit($word, $limit, $contMax) as $idx => $chunk) {
+                    if ($idx > 0) {
+                        $lines[] = $continuationIndent.$current;
+                    }
+                    $current = $chunk;
+                }
+            }
+        }
+
+        if ('' !== $current || [] === $lines) {
+            $lines[] = ([] === $lines ? '' : $continuationIndent).$current;
+        }
+
+        return $lines;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function hardSplit(string $token, int $firstLimit, int $nextLimit): array
+    {
+        $chunks = [];
+        $current = '';
+        $w = 0;
+        $limit = max(1, $firstLimit);
+        foreach (self::graphemes($token) as $g) {
+            $gw = mb_strwidth($g, 'UTF-8');
+            if ($w + $gw > $limit && '' !== $current) {
+                $chunks[] = $current;
+                $current = $g;
+                $w = $gw;
+                $limit = max(1, $nextLimit);
+            } else {
+                $current .= $g;
+                $w += $gw;
+            }
+        }
+        if ('' !== $current) {
+            $chunks[] = $current;
+        }
+
+        return [] !== $chunks ? $chunks : [''];
+    }
+
+    /**
      * @return list<string>
      */
     private static function graphemes(string $s): array

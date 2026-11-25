@@ -46,7 +46,7 @@ final class RepoListPane extends View
             $clone = $this->cloneCommand($name);
             $updated = 'Updated ' . Time::ago($item->updatedAt());
 
-            $rows = Rows::repo($name, $desc, $clone, $updated, $selected, $cols);
+            $rows = Rows::repo($name, $desc, $clone, $updated, $selected, $cols, $this->views->twigTui);
 
             return array_merge($prefix, $rows);
         });

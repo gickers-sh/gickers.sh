@@ -1,0 +1,16 @@
+{% embed '@tui/components/modal.html.twig' with { title: title } %}
+    {% block body %}
+        <div style="color: #c0caf5; margin-bottom: 1;">
+            {{ message|default('') }}
+        </div>
+        {% if choices is defined and choices|length > 0 %}
+        <div style="display: flex; gap: 2;">
+            {% for choice in choices %}
+                <span class="badge {{ choice.selected ? 'badge-selector' : 'badge-cyan' }}">
+                    [{{ choice.label }}]
+                </span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% endblock %}
+{% endembed %}

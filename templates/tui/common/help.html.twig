@@ -1,0 +1,25 @@
+{% embed '@tui/components/modal.html.twig' with { title: title|default('Keyboard Shortcuts') } %}
+    {% block body %}
+        <table style="width: 100%; border: none;">
+            <tbody>
+            {% for group in groups|default([]) %}
+                <tr>
+                    <td colspan="2" style="color: #7dcfff; font-weight: bold; padding-top: 1;">
+                        {{ group.name }}
+                    </td>
+                </tr>
+                {% for item in group.shortcuts %}
+                <tr>
+                    <td style="color: #ff9e64; font-weight: bold; width: 30%;">
+                        {{ item.key }}
+                    </td>
+                    <td style="color: #a9b1d6;">
+                        {{ item.description }}
+                    </td>
+                </tr>
+                {% endfor %}
+            {% endfor %}
+            </tbody>
+        </table>
+    {% endblock %}
+{% endembed %}

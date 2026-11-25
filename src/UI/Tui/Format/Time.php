@@ -75,4 +75,35 @@ final class Time
 
         return $d.(1 === $d ? ' day ago' : ' days ago');
     }
+
+    /**
+     * Compact uptime / elapsed duration formatter from a start timestamp up to now
+     * (e.g. "42s", "15m 10s", "3h 24m", "5d 12h").
+     */
+    public static function uptime(\DateTimeImmutable|int $since): string
+    {
+        $timestamp = $since instanceof \DateTimeImmutable ? $since->getTimestamp() : $since;
+        $seconds = max(0, time() - $timestamp);
+
+        if ($seconds < 60) {
+            return $seconds.'s';
+        }
+        if ($seconds < 3600) {
+            $m = intdiv($seconds, 60);
+            $s = $seconds % 60;
+
+            return $s > 0 ? sprintf('%dm %ds', $m, $s) : sprintf('%dm', $m);
+        }
+        if ($seconds < 86400) {
+            $h = intdiv($seconds, 3600);
+            $m = intdiv($seconds % 3600, 60);
+
+            return $m > 0 ? sprintf('%dh %dm', $h, $m) : sprintf('%dh', $h);
+        }
+
+        $d = intdiv($seconds, 86400);
+        $h = intdiv($seconds % 86400, 3600);
+
+        return $h > 0 ? sprintf('%dd %dh', $d, $h) : sprintf('%dd', $d);
+    }
 }

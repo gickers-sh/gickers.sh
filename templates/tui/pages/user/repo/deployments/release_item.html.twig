@@ -1,0 +1,18 @@
+{% embed '@tui/components/list_card.html.twig' with { selected: selected, extra_class: 'deployment-release' } %}
+    {% block title %}
+        <span class="release-id">#{{ id }}</span>
+        {% if ref_name or is_latest %}
+            <span class="card-meta">({{ [ref_name, is_latest ? 'latest' : '']|filter(v => v != '')|join(' · ') }})</span>
+        {% endif %}
+        <span class="badge badge-{{ status }}">[{{ status }}]</span>
+        {% if uptime %}<span class="card-uptime">up {{ uptime }}</span>{% endif %}
+    {% endblock %}
+    {% block meta %}<span class="card-hash">{{ short_sha|default('none') }}</span>{% endblock %}
+    {% block body %}
+        <div class="card-desc">Commit: {{ full_sha|default(short_sha|default('none')) }} · Triggered by: {{ triggered_by|default('system') }}</div>
+        <div class="card-desc">Started: {{ started_at }} · Build duration: {{ duration }}{% if uptime %} · Uptime: {{ uptime }}{% endif %}</div>
+        {% if log_summary %}
+            <div class="card-log {{ '[error]' in log_summary ? 'error' : '' }}">Output: {{ log_summary }}</div>
+        {% endif %}
+    {% endblock %}
+{% endembed %}

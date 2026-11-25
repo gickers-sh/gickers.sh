@@ -4,6 +4,13 @@ declare(strict_types=1);
 
 namespace App\Tests\Functional\Tui;
 
+use App\Deploy\Domain\DeployRefType;
+use App\Deploy\Domain\DeployStatus;
+use App\Deploy\Domain\DeployStore;
+use App\Deploy\Domain\Model\DeployDomain;
+use App\Deploy\Domain\Model\DeployEnvironment;
+use App\Deploy\Domain\Model\DeployEnvVar;
+use App\Deploy\Domain\Model\DeployRelease;
 use App\Identity\Domain\Model\User;
 use App\Identity\Domain\UserStore;
 use App\Repo\Application\CreateRepo;
@@ -30,6 +37,7 @@ final class TuiFunctionalTest extends KernelTestCase
     private CreateRepo $createRepo;
     private GitRepositoryReader $gitReader;
     private RepoDirectory $repoDirectory;
+    private DeployStore $deployStore;
     /** @var list<string> */
     private array $tempDirs = [];
 
@@ -43,6 +51,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $this->createRepo = $container->get(CreateRepo::class);
         $this->gitReader = $container->get(GitRepositoryReader::class);
         $this->repoDirectory = $container->get(RepoDirectory::class);
+        $this->deployStore = $container->get(DeployStore::class);
     }
 
     protected function tearDown(): void
@@ -154,6 +163,11 @@ final class TuiFunctionalTest extends KernelTestCase
         $this->assertStringContainsString('Username', $output);
         $this->assertStringContainsString('alice', $output);
 
+        // Switch to Wiki
+        $vt->simulateInput("\t");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('Wiki', $output);
+
         // Tab back to About
         $vt->simulateInput("\t");
         $output = $this->tickUntilSettled($tui, $vt);
@@ -212,7 +226,7 @@ final class TuiFunctionalTest extends KernelTestCase
 
         $tui->start();
         $initialOutput = $this->tickUntilSettled($tui, $vt);
-        $this->assertStringContainsString('Soft Serve', $initialOutput);
+        $this->assertTrue(str_contains($initialOutput, 'Codes.sh') || str_contains($initialOutput, 'Soft Serve'));
         $this->assertStringContainsString('About', $initialOutput);
 
         // Open expanded help grid
@@ -232,7 +246,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $this->assertStringContainsString('go to end', $screenText);
         $this->assertStringContainsString('toggle help', $screenText);
         // Ensure header and main selection page content remain visible above the helper
-        $this->assertStringContainsString('Soft Serve', $screenText);
+        $this->assertTrue(str_contains($screenText, 'Codes.sh') || str_contains($screenText, 'Soft Serve'));
         $this->assertStringContainsString('About', $screenText);
         $this->assertStringContainsString('No readme found.', $screenText);
 
@@ -240,7 +254,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $headerLineIndex = null;
         $helpLineIndex = null;
         foreach ($screenLines as $idx => $line) {
-            if (null === $headerLineIndex && str_contains($line, 'Soft Serve')) {
+            if (null === $headerLineIndex && (str_contains($line, 'Soft Serve') || str_contains($line, 'Codes.sh'))) {
                 $headerLineIndex = $idx;
             }
             if (null === $helpLineIndex && str_contains($line, 'toggle help')) {
@@ -654,6 +668,136 @@ final class TuiFunctionalTest extends KernelTestCase
         // RepoPage chrome (tab bar + status) is now visible — proves the click opened the repo.
         $this->assertStringContainsString('Commits', $output);
         $this->assertStringContainsString('? Help', $output);
+
+        $tui->stop();
+    }
+
+    public function testDeploymentsTabListAndDetailedDisplayView(): void
+    {
+        $user = new User('deploy-tui-' . uniqid(), true, new \DateTimeImmutable());
+        $this->userStore->save($user);
+
+        $repo = ($this->createRepo)($user, 'deploy-tui-app-' . uniqid(), false, false, 'Deployable TUI repo');
+        $repoPath = $this->repoDirectory->pathFor($repo->name());
+        $gitRepo = $this->gitReader->openRepository($repoPath);
+
+        GitTestHelper::writeFile($gitRepo, 'main', 'Dockerfile', "FROM alpine\n", 'Initial deploy commit');
+
+        $now = new \DateTimeImmutable();
+        $envMain = new DeployEnvironment($repo, 'main', DeployRefType::Branch, $now);
+        $envMain->markDeployed('04a54bef59c494670dac37af76384308cf2552b3', $now);
+        $this->deployStore->saveEnvironment($envMain);
+
+        $domain = new DeployDomain($envMain, 'prod.codes.sh', 'web', 8080, $now);
+        $this->deployStore->saveDomain($domain);
+
+        $envVar = new DeployEnvVar($envMain, 'APP_SECRET_KEY', 'super-secret-encrypted-val', $now);
+        $this->deployStore->saveEnvVar($envVar);
+
+        $rel1 = new DeployRelease($envMain, '04a54bef59c494670dac37af76384308cf2552b3', $user, $now);
+        $rel1->appendLog("==> Building release 1\n[error] healthcheck failed\n");
+        $rel1->markFailed('healthcheck failed', $now->modify('+4 seconds'));
+        $this->deployStore->saveRelease($rel1);
+
+        $rel2 = new DeployRelease($envMain, '04a54bef59c494670dac37af76384308cf2552b3', $user, $now->modify('+10 seconds'));
+        $rel2->appendLog("==> Building release 2\n==> Deployment succeeded.\n");
+        $rel2->markSucceeded($now->modify('+22 seconds'));
+        $this->deployStore->saveRelease($rel2);
+
+        $envStaging = new DeployEnvironment($repo, 'staging', DeployRefType::Branch, $now);
+        $envStaging->setStatus(DeployStatus::Stopped, $now);
+        $this->deployStore->saveEnvironment($envStaging);
+
+        $vt = new VirtualTerminal(120, 60);
+        $app = $this->apps->create($vt, $user, true);
+        $app->start($app->views()->repoByName($repo->nameString()));
+        $tui = $app->tui();
+
+        $tui->start();
+        $initial = $this->tickUntilSettled($tui, $vt);
+        $this->assertStringContainsString('Deployments', $initial);
+
+        // Switch to Deployments tab (shortcut 6)
+        $vt->simulateInput('6');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plainList = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+
+        $this->assertStringContainsString('main (branch)', $plainList);
+        $this->assertStringContainsString('[running]', $plainList);
+        $this->assertStringContainsString('Uptime:', $plainList);
+        $this->assertStringContainsString('04a54be', $plainList);
+        $this->assertStringContainsString('prod.codes.sh -> web:8080', $plainList);
+        $this->assertStringContainsString('staging (branch)', $plainList);
+        $this->assertStringContainsString('[stopped]', $plainList);
+        $this->assertStringContainsString('Uptime: — (stopped)', $plainList);
+        $this->assertStringContainsString('# 1/2', $plainList);
+
+        // Fuzzy filter deployments with '/'
+        $vt->simulateInput('/');
+        $this->tickUntilSettled($tui, $vt);
+        $vt->simulateInput('prod.codes');
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plainFiltered = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('main (branch)', $plainFiltered);
+        $this->assertStringNotContainsString('staging (branch)', $plainFiltered);
+        $this->assertStringContainsString('# 1/1', $plainFiltered);
+
+        // Press Enter on 'main' to open the DeploymentReleasesView (list of releases for 'main', same card style as DeploymentsPane)
+        $vt->simulateInput("\r");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plainReleasesList = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+
+        $this->assertStringContainsString('#' . $rel2->id() . ' (main · latest)  [succeeded]', $plainReleasesList);
+        $this->assertStringContainsString('#' . $rel1->id() . ' (main)  [failed]', $plainReleasesList);
+        $this->assertStringContainsString('Commit: 04a54bef59c494670dac37af76384308cf2552b3 · Triggered by: @' . $user->username(), $plainReleasesList);
+        $this->assertStringContainsString('Uptime:', $plainReleasesList);
+        $this->assertStringContainsString('Output: ==> Deployment succeeded.', $plainReleasesList);
+        $this->assertStringContainsString('Output: [error] healthcheck failed', $plainReleasesList);
+        $this->assertStringContainsString('04a54be', $plainReleasesList);
+        $this->assertStringContainsString('# 1/2', $plainReleasesList);
+
+        // Press Enter on the latest release (#2) to open the full Display view (DeploymentView)
+        $vt->simulateInput("\r");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plainDetail = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+
+        // Environment metadata, uptime, selected release details, quota, domains, masked env vars, CLI commands & logs
+        $this->assertStringContainsString('Deployment Environment · main · Release #' . $rel2->id(), $plainDetail);
+        $this->assertStringContainsString('refs/heads/main', $plainDetail);
+        $this->assertStringContainsString('running since', $plainDetail);
+        $this->assertStringContainsString('04a54be (04a54bef59c494670dac37af76384308cf2552b3)', $plainDetail);
+        $this->assertStringContainsString('Selected Release · #' . $rel2->id() . ' (latest)', $plainDetail);
+        $this->assertStringContainsString('Resource Quota', $plainDetail);
+        $this->assertStringContainsString('512 MB RAM', $plainDetail);
+        $this->assertStringContainsString('https://prod.codes.sh -> web:8080', $plainDetail);
+        $this->assertStringContainsString('APP_SECRET_KEY=••••••••', $plainDetail);
+        $this->assertStringNotContainsString('super-secret-encrypted-val', $plainDetail);
+        $this->assertStringContainsString('repo deploy redeploy ' . $repo->nameString() . ' main', $plainDetail);
+        $this->assertStringContainsString('Deployment succeeded.', $plainDetail);
+
+        // Press Esc to return to the Releases list (DeploymentReleasesView)
+        $vt->simulateInput("\e");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plainBackToReleases = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('#' . $rel2->id() . ' (main · latest)  [succeeded]', $plainBackToReleases);
+
+        // Navigate down with Down Arrow ("\e[B") to select Release #1 in the list, then press Enter to open its Display view
+        $vt->simulateInput("\e[B");
+        $this->tickUntilSettled($tui, $vt);
+        $vt->simulateInput("\r");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plainRel1Detail = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('Deployment Environment · main · Release #' . $rel1->id(), $plainRel1Detail);
+        $this->assertStringContainsString('Selected Release · #' . $rel1->id(), $plainRel1Detail);
+        $this->assertStringContainsString('healthcheck failed', $plainRel1Detail);
+
+        // Press Esc to return to DeploymentReleasesView, then Esc again to return to DeploymentsPane
+        $vt->simulateInput("\e");
+        $this->tickUntilSettled($tui, $vt);
+        $vt->simulateInput("\e");
+        $output = $this->tickUntilSettled($tui, $vt);
+        $plainBack = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
+        $this->assertStringContainsString('staging (branch)', $plainBack);
 
         $tui->stop();
     }

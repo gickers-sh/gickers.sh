@@ -23,7 +23,7 @@ use Symfony\Component\Tui\Widget\AbstractWidget;
 final class RepoViews
 {
     /** Repository tab labels, in order (`1`…`8`). */
-    public const TABS = ['Readme', 'Files', 'Commits', 'Branches', 'Tags', 'Profile', 'Settings'];
+    public const TABS = ['Readme', 'Files', 'Commits', 'Branches', 'Tags', 'Deployments', 'Profile', 'Settings'];
 
     public readonly RepoState $state;
     public readonly RepoData $data;

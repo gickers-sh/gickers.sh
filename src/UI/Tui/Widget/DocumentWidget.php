@@ -148,22 +148,34 @@ final class DocumentWidget extends ContainerWidget
         } catch (\Throwable) {
             $this->key = $key;
             $this->setLoading(false);
-            $this->scroll->setLines($raw);
+            try {
+                $rendered = $this->renderer->renderDocument($filename, $this->content, max(20, $width - 2));
+                $this->scroll->setLines(preg_split('/\r\n|\r|\n/', rtrim($rendered, "\n")) ?: []);
+            } catch (\Throwable) {
+                $this->scroll->setLines($raw);
+            }
 
             return;
         }
         $this->pendingKey = $key;
         $this->setLoading(true);
-        $this->async->watch($this, $process, function (Process $p) use ($key, $raw): void {
+        $this->async->watch($this, $process, function (Process $p) use ($key, $filename, $width, $raw): void {
             if ($key !== $this->pendingKey) {
                 return;
             }
             $this->pendingKey = null;
             $this->key = $key;
             $this->setLoading(false);
-            $this->scroll->setLines($p->isSuccessful()
-                ? (preg_split('/\r\n|\r|\n/', rtrim($p->getOutput(), "\n")) ?: [])
-                : $raw);
+            if ($p->isSuccessful()) {
+                $this->scroll->setLines(preg_split('/\r\n|\r|\n/', rtrim($p->getOutput(), "\n")) ?: []);
+            } else {
+                try {
+                    $rendered = $this->renderer->renderDocument($filename, $this->content, max(20, $width - 2));
+                    $this->scroll->setLines(preg_split('/\r\n|\r|\n/', rtrim($rendered, "\n")) ?: []);
+                } catch (\Throwable) {
+                    $this->scroll->setLines($raw);
+                }
+            }
         });
     }
 

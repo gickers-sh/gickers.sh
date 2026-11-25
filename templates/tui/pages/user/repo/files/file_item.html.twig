@@ -1,0 +1,3 @@
+<div class="file-item {{ selected ? 'selected' : '' }}">
+<span class="file-cursor" style="color: {{ selected ? '#f7768e' : 'transparent' }}; font-weight: bold;">{{ selected ? '> ' : '  ' }}</span><span class="file-mode" style="color: {{ selected ? '#f7768e' : '#565f89' }};">{{ "%-10s"|format(mode) }}</span>    <span class="file-size" style="color: #565f89;">{{ "%8s"|format(size|default('')) }}</span>   {% if rendered_name is defined and rendered_name != '' %}{{ rendered_name|raw }}{% else %}<span class="file-name" style="color: {{ selected ? '#f7768e' : (is_dir ? '#7aa2f7' : '#c0caf5') }}; font-weight: {{ selected or is_dir ? 'bold' : 'normal' }};">{{ name }}</span>{% endif %}
+</div>

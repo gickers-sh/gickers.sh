@@ -1,0 +1,29 @@
+{# Repo Settings Overview Template #}
+<div class="repo-settings" style="width: 100%; padding: 1;">
+    <div style="font-weight: bold; color: #7aa2f7; margin-bottom: 1;">
+        Repository Settings — {{ repo_name }}
+    </div>
+
+    <div style="margin-bottom: 1;">
+        <span style="color: #565f89;">Visibility:</span>
+        <span style="color: {{ is_private ? '#f7768e' : '#9ece6a' }}; font-weight: bold;">
+            {{ is_private ? 'Private 🔒' : 'Public' }}
+        </span>
+    </div>
+
+    <div style="margin-bottom: 1;">
+        <span style="color: #565f89;">Default Branch:</span>
+        <span style="color: #7dcfff; font-weight: bold;">{{ default_branch|default('main') }}</span>
+    </div>
+
+    <div style="margin-bottom: 1;">
+        <span style="color: #565f89;">Clone URL:</span>
+        <span style="color: #bb9af7;">{{ clone_url }}</span>
+    </div>
+
+    {% if description is defined and description != '' %}
+    <div style="border-top: 1px solid #292e42; padding-top: 1; color: #a9b1d6;">
+        {{ description }}
+    </div>
+    {% endif %}
+</div>

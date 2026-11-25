@@ -191,6 +191,17 @@ final class AboutPane extends View
 
     private function showNone(): void
     {
+        if (null !== $this->views->twigTui) {
+            $lines = $this->views->twigTui->renderLines('@tui/pages/about/index.html.twig', [
+                'server_name' => '' !== $this->views->settings->name ? $this->views->settings->name : 'codes.sh',
+                'description' => 'Manage, browse, and collaborate on Git repositories straight from your terminal. No passwords, zero friction.',
+                'host' => 'codes.sh',
+            ], 80);
+            $this->doc->setLines($lines);
+
+            return;
+        }
+
         $this->doc->setLines([
             '',
             Theme::style('No readme found.', Theme::MUTED),

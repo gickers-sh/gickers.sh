@@ -1,0 +1,12 @@
+{% embed '@tui/components/list_card.html.twig' with { selected: selected, extra_class: 'wiki-item' } %}
+    {% block title %}{{ title }} <span class="card-category">[{{ category }}]</span> <span class="card-slug">({{ slug }})</span>{% endblock %}
+    {% block meta %}{% if updated is defined and updated != '' %}{{ updated }}{% endif %}{% endblock %}
+    {% block body %}
+        {% if summary is defined and summary != '' %}
+            <div class="card-desc">{{ summary }}</div>
+        {% endif %}
+        {% if command is defined and command != '' %}
+            <div class="card-action">{{ command }}</div>
+        {% endif %}
+    {% endblock %}
+{% endembed %}

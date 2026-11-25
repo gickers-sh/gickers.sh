@@ -1,0 +1,21 @@
+{% if flash is defined and flash != '' %}
+<div class="status-bar-flash" style="width: 100%; background-color: #c0caf5; color: #1f2335;">
+    {{ flash }}
+</div>
+{% else %}
+<div class="status-bar" style="width: 100%;">
+    <div style="display: flex;">
+        <span class="status-key">{{ key|default('') }}</span>
+        <span class="status-val">{{ value|default('') }}</span>
+    </div>
+    <div style="display: flex;">
+        {% if info is defined and info != '' %}
+            <span class="status-info">{{ info }}</span>
+        {% endif %}
+        {% if branch is defined and branch != '' %}
+            <span class="status-branch">{{ branch }}</span>
+        {% endif %}
+        <span class="status-help">? Help</span>
+    </div>
+</div>
+{% endif %}

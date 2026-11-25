@@ -29,8 +29,20 @@ final class SettingsPane extends RepoScreen
                 ];
             }
 
-            $cardWidth = min(74, max(28, $cols - 4));
-            $innerWidth = max(20, $cardWidth - 6);
+            if (null !== $this->repo->views->twigTui) {
+                return $this->repo->views->twigTui->renderLines('@tui/pages/user/repo/settings/index.html.twig', [
+                    'repo_name' => $this->repo->state->name,
+                    'is_private' => $db->isPrivate(),
+                    'default_branch' => $this->repo->state->git->defaultBranch,
+                    'clone_url' => $this->repo->state->cloneCommand(),
+                    'description' => $db->description(),
+                    'is_admin' => $this->canEditSettings(),
+                    'project' => $db->projectName(),
+                ], $cols);
+            }
+
+            $cardWidth = max(28, $cols - 2);
+            $innerWidth = max(20, $cardWidth - 4);
             $admin = $this->canEditSettings();
 
             $badge = $admin
@@ -39,23 +51,27 @@ final class SettingsPane extends RepoScreen
             $header = '  ' . Theme::style('Repository settings', Theme::BLUE, bold: true) . '  ' . $badge;
 
             $keyWidth = 14;
-            $renderKV = static function (string $key, string $val, bool $isSpecial = false) use ($keyWidth, $innerWidth): string {
+            $valMaxWidth = max(12, $innerWidth - $keyWidth - 3);
+            $renderKV = static function (string $key, string $val) use ($keyWidth, $valMaxWidth): array {
                 $keyPadded = Theme::style(Ansi::fit($key, $keyWidth), Theme::MUTED);
-                if ($isSpecial) {
-                    return '  ' . $keyPadded . ' ' . $val;
+                $indent = str_repeat(' ', $keyWidth);
+                $out = [];
+                foreach (Ansi::wrap($val, $valMaxWidth) as $i => $chunk) {
+                    $prefix = 0 === $i ? '  ' . $keyPadded . ' ' : '  ' . $indent . ' ';
+                    $out[] = $prefix . Theme::style($chunk, Theme::FG);
                 }
 
-                return '  ' . $keyPadded . ' ' . Theme::style(Ansi::truncate($val, $innerWidth - $keyWidth - 3), Theme::FG);
+                return $out;
             };
 
             $lines = [
                 '',
                 $header,
                 '',
-                $renderKV('Name', $db->nameString()),
-                $renderKV('Project', '' !== $db->projectName() ? $db->projectName() : '(none)'),
-                $renderKV('Default ref', $this->repo->state->git->defaultBranch),
-                $renderKV('Updated', Time::relative($db->updatedAt())),
+                ...$renderKV('Name', $db->nameString()),
+                ...$renderKV('Project', '' !== $db->projectName() ? $db->projectName() : '(none)'),
+                ...$renderKV('Default ref', $this->repo->state->git->defaultBranch),
+                ...$renderKV('Updated', Time::relative($db->updatedAt())),
                 '',
                 Theme::style('  Description', Theme::BLUE, bold: true),
             ];
@@ -65,33 +81,17 @@ final class SettingsPane extends RepoScreen
                 $lines[] = '    ' . Theme::style('(no description)', Theme::MUTED, italic: true);
             } else {
                 foreach (explode("\n", $desc) as $dl) {
-                    $lines[] = '    ' . Theme::style(Ansi::truncate($dl, $innerWidth - 6), Theme::FG);
+                    foreach (Ansi::wrap($dl, max(12, $innerWidth - 6)) as $wLine) {
+                        $lines[] = '    ' . Theme::style($wLine, Theme::FG);
+                    }
                 }
             }
 
             $lines[] = '';
             $lines[] = Theme::style('  Visibility & Type', Theme::BLUE, bold: true);
-            $lines[] = $renderKV('Visibility', $db->isPrivate() ? 'Private (restricted)' : 'Public');
-            $lines[] = $renderKV('Mirror', $db->isMirror() ? 'Yes' : 'No');
-            $lines[] = $renderKV('Hidden', $db->isHidden() ? 'Yes' : 'No');
-
-            if ($admin && null !== $this->repo->views->queryDeployments) {
-                $deployments = $this->repo->views->queryDeployments->buildEnvironmentsSummary($db);
-                $lines[] = '';
-                $lines[] = Theme::style('  Docker Deployments', Theme::BLUE, bold: true);
-                if ([] === $deployments) {
-                    $lines[] = '    ' . Theme::style('(no deployment environments configured)', Theme::MUTED, italic: true);
-                } else {
-                    foreach ($deployments as $item) {
-                        $env = $item['environment'];
-                        $sha = null !== $env->deployedSha() ? substr($env->deployedSha(), 0, 7) : 'none';
-                        $domains = array_map(static fn ($d): string => $d->domain(), $env->domains());
-                        $domStr = [] !== $domains ? ' [' . implode(', ', $domains) . ']' : '';
-                        $val = sprintf('%s (%s) sha=%s%s', $env->status()->value, $env->refType()->value, $sha, $domStr);
-                        $lines[] = $renderKV($env->refName(), $val);
-                    }
-                }
-            }
+            array_push($lines, ...$renderKV('Visibility', $db->isPrivate() ? 'Private (restricted)' : 'Public'));
+            array_push($lines, ...$renderKV('Mirror', $db->isMirror() ? 'Yes' : 'No'));
+            array_push($lines, ...$renderKV('Hidden', $db->isHidden() ? 'Yes' : 'No'));
             $lines[] = '';
 
             $hint = $admin

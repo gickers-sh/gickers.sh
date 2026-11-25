@@ -1,0 +1,4 @@
+{% embed '@tui/components/list_card.html.twig' with { selected: selected, extra_class: 'ref-item' } %}
+    {% block title %}{{ name }}{% if updated is defined and updated != '' %} <span class="card-meta">updated {{ updated }}</span>{% endif %}{% endblock %}
+    {% block meta %}{% if short_hash is defined and short_hash != '' %}<span class="card-hash">{{ short_hash }}</span>{% endif %}{% endblock %}
+{% endembed %}

@@ -1,0 +1,7 @@
+<div class="list-card {{ selected ? 'selected' : '' }} {{ extra_class|default('') }}">
+    <div class="card-header">
+        <span class="card-title">{% block title %}{{ title|default('') }}{% endblock %}</span>
+        <span class="card-meta">{% block meta %}{{ meta|default('') }}{% endblock %}</span>
+    </div>
+    {% block body %}{% endblock %}
+</div>

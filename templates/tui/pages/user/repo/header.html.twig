@@ -1,0 +1,12 @@
+<div class="repo-header" style="width: 100%;">
+    <div class="repo-header-top">
+        <span class="repo-header-name">{{ name }}</span>
+        {% if clone|default('')|trim != '' %}
+            <span class="repo-header-clone">{{ clone|trim }}</span>
+        {% endif %}
+    </div>
+    {% if desc is defined and desc != '' %}
+        <div class="repo-header-desc">{{ desc }}</div>
+    {% endif %}
+    <div class="repo-header-divider"></div>
+</div>

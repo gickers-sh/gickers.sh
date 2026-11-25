@@ -26,6 +26,13 @@ final class ProfilePane extends RepoScreen
             }
 
             $owner = $db->owner();
+            if (null !== $this->repo->views->twigTui) {
+                return $this->repo->views->twigTui->renderLines('@tui/pages/user/profile/index.html.twig', [
+                    'user' => $owner,
+                    'repo_count' => 1,
+                ], $cols);
+            }
+
             $keys = \count($owner->publicKeys());
             $role = $owner->isAdmin() ? 'admin' : 'user';
 
@@ -43,12 +50,16 @@ final class ProfilePane extends RepoScreen
 
             $desc = trim($db->description());
             if ('' !== $desc) {
-                $out[] = $bar.' '.Theme::style(Ansi::truncate($desc, $cols - 2), Theme::FG_DIM);
+                foreach (Ansi::wrap($desc, max(10, $cols - 2)) as $wLine) {
+                    $out[] = $bar.' '.Theme::style($wLine, Theme::FG_DIM);
+                }
             }
 
             $clone = $this->repo->state->cloneCommand();
             if ('' !== $clone) {
-                $out[] = $bar.' '.Theme::style(Ansi::truncate($clone, $cols - 2), Theme::SELECTOR);
+                foreach (Ansi::wrap($clone, max(10, $cols - 2)) as $wLine) {
+                    $out[] = $bar.' '.Theme::style($wLine, Theme::SELECTOR);
+                }
             }
 
             $usage = sprintf('Clones: %d · Fetches: %d', $db->cloneCount(), $db->fetchCount());
@@ -56,7 +67,9 @@ final class ProfilePane extends RepoScreen
             if (null !== $disk) {
                 $usage .= ' · '.Size::human($disk);
             }
-            $out[] = $bar.' '.Theme::style($usage, Theme::MUTED);
+            foreach (Ansi::wrap($usage, max(10, $cols - 2)) as $wLine) {
+                $out[] = $bar.' '.Theme::style($wLine, Theme::MUTED);
+            }
 
             return $out;
         }));

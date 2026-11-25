@@ -1,0 +1,6 @@
+<div class="footer-bar">
+{% for pair in pairs %}
+    {%- if not loop.first %} <span style="color: #3b4261;">•</span> {% endif -%}
+    <span><span style="color: #565f89;">{{ pair[0] }}</span> <span style="color: #3b4261;">{{ pair[1] }}</span></span>
+{% endfor %}
+</div>

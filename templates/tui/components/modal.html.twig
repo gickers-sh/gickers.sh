@@ -1,0 +1,8 @@
+<div class="modal {{ extra_class|default('') }}" style="width: 100%;">
+    {% if title is defined and title != '' %}
+        <div class="modal-title" style="font-weight: bold; color: #7aa2f7; margin-bottom: 1;">
+            {% block title %}{{ title }}{% endblock %}
+        </div>
+    {% endif %}
+    {% block body %}{% endblock %}
+</div>

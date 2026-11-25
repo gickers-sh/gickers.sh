@@ -1,0 +1,39 @@
+<div class="cli-help" style="width: 100%;">
+{% if command.long != '' or command.short != '' %}
+    <div class="cli-description" style="margin-bottom: 1em;">
+        {{ command.long != '' ? command.long : command.short }}
+    </div>
+{% endif %}
+
+{% if command.usage != '' %}
+    <div style="margin-bottom: 1em;">
+        <span style="color: #7aa2f7; font-weight: bold;">Usage:</span>
+        <div style="padding-left: 2;">{{ ssh_command }} {{ command.usage }}</div>
+    </div>
+{% endif %}
+
+{% if command.aliases|length > 0 %}
+    <div style="margin-bottom: 1em;">
+        <span style="color: #7aa2f7; font-weight: bold;">Aliases:</span>
+        <div style="padding-left: 2; color: #565f89;">{{ command.aliases|join(', ') }}</div>
+    </div>
+{% endif %}
+
+{% if flags|length > 0 %}
+    <div style="margin-bottom: 1em;">
+        <span style="color: #7aa2f7; font-weight: bold;">Flags:</span>
+        <table style="width: 100%; border: none;">
+            <tbody>
+            {% for flag in flags %}
+                <tr>
+                    <td style="color: #ff9e64; font-weight: bold; width: 25%;">
+                        {% if flag.shorthand != '' %}-{{ flag.shorthand }}, {% endif %}--{{ flag.name }}
+                    </td>
+                    <td style="color: #a9b1d6;">{{ flag.description }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endif %}
+</div>

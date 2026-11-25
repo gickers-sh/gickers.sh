@@ -39,7 +39,7 @@ final class RefsPane extends RepoScreen
             $updated = null !== $meta ? Time::relative($meta['time']) : '';
             $hash = null !== $meta ? substr($meta['hash'], 0, 7) : '';
 
-            return [Rows::ref($item, $updated, $hash, $selected, $cols)];
+            return Rows::refRows($item, $updated, $hash, $selected, $cols);
         });
 
         $this->updateEmptyText(false);

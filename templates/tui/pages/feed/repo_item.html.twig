@@ -1,0 +1,12 @@
+{% embed '@tui/components/list_card.html.twig' with { selected: selected, extra_class: 'repo-item' } %}
+    {% block title %}{{ name }}{% endblock %}
+    {% block meta %}{% if updated is defined and updated != '' %}{{ updated }}{% endif %}{% endblock %}
+    {% block body %}
+        {% if desc is defined and desc != '' %}
+            <div class="card-desc">{{ desc }}</div>
+        {% endif %}
+        {% if clone is defined and clone != '' %}
+            <div class="card-action">{{ clone }}</div>
+        {% endif %}
+    {% endblock %}
+{% endembed %}

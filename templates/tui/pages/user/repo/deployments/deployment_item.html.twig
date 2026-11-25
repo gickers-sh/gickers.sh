@@ -1,0 +1,17 @@
+{% embed '@tui/components/list_card.html.twig' with { selected: selected, extra_class: 'deployment-env' } %}
+    {% block title %}
+        <span class="env-name">{{ ref_name }}</span>
+        <span class="card-meta">({{ ref_type }})</span>
+        <span class="badge badge-{{ status }}">[{{ status }}]</span>
+        {% if not enabled|default(true) %}<span class="badge badge-disabled">[disabled]</span>{% endif %}
+        {% if uptime %}<span class="card-uptime">up {{ uptime }}</span>{% endif %}
+    {% endblock %}
+    {% block meta %}<span class="card-hash">{{ short_sha|default('none') }}</span>{% endblock %}
+    {% block body %}
+        {% if meta_lines is defined %}
+            {% for line in meta_lines %}
+                <div class="card-desc">{{ line }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endblock %}
+{% endembed %}

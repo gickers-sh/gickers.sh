@@ -1,0 +1,338 @@
+/* ==========================================================================
+   codes.sh TUI Stylesheet (TokyoNight Theme)
+   Used by both Termstrap (HTML rendering) and Symfony Tui (Widget tree)
+   ========================================================================== */
+
+:root {
+    --bg: #1a1b26;
+    --fg: #c0caf5;
+    --fg-dim: #a9b1d6;
+    --muted: #565f89;
+    --muted2: #414868;
+    --blue: #7aa2f7;
+    --cyan: #7dcfff;
+    --teal: #73daca;
+    --orange: #ff9e64;
+    --red: #f7768e;
+    --highlight: #e0af68;
+    --selector: #bb9af7;
+    --border: #292e42;
+    --border2: #3b4261;
+}
+
+.chrome {
+    padding: 0 2 0 2;
+}
+
+.header {
+    color: #c0caf5;
+    font-weight: bold;
+}
+
+.rule {
+    color: #292e42;
+}
+
+.tabbar {
+    flex-direction: row;
+    gap: 1;
+}
+
+.tab {
+    color: #565f89;
+}
+
+.tab-active {
+    color: #7dcfff;
+    font-weight: bold;
+    text-decoration: underline;
+}
+
+.status {
+    background-color: #292e42;
+    color: #a9b1d6;
+}
+
+.help {
+    color: #565f89;
+}
+
+.flash {
+    color: #bb9af7;
+    font-weight: bold;
+}
+
+.modal {
+    padding: 1;
+    border: 1px solid #3b4261;
+    border-radius: 4px;
+}
+
+.field-label {
+    color: #565f89;
+}
+
+.error {
+    color: #bb9af7;
+}
+
+.indent {
+    padding: 0 0 0 2;
+}
+
+.hsplit {
+    flex-direction: row;
+    gap: 1;
+}
+
+.flex {
+    flex: 1;
+}
+
+.hidden {
+    display: none;
+}
+
+/* ==========================================================================
+   Feed & Row Items (Repositories, Commits, Wiki, Files, Deployments)
+   ========================================================================== */
+
+.row-item {
+    padding: 0 1;
+}
+
+.row-item.selected {
+    border-left: 2px solid #e0af68;
+}
+
+.row-title {
+    color: #7aa2f7;
+    font-weight: bold;
+}
+
+.row-desc {
+    color: #a9b1d6;
+}
+
+.row-muted {
+    color: #565f89;
+}
+
+.row-clone {
+    color: #e0af68;
+}
+
+.row-clone-selected {
+    color: #bb9af7;
+}
+
+/* ==========================================================================
+   Semantic TUI HTML Cards
+   ========================================================================== */
+
+/* ==========================================================================
+   Reusable List Card Component (Feed, Commits, Refs, Deployments, Wiki)
+   ========================================================================== */
+
+.list-card {
+    padding-left: 1;
+}
+
+.list-card.selected {
+    border-left: thick solid #bb9af7;
+}
+
+.card, .card-header {
+    border-bottom: none;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+}
+
+.card-title {
+    font-weight: bold;
+    color: #c0caf5;
+}
+
+.list-card.selected .card-title {
+    color: #7aa2f7;
+}
+
+.card-meta {
+    color: #565f89;
+}
+
+.card-hash {
+    color: #e0af68;
+}
+
+.list-card.selected .card-hash {
+    color: #f7768e;
+    font-weight: bold;
+}
+
+.card-desc {
+    color: #565f89;
+}
+
+.list-card.selected .card-desc {
+    color: #a9b1d6;
+}
+
+.card-action {
+    color: #bb9af7;
+}
+
+.list-card.selected .card-action {
+    color: #f7768e;
+}
+
+.card-category {
+    color: #7dcfff;
+}
+
+.card-slug {
+    color: #565f89;
+}
+
+.card-uptime {
+    color: #73daca;
+}
+
+.card-log {
+    color: #565f89;
+}
+
+.card-log.error {
+    color: #f7768e;
+}
+
+.list-card.selected .card-log {
+    color: #7dcfff;
+}
+
+/* Key-Value Component */
+.key-value-row {
+    display: flex;
+    gap: 1;
+    margin-bottom: 1;
+}
+.key-value-row .key-label {
+    color: #565f89;
+}
+.key-value-row .key-value {
+    color: #c0caf5;
+}
+
+.badge {
+    padding: 0 1;
+    font-weight: bold;
+}
+
+.badge-cyan {
+    color: #1a1b26;
+    background-color: #7dcfff;
+}
+
+.badge-selector {
+    color: #1a1b26;
+    background-color: #bb9af7;
+}
+
+/* Server Badge */
+.server-badge {
+    background-color: #24283b;
+    color: #c0caf5;
+    font-weight: bold;
+    padding: 0 1;
+}
+
+/* File Tree Items */
+.file-item {
+    white-space: nowrap;
+}
+.file-item .file-cursor {
+    color: #f7768e;
+    font-weight: bold;
+}
+.file-item .file-mode {
+    color: #565f89;
+}
+.file-item.selected .file-mode {
+    color: #f7768e;
+    font-weight: bold;
+}
+.file-item .file-size {
+    color: #565f89;
+}
+.file-item .file-name {
+    color: #c0caf5;
+}
+.file-item.selected .file-name {
+    color: #f7768e;
+    font-weight: bold;
+}
+.file-item .file-dir {
+    color: #7aa2f7;
+    font-weight: bold;
+}
+
+/* Repo Header */
+.repo-header {
+    width: 100%;
+}
+.repo-header-top {
+    display: flex;
+    justify-content: space-between;
+}
+.repo-header-name {
+    color: #7aa2f7;
+    font-weight: bold;
+}
+.repo-header-clone {
+    color: #bb9af7;
+}
+.repo-header-desc {
+    color: #a9b1d6;
+    font-style: italic;
+}
+.repo-header-divider {
+    border-bottom: 1px solid #3b4261;
+    width: 100%;
+}
+
+/* Chrome Status Bar */
+.status-bar {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+}
+.status-bar .status-key {
+    background-color: #bb9af7;
+    color: #1f2335;
+    font-weight: bold;
+    padding: 0 1;
+}
+.status-bar .status-val {
+    background-color: #24283b;
+    color: #565f89;
+    padding: 0 1;
+}
+.status-bar .status-info,
+.status-bar .status-branch {
+    background-color: #7aa2f7;
+    color: #1f2335;
+    padding: 0 1;
+}
+.status-bar .status-help {
+    background-color: #3b4261;
+    color: #565f89;
+    padding: 0 1;
+}
+
+pre, code {
+    white-space: pre-wrap;
+}
+

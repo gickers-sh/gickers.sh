@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\UI\Tui\View\Repo;
 
 use App\UI\Tui\View\Repo\Commits\CommitsPane;
+use App\UI\Tui\View\Repo\Deployments\DeploymentsPane;
 use App\UI\Tui\View\Repo\Files\FilesPane;
 use App\UI\Tui\View\Repo\Profile\ProfilePane;
 use App\UI\Tui\View\Repo\Readme\ReadmePane;
@@ -32,6 +33,7 @@ final class RepoView extends RepoScreen
             new CommitsPane($this->repo),
             new RefsPane($this->repo, true),
             new RefsPane($this->repo, false),
+            new DeploymentsPane($this->repo),
             new ProfilePane($this->repo),
             new SettingsPane($this->repo),
         ];
@@ -131,6 +133,7 @@ final class RepoView extends RepoScreen
 
         $actions = match ($this->activeTab) {
             1, 2, 3, 4 => [['/', 'fuzzy search']],
+            5 => [['/', 'fuzzy search'], ['r', 'refresh']],
             default => [],
         };
 

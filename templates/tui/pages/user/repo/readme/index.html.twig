@@ -1,0 +1,8 @@
+<div class="readme-pane" style="width: 100%;">
+{% if content is defined and content != '' %}
+    {{ content|raw }}
+{% else %}
+    <div style="color: #565f89; margin-top: 1; margin-left: 2;">No readme found.</div>
+    <div style="color: #565f89; margin-left: 2;">Add a README.md file to display project documentation here.</div>
+{% endif %}
+</div>

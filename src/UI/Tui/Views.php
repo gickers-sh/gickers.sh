@@ -12,13 +12,16 @@ use App\Repo\Domain\Git\GitRepository;
 use App\Repo\Domain\RepoDirectory;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
 use App\Shared\Infrastructure\Config\ServerSettings;
+use App\UI\Tui\Builder\TuiViewBuilder;
 use App\UI\Tui\Render\TermstrapRenderer;
+use App\UI\Tui\Render\TwigTuiRenderer;
 use App\UI\Tui\View\Common\ConfirmView;
 use App\UI\Tui\View\Common\HelpView;
 use App\UI\Tui\View\Repo\RepoView;
 use App\UI\Tui\View\Repo\RepoViews;
 use App\UI\Tui\View\Selection\SelectionView;
 use App\UI\Tui\View\View;
+use App\Wiki\Application\Query\WikiQuery;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -38,7 +41,14 @@ final class Views
         public readonly RepoDirectory $repoDirectory,
         public readonly ?LoggerInterface $logger = null,
         public readonly ?QueryDeployments $queryDeployments = null,
+        public readonly ?WikiQuery $wikiQuery = null,
+        public readonly ?TwigTuiRenderer $twigTui = null,
+        public readonly ?TuiViewBuilder $builder = null,
     ) {
+        if (null !== $this->twigTui) {
+            \App\UI\Tui\Format\Rows::setDefaultRenderer($this->twigTui);
+            \App\UI\Tui\Format\Chrome::setDefaultRenderer($this->twigTui);
+        }
     }
 
     public function navigator(): Navigator

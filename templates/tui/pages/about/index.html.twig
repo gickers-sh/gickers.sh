@@ -1,0 +1,24 @@
+{# About Page: Server Presentation and Welcome Banner #}
+<div class="about-pane" style="width: 100%; padding: 1;">
+    <div style="margin-bottom: 1;">
+        <span style="color: #7dcfff; font-weight: bold; font-size: 1.2em;">{{ server_name|default('codes.sh') }}</span>
+        <span style="color: #565f89;"> — self-hosted Git server</span>
+    </div>
+    
+    <div style="color: #c0caf5; margin-bottom: 1;">
+        {{ description|default('Manage, browse, and collaborate on Git repositories straight from your terminal. No passwords, zero friction.') }}
+    </div>
+
+    <div style="color: #565f89; margin-bottom: 1;">
+        No readme found. Create a `.soft-serve` repository and add a README.md file to display readme.
+    </div>
+
+    <div style="border-top: 1px solid #292e42; padding-top: 1; margin-bottom: 1;">
+        <div style="color: #7aa2f7; font-weight: bold; margin-bottom: 1;">Quick Connect:</div>
+        <div style="color: #bb9af7; font-weight: bold;">ssh {{ host|default('codes.sh') }}</div>
+    </div>
+
+    <div style="color: #565f89; font-size: 0.9em;">
+        Press <span style="color: #ff9e64;">Tab</span> to switch between Feed, Repositories, and Profile.
+    </div>
+</div>

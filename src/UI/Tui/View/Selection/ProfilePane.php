@@ -12,12 +12,21 @@ use App\UI\Tui\Widget\LinesWidget;
 
 final class ProfilePane extends View
 {
-    public function __construct(private readonly ?User $actor)
-    {
+    public function __construct(
+        private readonly ?User $actor,
+        private readonly ?\App\UI\Tui\Render\TwigTuiRenderer $twigTui = null,
+    ) {
         $this->expandVertically(true);
         $this->add(new LinesWidget(function (int $cols): array {
             if (null === $this->actor) {
                 return Chrome::messageBody('Not signed in (anonymous session).', $cols);
+            }
+
+            if (null !== $this->twigTui) {
+                return $this->twigTui->renderLines('@tui/pages/user/profile/index.html.twig', [
+                    'user' => $this->actor,
+                    'repo_count' => 0,
+                ], $cols);
             }
 
             $isAdmin = $this->actor->isAdmin();

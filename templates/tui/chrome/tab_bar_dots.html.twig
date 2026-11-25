@@ -1,0 +1,10 @@
+<div class="tab-bar-dots">
+{% for i, label in labels %}
+    {%- if not loop.first %}   {% endif -%}
+    {%- if i == active -%}
+        <span style="color: #7dcfff;">• {{ label }}</span>
+    {%- else -%}
+        <span style="color: #c0caf5;">{{ label }}</span>
+    {%- endif -%}
+{% endfor %}
+</div>

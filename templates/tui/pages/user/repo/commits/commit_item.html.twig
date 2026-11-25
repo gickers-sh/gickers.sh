@@ -1,0 +1,9 @@
+{% embed '@tui/components/list_card.html.twig' with { selected: selected, extra_class: 'commit-item' } %}
+    {% block title %}{{ subject }}{% endblock %}
+    {% block meta %}<span class="card-hash">{{ short_hash }}</span>{% endblock %}
+    {% block body %}
+        {% if meta is defined and meta != '' %}
+            <div class="card-desc">{{ meta }}</div>
+        {% endif %}
+    {% endblock %}
+{% endembed %}
