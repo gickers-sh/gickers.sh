@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\UI\Tui\Render;
 
+use App\Shared\Infrastructure\Process\PhpBinary;
 use Symfony\Component\Process\Process;
 use Tempest\Highlight\Highlighter;
 use Tempest\Highlight\TerminalTheme;
@@ -181,7 +182,7 @@ final class CodeHighlighter implements TerminalTheme
             'content' => $content,
         ], \JSON_THROW_ON_ERROR);
 
-        $process = new Process([\PHP_BINARY, '-r', $script, $autoload]);
+        $process = new Process([PhpBinary::find(), '-r', $script, $autoload]);
         $process->setInput($payload);
         $process->start();
 

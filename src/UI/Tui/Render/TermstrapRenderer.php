@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\UI\Tui\Render;
 
+use App\Shared\Infrastructure\Process\PhpBinary;
 use Symfony\Component\Process\Process;
 use Termstrap\Termstrap;
 
@@ -14,7 +15,8 @@ h1 { margin-top: 0 !important; margin-bottom: 1em !important; padding: 0 !import
 h2 { margin-top: 1em !important; margin-bottom: 1em !important; padding: 0 !important; }
 h3 { margin-top: 1em !important; margin-bottom: 0 !important; padding: 0 !important; }
 h4, h5, h6 { margin-top: 0 !important; margin-bottom: 0 !important; padding: 0 !important; }
-pre { margin-top: 0 !important; margin-bottom: 1em !important; padding: 1em 2em !important; border-left: 3px solid !important; border-left-color: #7aa2f7 !important; }
+pre { margin-top: 0 !important; margin-bottom: 1em !important; padding: 1em 2em !important; border-left: 3px solid !important; border-left-color: #7aa2f7 !important; white-space: pre-wrap !important; }
+code { white-space: pre-wrap !important; }
 CSS;
 
     private Termstrap $termstrap;
@@ -79,6 +81,7 @@ CSS;
             'syntax_theme' => $options['syntax_theme'] ?? 'monokai',
             'stylesheets' => [self::THEME_OVERRIDE_CSS],
             'markdown' => $isMarkdown,
+            'wrap_code' => true,
         ];
 
         if (isset($options['step'])) {
@@ -124,7 +127,7 @@ CSS;
             'options' => $options,
         ], \JSON_THROW_ON_ERROR);
 
-        $process = new Process([\PHP_BINARY, '-r', $script, $autoload]);
+        $process = new Process([PhpBinary::find(), '-r', $script, $autoload]);
         $process->setInput($payload);
         $process->start();
 
@@ -157,7 +160,7 @@ CSS;
             'docDefs' => $docDefs,
         ], \JSON_THROW_ON_ERROR);
 
-        $process = new Process([\PHP_BINARY, '-r', $script, $autoload]);
+        $process = new Process([PhpBinary::find(), '-r', $script, $autoload]);
         $process->setInput($payload);
         $process->start();
 
@@ -221,6 +224,7 @@ CSS;
             'disable_animated_images' => true,
             'stylesheets' => [self::THEME_OVERRIDE_CSS],
             'markdown' => $isMarkdown,
+            'wrap_code' => true,
         ];
 
         try {

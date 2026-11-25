@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Repo\Infrastructure\Git;
 
 use App\Repo\Domain\Git\GitRepository;
+use App\Shared\Infrastructure\Process\PhpBinary;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 final class HookInstaller
@@ -81,7 +82,7 @@ BASH;
 
             // 4. Soft-serve / codes.sh hook inside ${hook}.d (matching hooksTmpl from pkg/hooks/gen.go).
             // The PHP binary is absolute, like Go's os.Executable(): sshd sessions get a minimal PATH.
-            $phpBinary = \PHP_BINARY;
+            $phpBinary = PhpBinary::find();
             $softHookPath = $hookDDir.'/soft-serve';
             $softHookContent = <<<BASH
 #!/usr/bin/env bash
