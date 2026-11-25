@@ -108,9 +108,14 @@
 
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const code = pre.querySelector('code') || pre;
-        const text = code.innerText || code.textContent;
-        copyToClipboard(text.trim(), btn);
+        const code = pre.querySelector('code');
+        if (code) {
+          copyToClipboard((code.innerText || code.textContent).trim(), btn);
+          return;
+        }
+        const clone = pre.cloneNode(true);
+        clone.querySelector('.pre-copy-btn')?.remove();
+        copyToClipboard((clone.innerText || clone.textContent).trim(), btn);
       });
 
       pre.appendChild(btn);
@@ -321,6 +326,113 @@
     });
   };
 
+  const initWikiToc = () => {
+    const tocList = document.querySelector('#wiki-toc-list');
+    const article = document.querySelector('.wiki-content');
+    const tocAside = document.querySelector('.wiki-toc');
+    if (!tocList || !article) return;
+
+    const headings = article.querySelectorAll('h2, h3');
+    if (headings.length === 0) {
+      if (tocAside) tocAside.style.display = 'none';
+      return;
+    }
+
+    const slugCounts = new Map();
+    const tocItems = [];
+
+    headings.forEach((heading) => {
+      if (!heading.id) {
+        let raw = heading.textContent.trim().toLowerCase()
+          .replace(/[^\w\s-]/g, '')
+          .replace(/\s+/g, '-');
+        if (!raw) raw = 'section';
+        const count = (slugCounts.get(raw) || 0) + 1;
+        slugCounts.set(raw, count);
+        heading.id = count > 1 ? `${raw}-${count}` : raw;
+      }
+
+      const li = document.createElement('li');
+      const tag = heading.tagName.toLowerCase();
+      li.className = `wiki-toc-item wiki-toc-${tag}`;
+
+      const a = document.createElement('a');
+      a.href = `#${heading.id}`;
+      a.className = 'wiki-toc-link';
+      a.textContent = heading.textContent.replace(/^#+\s*/, '').trim();
+
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (history.pushState) {
+          history.pushState(null, '', `#${heading.id}`);
+        } else {
+          window.location.hash = heading.id;
+        }
+        updateActiveLink(heading.id);
+      });
+
+      li.appendChild(a);
+      tocList.appendChild(li);
+      tocItems.push({ heading, link: a });
+    });
+
+    const updateActiveLink = (activeId) => {
+      tocItems.forEach(({ heading, link }) => {
+        if (heading.id === activeId) {
+          link.classList.add('active');
+        } else {
+          link.classList.remove('active');
+        }
+      });
+    };
+
+    if ('IntersectionObserver' in window) {
+      const observer = new IntersectionObserver((entries) => {
+        const visible = entries.filter((e) => e.isIntersecting);
+        if (visible.length > 0) {
+          updateActiveLink(visible[0].target.id);
+        }
+      }, {
+        rootMargin: '0px 0px -65% 0px',
+        threshold: 0
+      });
+
+      headings.forEach((h) => observer.observe(h));
+    }
+
+    const onScroll = () => {
+      const scrollPos = window.scrollY + 140;
+      let currentId = null;
+      headings.forEach((h) => {
+        if (h.offsetTop <= scrollPos) {
+          currentId = h.id;
+        }
+      });
+      if (currentId) {
+        updateActiveLink(currentId);
+      } else if (tocItems.length > 0) {
+        updateActiveLink(tocItems[0].heading.id);
+      }
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  };
+
+  const initWikiShortcuts = () => {
+    const searchInput = document.querySelector('.wiki-search-input');
+    if (!searchInput) return;
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+        e.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+      }
+    });
+  };
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       initCopyButtons();
@@ -328,6 +440,8 @@
       initCliViewToggle();
       initCliEditors();
       initViewTabs();
+      initWikiShortcuts();
+      initWikiToc();
     });
   } else {
     initCopyButtons();
@@ -335,5 +449,7 @@
     initCliViewToggle();
     initCliEditors();
     initViewTabs();
+    initWikiShortcuts();
+    initWikiToc();
   }
 })();

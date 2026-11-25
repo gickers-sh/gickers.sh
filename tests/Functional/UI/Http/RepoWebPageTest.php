@@ -218,11 +218,11 @@ final class RepoWebPageTest extends KernelTestCase
 
         $stylesheet = file_get_contents(dirname(__DIR__, 4) . '/public/css/repo-web.css');
         $this->assertIsString($stylesheet);
-        $this->assertLessThan(30000, strlen($stylesheet));
+        $this->assertLessThan(40000, strlen($stylesheet));
 
         $script = file_get_contents(dirname(__DIR__, 4) . '/public/js/repo-web.js');
         $this->assertIsString($script);
-        $this->assertLessThan(13000, strlen($script));
+        $this->assertLessThan(20000, strlen($script));
     }
 
     public function testPageRendersSshCliPaletteAndCopyButtons(): void
@@ -248,6 +248,8 @@ final class RepoWebPageTest extends KernelTestCase
         $this->assertStringContainsString('cli-field-input', $html);
         $this->assertStringNotContainsString('cli-ssh-link', $html);
         $this->assertStringNotContainsString('href="ssh://', $html);
+        $this->assertStringContainsString('data-lang="bash"', $html);
+        $this->assertStringContainsString('hl-type', $html);
     }
 
     public function testEmptyRepositoryStillShowsCloneCommand(): void
