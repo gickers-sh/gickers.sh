@@ -94,4 +94,137 @@ final class ReconcileDeploymentsTest extends KernelTestCase
         self::assertCount(1, $releases);
         self::assertSame('main', $releases[0]->environment()->refName());
     }
+
+    public function testReconcileContainerHealthMarksCrashedEnvironmentAndReleaseAsFailed(): void
+    {
+        $now = new \DateTimeImmutable();
+        $env = new DeployEnvironment($this->repo, 'main', DeployRefType::Branch, $now);
+        $env->markDeployed('04a54bef59c494670dac37af76384308cf2552b3', $now);
+        $this->deployStore->saveEnvironment($env);
+
+        $release = new DeployRelease($env, '04a54bef59c494670dac37af76384308cf2552b3', $this->admin, $now);
+        $release->appendLog("==> Deployment succeeded.\n");
+        $release->markSucceeded($now);
+        $this->deployStore->saveRelease($release);
+
+        $fakeOrchestrator = new class implements \App\Deploy\Domain\ContainerOrchestrator {
+            public bool $stopped = false;
+
+            public function deploy(DeployEnvironment $environment, string $commitSha, \App\Deploy\Domain\Spec\ComposeSpec $spec, \App\Deploy\Domain\DeployQuota $quota, array $decryptedEnvVars, array $exposedServices, callable $onLog): void
+            {
+            }
+
+            public function stop(DeployEnvironment $environment): void
+            {
+                $this->stopped = true;
+            }
+
+            public function restart(DeployEnvironment $environment): void
+            {
+            }
+
+            public function destroy(DeployEnvironment $environment): void
+            {
+            }
+
+            public function serviceLogs(DeployEnvironment $environment, ?string $serviceName = null, int $tail = 200): string
+            {
+                return 'Fatal error: Uncaught Error in /app/index.php:12';
+            }
+
+            public function streamServiceLogs(DeployEnvironment $environment, ?string $serviceName, callable $onOutput, int $tail = 100): void
+            {
+            }
+
+            public function exec(DeployEnvironment $environment, string $serviceName, array $command): array
+            {
+                return ['exitCode' => 0, 'output' => ''];
+            }
+
+            public function inspectServices(DeployEnvironment $environment): array
+            {
+                return [
+                    [
+                        'service' => 'app',
+                        'status' => 'exited',
+                        'exitCode' => 1,
+                        'restartCount' => 5,
+                        'oomKilled' => false,
+                        'error' => '',
+                    ],
+                ];
+            }
+        };
+
+        $container = static::getContainer();
+        $reconciler = new ReconcileDeployments(
+            $this->deployStore,
+            $container->get(ReverseProxyRouter::class),
+            $container->get(\App\Deploy\Application\TriggerDeploy::class),
+            $container->get(RepoStore::class),
+            $container->get(\App\Repo\Domain\RepoDirectory::class),
+            $container->get(\App\Repo\Infrastructure\Git\GitRepositoryReader::class),
+            $container->get(\Psr\Clock\ClockInterface::class),
+            $fakeOrchestrator,
+        );
+
+        $failed = $reconciler->reconcileContainerHealth($env);
+
+        self::assertCount(1, $failed);
+        self::assertTrue($fakeOrchestrator->stopped);
+        self::assertSame(DeployStatus::Failed, $env->status());
+
+        $updatedRelease = $this->deployStore->latestReleaseForEnvironment($env);
+        self::assertNotNull($updatedRelease);
+        self::assertSame(\App\Deploy\Domain\ReleaseStatus::Failed, $updatedRelease->status());
+        self::assertStringContainsString('stopped after 5 retry attempt(s)', $updatedRelease->buildLog());
+        self::assertStringContainsString('Fatal error: Uncaught Error in /app/index.php:12', $updatedRelease->buildLog());
+    }
+
+    public function testMaxOneConcurrentDeploymentPerRepoAndRef(): void
+    {
+        $now = new \DateTimeImmutable();
+        $env = new DeployEnvironment($this->repo, 'main', DeployRefType::Branch, $now);
+        $this->deployStore->saveEnvironment($env);
+
+        /** @var \App\Deploy\Application\TriggerDeploy $triggerDeploy */
+        $triggerDeploy = static::getContainer()->get(\App\Deploy\Application\TriggerDeploy::class);
+
+        // 1. First deployment queues release #1
+        $rel1 = ($triggerDeploy)($this->admin, $this->repo->name(), 'main');
+        self::assertSame(\App\Deploy\Domain\ReleaseStatus::Queued, $rel1->status());
+
+        // 2. Triggering again while #1 is still Queued coalesces into release #1 instead of creating a duplicate
+        $rel2 = ($triggerDeploy)($this->admin, $this->repo->name(), 'main');
+        self::assertSame($rel1->id(), $rel2->id());
+        self::assertCount(1, $this->deployStore->activeReleasesForEnvironment($env));
+
+        // 3. Once release #1 transitions to Building, a manual trigger/redeploy throws Conflict
+        $rel1->markBuilding();
+        $this->deployStore->saveRelease($rel1);
+
+        try {
+            ($triggerDeploy)($this->admin, $this->repo->name(), 'main');
+            self::fail('Expected Conflict when a deployment is already Building for the same repo + ref');
+        } catch (\App\Shared\Domain\Exception\Conflict $e) {
+            self::assertStringContainsString('is already in progress for', $e->getMessage());
+        }
+
+        // 4. Push/system events with coalesceIfActive=true do not spawn a second concurrent release while Building
+        $coalesced = $triggerDeploy->queueForEnvironment($env, $rel1->commitSha(), $this->admin, coalesceIfActive: true);
+        self::assertSame($rel1->id(), $coalesced->id());
+        self::assertCount(1, $this->deployStore->activeReleasesForEnvironment($env));
+
+        // 5. Another ref (e.g. "staging") on the same repo can still deploy independently
+        $storage = static::getContainer()->get(BareRepositoryStorage::class);
+        $gitRepo = $storage->open($this->repo->name());
+        GitTestHelper::writeFile($gitRepo, 'staging', 'Dockerfile', "FROM alpine\n", 'init staging');
+
+        $stagingEnv = new DeployEnvironment($this->repo, 'staging', DeployRefType::Branch, $now);
+        $this->deployStore->saveEnvironment($stagingEnv);
+
+        $stagingRel = ($triggerDeploy)($this->admin, $this->repo->name(), 'staging');
+        self::assertNotSame($rel1->id(), $stagingRel->id());
+        self::assertSame('staging', $stagingRel->environment()->refName());
+    }
 }

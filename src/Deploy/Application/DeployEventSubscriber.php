@@ -5,16 +5,12 @@ declare(strict_types=1);
 namespace App\Deploy\Application;
 
 use App\Deploy\Application\Message\DestroyEnvironment;
-use App\Deploy\Application\Message\RunDeploy;
-use App\Deploy\Domain\DeployStatus;
 use App\Deploy\Domain\DeployStore;
 use App\Deploy\Domain\Model\DeployEnvironment;
-use App\Deploy\Domain\Model\DeployRelease;
 use App\Identity\Domain\UserStore;
 use App\Repo\Domain\Event\BranchTagDeleted;
 use App\Repo\Domain\Event\PushReceived;
 use App\Repo\Domain\RepoStore;
-use Psr\Clock\ClockInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
 
@@ -27,8 +23,8 @@ final readonly class DeployEventSubscriber implements EventSubscriberInterface
         private DeployStore $deployStore,
         private DeployAccessResolver $accessResolver,
         private UserStore $userStore,
+        private TriggerDeploy $triggerDeploy,
         private MessageBusInterface $messageBus,
-        private ClockInterface $clock,
     ) {
     }
 
@@ -48,7 +44,7 @@ final readonly class DeployEventSubscriber implements EventSubscriberInterface
         }
 
         $actor = null !== $event->actorId ? $this->userStore->byId($event->actorId) : null;
-        $now = $this->clock->now();
+        $actor ??= $repo->owner();
 
         foreach ($event->changes as $change) {
             if (self::ZERO_SHA === $change['new']) {
@@ -65,18 +61,7 @@ final readonly class DeployEventSubscriber implements EventSubscriberInterface
                 continue;
             }
 
-            $environment->setStatus(DeployStatus::Queued, $now);
-            $this->deployStore->saveEnvironment($environment);
-
-            $release = new DeployRelease(
-                environment: $environment,
-                commitSha: $change['new'],
-                triggeredBy: $actor,
-                startedAt: $now,
-            );
-            $this->deployStore->saveRelease($release);
-
-            $this->messageBus->dispatch(new RunDeploy($release->id()));
+            $this->triggerDeploy->queueForEnvironment($environment, $change['new'], $actor, coalesceIfActive: true, triggerSource: 'git push');
         }
     }
 

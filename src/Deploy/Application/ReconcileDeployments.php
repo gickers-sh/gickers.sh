@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Deploy\Application;
 
-use App\Deploy\Application\Message\RunDeploy;
+use App\Deploy\Domain\ContainerOrchestrator;
 use App\Deploy\Domain\DeployStatus;
 use App\Deploy\Domain\DeployStore;
 use App\Deploy\Domain\Model\DeployEnvironment;
 use App\Deploy\Domain\Model\DeployRelease;
+use App\Deploy\Domain\ReleaseStatus;
 use App\Deploy\Domain\ReverseProxyRouter;
 use App\Identity\Domain\Model\User;
-use App\Repo\Domain\Model\Repo;
 use App\Repo\Domain\RepoDirectory;
 use App\Repo\Domain\RepoName;
 use App\Repo\Domain\RepoStore;
@@ -19,7 +19,6 @@ use App\Repo\Infrastructure\Git\GitRepositoryReader;
 use App\Shared\Domain\Exception\AccessDenied;
 use App\Shared\Domain\Exception\NotFound;
 use Psr\Clock\ClockInterface;
-use Symfony\Component\Messenger\MessageBusInterface;
 
 final readonly class ReconcileDeployments
 {
@@ -30,8 +29,8 @@ final readonly class ReconcileDeployments
         private RepoStore $repoStore,
         private RepoDirectory $repoDirectory,
         private GitRepositoryReader $gitReader,
-        private MessageBusInterface $messageBus,
         private ClockInterface $clock,
+        private ?ContainerOrchestrator $orchestrator = null,
     ) {
     }
 
@@ -74,22 +73,8 @@ final readonly class ReconcileDeployments
         }
 
         $commitSha = $commits[0]->hash;
-        $now = $this->clock->now();
 
-        $environment->setStatus(DeployStatus::Queued, $now);
-        $this->deployStore->saveEnvironment($environment);
-
-        $release = new DeployRelease(
-            environment: $environment,
-            commitSha: $commitSha,
-            triggeredBy: $actor,
-            startedAt: $now,
-        );
-        $this->deployStore->saveRelease($release);
-
-        $this->messageBus->dispatch(new RunDeploy($release->id()));
-
-        return $release;
+        return $this->triggerDeploy->queueForEnvironment($environment, $commitSha, $actor, coalesceIfActive: true, triggerSource: 'reconcile');
     }
 
     /**
@@ -111,6 +96,100 @@ final readonly class ReconcileDeployments
         }
 
         return $releases;
+    }
+
+    /**
+     * Reconciles runtime container health for environments marked as Running.
+     * If all containers in a Running environment have exited with a non-zero code,
+     * been OOMKilled, or exhausted their restart policy (`on-failure:N`), transitions
+     * the environment and its latest release to `Failed` and appends the crash reason
+     * and last container logs to the release build log.
+     *
+     * @return list<DeployEnvironment> environments that were marked as Failed
+     */
+    public function reconcileContainerHealth(?DeployEnvironment $singleEnvironment = null): array
+    {
+        if (null === $this->orchestrator) {
+            return [];
+        }
+
+        $candidates = null !== $singleEnvironment
+            ? [$singleEnvironment]
+            : $this->deployStore->allActiveEnvironments();
+
+        $failedEnvironments = [];
+        foreach ($candidates as $env) {
+            if (!$env->isEnabled() || DeployStatus::Running !== $env->status()) {
+                continue;
+            }
+
+            try {
+                $states = $this->orchestrator->inspectServices($env);
+            } catch (\Throwable) {
+                continue;
+            }
+
+            if ([] === $states) {
+                continue;
+            }
+
+            $failedReasons = [];
+            $failingServices = [];
+            foreach ($states as $state) {
+                if ($state['oomKilled']) {
+                    $failedReasons[] = sprintf(
+                        'service "%s" was killed due to Out-Of-Memory (OOMKilled) after %d restart(s)',
+                        $state['service'],
+                        $state['restartCount'],
+                    );
+                    $failingServices[] = $state['service'];
+                } elseif (\in_array($state['status'], ['exited', 'dead'], true) && 0 !== $state['exitCode']) {
+                    $failedReasons[] = sprintf(
+                        'service "%s" stopped after %d retry attempt(s) (status: %s, exit code: %d)',
+                        $state['service'],
+                        $state['restartCount'],
+                        $state['status'],
+                        $state['exitCode'],
+                    );
+                    $failingServices[] = $state['service'];
+                }
+            }
+
+            if ([] === $failedReasons) {
+                continue;
+            }
+
+            $now = $this->clock->now();
+            $env->setStatus(DeployStatus::Failed, $now);
+            $this->deployStore->saveEnvironment($env);
+
+            $latestRelease = $this->deployStore->latestReleaseForEnvironment($env);
+            if (null !== $latestRelease && ReleaseStatus::Failed !== $latestRelease->status()) {
+                foreach (array_unique($failingServices) as $svcName) {
+                    try {
+                        $logs = $this->orchestrator->serviceLogs($env, $svcName, 40);
+                        if ('' !== $logs) {
+                            $latestRelease->appendLog(sprintf("\n==> Runtime crash logs for service \"%s\":\n%s\n", $svcName, $logs));
+                        }
+                    } catch (\Throwable) {
+                    }
+                }
+                $latestRelease->markFailed(
+                    'runtime container crash detected (retries exhausted): '.implode('; ', $failedReasons),
+                    $now,
+                );
+                $this->deployStore->saveRelease($latestRelease);
+            }
+
+            try {
+                $this->orchestrator->stop($env);
+            } catch (\Throwable) {
+            }
+
+            $failedEnvironments[] = $env;
+        }
+
+        return $failedEnvironments;
     }
 
     /**

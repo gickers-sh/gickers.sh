@@ -228,7 +228,7 @@ final class ServeCommand extends Command
             'ssh' => $ssh,
             'http' => $http,
             // `scheduler_default` is the transport Symfony derives from the #[AsSchedule('default')] provider (recurring jobs, e.g. mirror sync).
-            'worker' => new Process([\PHP_BINARY, $console, 'messenger:consume', 'async', 'scheduler_default', '--time-limit=3600', '--memory-limit=128M'], $this->projectDir),
+            'worker' => new Process([\PHP_BINARY, '-d', 'memory_limit=512M', $console, 'messenger:consume', 'async', 'scheduler_default', '--time-limit=3600', '--memory-limit=256M'], $this->projectDir),
         ];
     }
 

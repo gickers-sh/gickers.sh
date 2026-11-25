@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Unit\Shared;
 
+use App\Deploy\Application\Message\ReconcileDeployHealth;
 use App\Repo\Application\Message\RunMirrorSync;
 use App\Shared\Infrastructure\Scheduler\MirrorSyncSchedule;
 use PHPUnit\Framework\TestCase;
@@ -58,9 +59,25 @@ final class MirrorSyncScheduleTest extends TestCase
     {
         $messages = [];
         foreach ($generator->getMessages() as $message) {
-            $messages[] = $message;
+            if ($message instanceof RunMirrorSync) {
+                $messages[] = $message;
+            }
         }
 
         return $messages;
+    }
+
+    public function testReconcileDeployHealthFiresEveryThirtySeconds(): void
+    {
+        $clock = new MockClock('2026-01-01 10:00:00 UTC');
+        $generator = new MessageGenerator(new MirrorSyncSchedule(), 'default', $clock);
+
+        $initial = iterator_to_array($generator->getMessages(), false);
+        self::assertCount(0, array_filter($initial, static fn (object $m): bool => $m instanceof ReconcileDeployHealth));
+
+        $clock->modify('2026-01-01 10:00:31 UTC');
+        $after30s = iterator_to_array($generator->getMessages(), false);
+        $healthMessages = array_values(array_filter($after30s, static fn (object $m): bool => $m instanceof ReconcileDeployHealth));
+        self::assertCount(1, $healthMessages);
     }
 }

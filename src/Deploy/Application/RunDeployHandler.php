@@ -9,14 +9,18 @@ use App\Deploy\Domain\ContainerOrchestrator;
 use App\Deploy\Domain\DeployStatus;
 use App\Deploy\Domain\DeployStore;
 use App\Deploy\Domain\EnvVarEncryptor;
+use App\Deploy\Domain\ReleaseStatus;
 use App\Deploy\Domain\ReverseProxyRouter;
 use App\Deploy\Domain\Spec\ComposeSpec;
 use App\Repo\Domain\Git\GitRepository;
 use App\Repo\Domain\RepoDirectory;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
 use App\Shared\Domain\Exception\InvalidInput;
+use App\Shared\Infrastructure\Config\ServerSettings;
 use Psr\Clock\ClockInterface;
+use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
+use Symfony\Component\Messenger\Exception\UnrecoverableMessageHandlingException;
 
 #[AsMessageHandler]
 final readonly class RunDeployHandler
@@ -31,6 +35,7 @@ final readonly class RunDeployHandler
         private ContainerOrchestrator $orchestrator,
         private ReverseProxyRouter $proxyRouter,
         private ClockInterface $clock,
+        private ?ServerSettings $settings = null,
     ) {
     }
 
@@ -38,6 +43,11 @@ final readonly class RunDeployHandler
     {
         $release = $this->deployStore->releaseById($message->releaseId);
         if (null === $release) {
+            return;
+        }
+
+        // Prevent duplicate or infinite redelivery of a release that has already finished
+        if (\in_array($release->status(), [ReleaseStatus::Succeeded, ReleaseStatus::Failed], true)) {
             return;
         }
 
@@ -61,14 +71,64 @@ final readonly class RunDeployHandler
             return;
         }
 
+        // Enforce at most 1 concurrent deployment per (repo + ref):
+        // 1. Check if another release is already Building or if a newer Queued release superseded this one.
+        foreach ($this->deployStore->activeReleasesForEnvironment($environment) as $activeRelease) {
+            if ($activeRelease->id() === $release->id()) {
+                continue;
+            }
+            if (ReleaseStatus::Building === $activeRelease->status()) {
+                $release->markFailed(sprintf('skipped: another deployment (#%d) is already building for %s@%s', $activeRelease->id(), $repo->nameString(), $environment->refName()), $now);
+                $this->deployStore->saveRelease($release);
+
+                return;
+            }
+            if ($activeRelease->id() > $release->id()) {
+                $release->markFailed(sprintf('superseded by newer queued deployment (#%d)', $activeRelease->id()), $now);
+                $this->deployStore->saveRelease($release);
+
+                return;
+            }
+        }
+
+        // 2. Acquire a non-blocking exclusive OS mutex lock per environment (repo + ref) across workers.
+        $lockHandle = $this->acquireEnvironmentLock($environment);
+        if (false === $lockHandle) {
+            $release->markFailed(sprintf('skipped: another deployment is already executing for %s@%s', $repo->nameString(), $environment->refName()), $now);
+            $this->deployStore->saveRelease($release);
+
+            return;
+        }
+
+        try {
+            $this->executeDeployment($release, $environment, $repo, $now);
+        } finally {
+            if (\is_resource($lockHandle)) {
+                @flock($lockHandle, \LOCK_UN);
+                @fclose($lockHandle);
+            }
+        }
+    }
+
+    private function executeDeployment(
+        \App\Deploy\Domain\Model\DeployRelease $release,
+        \App\Deploy\Domain\Model\DeployEnvironment $environment,
+        \App\Repo\Domain\Model\Repo $repo,
+        \DateTimeImmutable $now,
+    ): void {
         $release->markBuilding();
         $environment->setStatus(DeployStatus::Building, $now);
         $this->deployStore->saveRelease($release);
         $this->deployStore->saveEnvironment($environment);
 
-        $appendLog = function (string $line) use ($release): void {
+        $lastFlushAt = 0.0;
+        $appendLog = function (string $line, bool $forceFlush = false) use ($release, &$lastFlushAt): void {
             $release->appendLog(str_ends_with($line, "\n") ? $line : $line."\n");
-            $this->deployStore->saveRelease($release);
+            $nowMicro = microtime(true);
+            if ($forceFlush || ($nowMicro - $lastFlushAt) >= 0.4) {
+                $this->deployStore->saveRelease($release);
+                $lastFlushAt = $nowMicro;
+            }
         };
 
         try {
@@ -146,15 +206,19 @@ final readonly class RunDeployHandler
                 }
             }
 
-            $appendLog('==> Deployment succeeded.');
+            $appendLog('==> Deployment succeeded.', true);
             $release->markSucceeded($this->clock->now());
             $this->deployStore->saveRelease($release);
         } catch (\Throwable $e) {
             $finishedAt = $this->clock->now();
             $release->markFailed($e->getMessage(), $finishedAt);
             $environment->setStatus(DeployStatus::Failed, $finishedAt);
-            $this->deployStore->saveRelease($release);
-            $this->deployStore->saveEnvironment($environment);
+            try {
+                $this->deployStore->saveRelease($release);
+                $this->deployStore->saveEnvironment($environment);
+            } catch (\Throwable $saveError) {
+                throw new UnrecoverableMessageHandlingException($e->getMessage(), 0, $saveError);
+            }
         }
     }
 
@@ -163,7 +227,16 @@ final readonly class RunDeployHandler
         foreach (['compose.yaml', 'compose.yml', 'docker-compose.yaml', 'docker-compose.yml'] as $candidate) {
             $content = $this->gitReader->catBlob($gitRepo, $commitSha, $candidate);
             if (null !== $content) {
-                return $this->composeParser->parseComposeYaml($content, $quota);
+                $overrideContent = null;
+                foreach (['compose.override.yaml', 'compose.override.yml', 'docker-compose.override.yaml', 'docker-compose.override.yml'] as $overrideCandidate) {
+                    $foundOverride = $this->gitReader->catBlob($gitRepo, $commitSha, $overrideCandidate);
+                    if (null !== $foundOverride) {
+                        $overrideContent = $foundOverride;
+                        break;
+                    }
+                }
+
+                return $this->composeParser->parseComposeYaml($content, $quota, $overrideContent);
             }
         }
 
@@ -173,5 +246,36 @@ final readonly class RunDeployHandler
         }
 
         throw new InvalidInput('no compose.yaml, docker-compose.yml, or Dockerfile found at repository root');
+    }
+
+    /**
+     * Acquires a non-blocking exclusive flock for the (repo + ref) environment.
+     *
+     * @return resource|null|false resource when locked, null if lock storage is disabled, false if already locked by another worker
+     */
+    private function acquireEnvironmentLock(\App\Deploy\Domain\Model\DeployEnvironment $environment): mixed
+    {
+        if (null === $this->settings) {
+            return null;
+        }
+
+        $locksDir = $this->settings->deployPath().'/.locks';
+        if (!is_dir($locksDir)) {
+            (new Filesystem())->mkdir($locksDir, 0o700);
+        }
+
+        $lockFile = sprintf('%s/%s.lock', $locksDir, $environment->projectSlug());
+        $handle = @fopen($lockFile, 'cb');
+        if (false === $handle) {
+            return null;
+        }
+
+        if (!@flock($handle, \LOCK_EX | \LOCK_NB)) {
+            @fclose($handle);
+
+            return false;
+        }
+
+        return $handle;
     }
 }

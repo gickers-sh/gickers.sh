@@ -12,6 +12,8 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'deploy_releases')]
 class DeployRelease
 {
+    private const MAX_BUILD_LOG_BYTES = 524_288;
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -55,9 +57,36 @@ class DeployRelease
         return $this->commitSha;
     }
 
+    public function updateQueuedTarget(string $commitSha, ?User $triggeredBy, \DateTimeImmutable $now): void
+    {
+        $this->commitSha = $commitSha;
+        $this->triggeredBy = $triggeredBy;
+        $this->startedAt = $now;
+    }
+
     public function triggeredBy(): ?User
     {
         return $this->triggeredBy;
+    }
+
+    public function triggerDisplay(): string
+    {
+        $actor = $this->triggeredBy ?? $this->environment->repo()->owner();
+        $username = '@'.$actor->username();
+
+        if (str_contains($this->buildLog, '(git push)') || str_contains($this->buildLog, 'by git push') || null === $this->triggeredBy) {
+            return sprintf('%s (git push)', $username);
+        }
+
+        if (str_contains($this->buildLog, '(manual)') || str_contains($this->buildLog, 'manually')) {
+            return sprintf('%s (manual)', $username);
+        }
+
+        if (str_contains($this->buildLog, '(reconcile)') || str_contains($this->buildLog, 'reconcile')) {
+            return sprintf('%s (reconcile)', $username);
+        }
+
+        return $username;
     }
 
     public function status(): ReleaseStatus
@@ -88,6 +117,9 @@ class DeployRelease
     public function appendLog(string $chunk): void
     {
         $this->buildLog .= $chunk;
+        if (\strlen($this->buildLog) > self::MAX_BUILD_LOG_BYTES) {
+            $this->buildLog = "... [build log truncated]\n".substr($this->buildLog, -self::MAX_BUILD_LOG_BYTES);
+        }
     }
 
     public function markSucceeded(\DateTimeImmutable $finishedAt): void

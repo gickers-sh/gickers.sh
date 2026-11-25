@@ -11,6 +11,7 @@ use App\Deploy\Domain\Model\DeployEnvVar;
 use App\Deploy\Domain\Model\DeployRelease;
 use App\Deploy\Domain\Model\RepoDeployConfig;
 use App\Deploy\Domain\Model\RepoDeployRefRule;
+use App\Deploy\Domain\ReleaseStatus;
 use App\Repo\Domain\Model\Repo;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\AsAlias;
@@ -202,10 +203,20 @@ final readonly class DoctrineDeployStore implements DeployStore
 
     public function latestReleaseForEnvironment(DeployEnvironment $environment): ?DeployRelease
     {
-        return $this->em->getRepository(DeployRelease::class)->findOneBy(
+        $release = $this->em->getRepository(DeployRelease::class)->findOneBy(
             ['environment' => $environment],
             ['id' => 'DESC'],
         );
+        if (null !== $release) {
+            $this->em->refresh($release);
+        }
+
+        return $release;
+    }
+
+    public function refreshRelease(DeployRelease $release): void
+    {
+        $this->em->refresh($release);
     }
 
     public function releasesForEnvironment(DeployEnvironment $environment, int $limit = 10): array
@@ -215,6 +226,23 @@ final readonly class DoctrineDeployStore implements DeployStore
             ['id' => 'DESC'],
             $limit,
         );
+    }
+
+    public function activeReleasesForEnvironment(DeployEnvironment $environment): array
+    {
+        /** @var list<DeployRelease> $releases */
+        $releases = $this->em->createQueryBuilder()
+            ->select('r')
+            ->from(DeployRelease::class, 'r')
+            ->where('r.environment = :env')
+            ->andWhere('r.status IN (:statuses)')
+            ->setParameter('env', $environment)
+            ->setParameter('statuses', [ReleaseStatus::Queued, ReleaseStatus::Building])
+            ->orderBy('r.id', 'DESC')
+            ->getQuery()
+            ->getResult();
+
+        return $releases;
     }
 
     public function saveRelease(DeployRelease $release): void

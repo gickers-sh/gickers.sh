@@ -71,8 +71,17 @@ interface DeployStore
 
     public function latestReleaseForEnvironment(DeployEnvironment $environment): ?DeployRelease;
 
+    public function refreshRelease(DeployRelease $release): void;
+
     /** @return list<DeployRelease> */
     public function releasesForEnvironment(DeployEnvironment $environment, int $limit = 10): array;
+
+    /**
+     * Returns all releases for the environment that are currently in progress (Queued or Building).
+     *
+     * @return list<DeployRelease>
+     */
+    public function activeReleasesForEnvironment(DeployEnvironment $environment): array;
 
     public function saveRelease(DeployRelease $release): void;
 }

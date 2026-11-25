@@ -138,6 +138,19 @@
                                             {% endfor %}
                                         </span>
                                     {% endif %}
+                                    {% if item.releases is not empty %}
+                                        <div class="deploy-runs-summary">
+                                            <span class="deploy-runs-label">Releases:</span>
+                                            <div class="deploy-runs-chips">
+                                                {% for r in item.releases %}
+                                                    <a href="/{{ repository }}/deployments/{{ env.refName }}?release={{ r.id }}" class="deploy-run-chip deploy-nested-link">
+                                                        <span>#{{ r.id }}</span>
+                                                        <span class="deploy-chip-status">({{ r.status.value }})</span>
+                                                    </a>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    {% endif %}
                                 </div>
                             </div>
                         {% endfor %}

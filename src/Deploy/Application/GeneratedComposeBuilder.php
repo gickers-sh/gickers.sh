@@ -7,6 +7,7 @@ namespace App\Deploy\Application;
 use App\Deploy\Domain\DeployQuota;
 use App\Deploy\Domain\Model\DeployEnvironment;
 use App\Deploy\Domain\Spec\ComposeSpec;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -15,6 +16,32 @@ use Symfony\Component\Yaml\Yaml;
 final readonly class GeneratedComposeBuilder
 {
     public const PROXY_NETWORK = 'codes-proxy';
+
+    /**
+     * Minimal safe Linux capabilities required by standard images (nginx, postgres, frankenphp, etc.)
+     * after dropping ALL capabilities (which notably drops CAP_NET_RAW to prevent ARP/ICMP spoofing,
+     * CAP_SYS_ADMIN, CAP_SYS_MODULE, CAP_SYS_PTRACE, CAP_NET_ADMIN, CAP_MKNOD, etc.).
+     */
+    private const SAFE_CAPABILITIES = [
+        'CHOWN',
+        'DAC_OVERRIDE',
+        'FOWNER',
+        'FSETID',
+        'KILL',
+        'NET_BIND_SERVICE',
+        'SETGID',
+        'SETPCAP',
+        'SETUID',
+        'SYS_CHROOT',
+    ];
+
+    public function __construct(
+        #[Autowire(env: 'default::DEPLOY_DOCKER_RUNTIME')]
+        private ?string $dockerRuntime = null,
+        #[Autowire(env: 'default::DEPLOY_GATEWAY_HOST')]
+        private ?string $deployGatewayHost = null,
+    ) {
+    }
 
     /**
      * @param array<string, string> $decryptedEnvVars
@@ -30,6 +57,18 @@ final readonly class GeneratedComposeBuilder
         $projectSlug = $environment->projectSlug();
         $envNetwork = $environment->networkName();
         $exposedSet = array_flip($exposedServices);
+        $useIsolatedGatewayPorts = null !== $this->deployGatewayHost && '' !== trim($this->deployGatewayHost);
+        $runtime = null !== $this->dockerRuntime && '' !== trim($this->dockerRuntime) ? trim($this->dockerRuntime) : null;
+
+        // Map service -> published gateway port mappings when using isolated deploy-dockerd gateway
+        $serviceGatewayPorts = [];
+        if ($useIsolatedGatewayPorts) {
+            foreach ($environment->domains() as $domain) {
+                $svc = $domain->serviceName();
+                $mapping = sprintf('%d:%d', $domain->gatewayPort(), $domain->targetPort());
+                $serviceGatewayPorts[$svc][$mapping] = $mapping;
+            }
+        }
 
         $services = [];
         foreach ($spec->services as $serviceName => $service) {
@@ -50,6 +89,10 @@ final readonly class GeneratedComposeBuilder
                 $def['image'] = sprintf('%s_%s:latest', $projectSlug, $serviceName);
             } elseif (null !== $service->image) {
                 $def['image'] = $service->image;
+            }
+
+            if (null !== $runtime) {
+                $def['runtime'] = $runtime;
             }
 
             if (null !== $service->command) {
@@ -104,18 +147,35 @@ final readonly class GeneratedComposeBuilder
             $def['restart'] = $service->restart;
 
             // Mandatory security and resource quota hardening
+            $def['init'] = true;
             $def['security_opt'] = ['no-new-privileges:true'];
+            $def['cap_drop'] = ['ALL'];
+            $def['cap_add'] = self::SAFE_CAPABILITIES;
             $def['cpus'] = $quota->cpus;
             $def['mem_limit'] = $quota->memoryDockerString();
+            $def['memswap_limit'] = $quota->memoryDockerString();
             $def['pids_limit'] = $quota->pids;
+            $def['logging'] = [
+                'driver' => 'json-file',
+                'options' => [
+                    'max-size' => '10m',
+                    'max-file' => '3',
+                ],
+            ];
 
-            // Isolated network + optional proxy network attachment if explicitly exposed
+            if ($useIsolatedGatewayPorts && isset($serviceGatewayPorts[$serviceName])) {
+                $def['ports'] = array_values($serviceGatewayPorts[$serviceName]);
+            }
+
+            // Strictly isolated per-environment network.
+            // When DEPLOY_GATEWAY_HOST is configured (isolated DinD engine), no shared proxy_net is attached,
+            // guaranteeing zero Layer-2 network sharing across deployed environments.
             $serviceNetworks = [
                 'env_net' => [
                     'aliases' => [$serviceName],
                 ],
             ];
-            if (isset($exposedSet[$serviceName])) {
+            if (!$useIsolatedGatewayPorts && isset($exposedSet[$serviceName])) {
                 $serviceNetworks['proxy_net'] = [
                     'aliases' => [$environment->proxyAlias($serviceName)],
                 ];
@@ -136,7 +196,7 @@ final readonly class GeneratedComposeBuilder
             ],
         ];
 
-        if ([] !== $exposedServices) {
+        if (!$useIsolatedGatewayPorts && [] !== $exposedServices) {
             $doc['networks']['proxy_net'] = [
                 'name' => self::PROXY_NETWORK,
                 'external' => true,

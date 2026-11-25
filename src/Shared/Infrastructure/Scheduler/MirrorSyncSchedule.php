@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Shared\Infrastructure\Scheduler;
 
+use App\Deploy\Application\Message\ReconcileDeployHealth;
 use App\Repo\Application\Message\RunMirrorSync;
 use Symfony\Component\Scheduler\Attribute\AsSchedule;
 use Symfony\Component\Scheduler\RecurringMessage;
@@ -25,6 +26,7 @@ final class MirrorSyncSchedule implements ScheduleProviderInterface
             // the supervised worker is recycled hourly (--time-limit), and an unanchored
             // trigger would restart its one-hour countdown with every recycle.
             RecurringMessage::every('1 hour', new RunMirrorSync(), from: '@0'),
+            RecurringMessage::every('30 seconds', new ReconcileDeployHealth()),
         );
     }
 }

@@ -7,6 +7,8 @@ namespace App\UI\Console\Command\Hook;
 use App\Identity\Domain\UserStore;
 use App\Repo\Application\PushChange;
 use App\Repo\Application\RecordPush;
+use App\Repo\Domain\RepoName;
+use App\Repo\Domain\RepoStore;
 use App\Repo\Infrastructure\Git\CustomHookRunner;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -27,6 +29,7 @@ final class PostReceiveCommand extends Command
         private readonly RecordPush $recordPush,
         private readonly CustomHookRunner $customHookRunner,
         private readonly UserStore $userStore,
+        private readonly ?RepoStore $repoStore = null,
     ) {
         parent::__construct();
     }
@@ -67,6 +70,14 @@ final class PostReceiveCommand extends Command
             $actorOpt = $input->getOption('actor');
             if (is_string($actorOpt) && '' !== trim($actorOpt)) {
                 $actor = $this->userStore->byUsername(trim($actorOpt));
+            }
+            if (null === $actor && null !== $this->repoStore) {
+                try {
+                    $repo = $this->repoStore->byName(RepoName::fromInput($repoName));
+                    $actor = $repo?->owner();
+                } catch (\Throwable) {
+                    // repo unresolvable
+                }
             }
 
             ($this->recordPush)($repoName, $changes, $actor);

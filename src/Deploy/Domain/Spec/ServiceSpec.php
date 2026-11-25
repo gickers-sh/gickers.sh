@@ -24,7 +24,7 @@ final readonly class ServiceSpec
         public array $volumes = [],
         public array $dependsOn = [],
         public ?HealthcheckSpec $healthcheck = null,
-        public string $restart = 'unless-stopped',
+        public string $restart = 'on-failure:5',
     ) {
     }
 }

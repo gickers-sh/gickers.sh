@@ -26,6 +26,8 @@ final readonly class CaddyReverseProxyRouter implements ReverseProxyRouter
         private ?string $caddyAdminAddr = null,
         #[Autowire(env: 'default::CADDY_TLS')]
         private ?string $caddyTls = null,
+        #[Autowire(env: 'default::DEPLOY_GATEWAY_HOST')]
+        private ?string $deployGatewayHost = null,
         private Filesystem $filesystem = new Filesystem(),
     ) {
     }
@@ -44,7 +46,7 @@ final readonly class CaddyReverseProxyRouter implements ReverseProxyRouter
                 continue;
             }
 
-            $upstream = sprintf('%s:%d', $env->proxyAlias($domain->serviceName()), $domain->targetPort());
+            $upstream = $this->resolveUpstream($domain);
             $host = $domain->domain();
 
             if ('' !== $tlsDirective) {
@@ -81,8 +83,7 @@ final readonly class CaddyReverseProxyRouter implements ReverseProxyRouter
 
     public function smokeTest(DeployDomain $domain): ?int
     {
-        $env = $domain->environment();
-        $upstreamUrl = sprintf('http://%s:%d/', $env->proxyAlias($domain->serviceName()), $domain->targetPort());
+        $upstreamUrl = sprintf('http://%s/', $this->resolveUpstream($domain));
 
         try {
             $response = $this->httpClient->request('GET', $upstreamUrl, [
@@ -98,6 +99,15 @@ final readonly class CaddyReverseProxyRouter implements ReverseProxyRouter
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    private function resolveUpstream(DeployDomain $domain): string
+    {
+        if (null !== $this->deployGatewayHost && '' !== trim($this->deployGatewayHost)) {
+            return sprintf('%s:%d', trim($this->deployGatewayHost), $domain->gatewayPort());
+        }
+
+        return sprintf('%s:%d', $domain->environment()->proxyAlias($domain->serviceName()), $domain->targetPort());
     }
 
     private function reloadCaddy(): void

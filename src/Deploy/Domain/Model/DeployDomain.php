@@ -136,6 +136,16 @@ class DeployDomain
         return $this->targetPort;
     }
 
+    /**
+     * Deterministic, non-colliding host port (10000..59999) published inside the isolated
+     * deploy engine so Caddy can reverse-proxy without sharing any Layer-2 bridge network
+     * across deployed environments.
+     */
+    public function gatewayPort(): int
+    {
+        return 10000 + ($this->id() % 50000);
+    }
+
     public function isTlsEnabled(): bool
     {
         return $this->tlsEnabled;

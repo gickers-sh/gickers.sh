@@ -23,6 +23,9 @@ use Symfony\Component\Yaml\Yaml;
  */
 final readonly class ComposeAllowlistParser
 {
+    public const DEFAULT_MAX_RESTART_RETRIES = 5;
+    public const HARD_CAP_RESTART_RETRIES = 10;
+
     private const ALLOWED_TOP_LEVEL_KEYS = [
         'version',
         'name',
@@ -79,7 +82,7 @@ final readonly class ComposeAllowlistParser
         );
     }
 
-    public function parseComposeYaml(string $yamlContent, DeployQuota $quota): ComposeSpec
+    public function parseComposeYaml(string $yamlContent, DeployQuota $quota, ?string $overrideYamlContent = null): ComposeSpec
     {
         try {
             $raw = Yaml::parse($yamlContent);
@@ -92,6 +95,21 @@ final readonly class ComposeAllowlistParser
         }
 
         $infoLogs = [];
+
+        if (null !== $overrideYamlContent && '' !== trim($overrideYamlContent)) {
+            try {
+                $overrideRaw = Yaml::parse($overrideYamlContent);
+            } catch (ParseException $e) {
+                throw new InvalidInput(sprintf('invalid compose.override.yaml syntax: %s', $e->getMessage()), 0, $e);
+            }
+
+            if (!\is_array($overrideRaw)) {
+                throw new InvalidInput('compose.override.yaml must be a YAML mapping');
+            }
+
+            $raw = $this->mergeComposeMappings($raw, $overrideRaw);
+            $infoLogs[] = '[info] Merged compose override file into deployment specification.';
+        }
 
         foreach (array_keys($raw) as $topKey) {
             $topKeyStr = (string) $topKey;
@@ -237,13 +255,7 @@ final readonly class ComposeAllowlistParser
         $dependsOn = isset($config['depends_on']) ? $this->parseDependsOn($name, $config['depends_on']) : [];
         $healthcheck = isset($config['healthcheck']) ? $this->parseHealthcheck($name, $config['healthcheck']) : null;
 
-        $restart = 'unless-stopped';
-        if (isset($config['restart'])) {
-            if (!\is_string($config['restart']) || !\in_array($config['restart'], ['no', 'always', 'on-failure', 'unless-stopped'], true)) {
-                throw new InvalidInput(sprintf('service "%s": invalid "restart" policy', $name));
-            }
-            $restart = $config['restart'];
-        }
+        $restart = $this->parseRestartPolicy($name, $config['restart'] ?? null, $infoLogs);
 
         return new ServiceSpec(
             name: $name,
@@ -526,5 +538,155 @@ final readonly class ComposeAllowlistParser
             retries: $retries,
             startPeriod: $startPeriod,
         );
+    }
+
+    /**
+     * Parses and normalizes the service restart policy with a bounded retry limit
+     * so crashing containers never restart infinitely.
+     *
+     * @param list<string> $infoLogs
+     */
+    private function parseRestartPolicy(string $serviceName, mixed $raw, array &$infoLogs): string
+    {
+        $defaultPolicy = sprintf('on-failure:%d', self::DEFAULT_MAX_RESTART_RETRIES);
+        if (null === $raw) {
+            return $defaultPolicy;
+        }
+
+        if (!\is_string($raw)) {
+            throw new InvalidInput(sprintf('service "%s": invalid "restart" policy', $serviceName));
+        }
+
+        $policy = trim($raw);
+        if ('no' === $policy) {
+            return 'no';
+        }
+
+        if (\in_array($policy, ['always', 'unless-stopped', 'on-failure'], true)) {
+            $infoLogs[] = sprintf(
+                '[info] Service "%s": capping unbounded restart policy "%s" to "%s" to prevent infinite crash loops.',
+                $serviceName,
+                $policy,
+                $defaultPolicy,
+            );
+
+            return $defaultPolicy;
+        }
+
+        if (preg_match('/^on-failure:(\d+)$/', $policy, $matches)) {
+            $maxRetries = (int) $matches[1];
+            if ($maxRetries < 1) {
+                return 'no';
+            }
+            if ($maxRetries > self::HARD_CAP_RESTART_RETRIES) {
+                $capped = sprintf('on-failure:%d', self::HARD_CAP_RESTART_RETRIES);
+                $infoLogs[] = sprintf(
+                    '[info] Service "%s": capping restart policy "%s" to "%s" (maximum %d retries).',
+                    $serviceName,
+                    $policy,
+                    $capped,
+                    self::HARD_CAP_RESTART_RETRIES,
+                );
+
+                return $capped;
+            }
+
+            return sprintf('on-failure:%d', $maxRetries);
+        }
+
+        throw new InvalidInput(sprintf('service "%s": invalid "restart" policy', $serviceName));
+    }
+
+    /**
+     * Merges a base compose YAML mapping with an override compose YAML mapping following Docker Compose rules.
+     *
+     * @param array<mixed, mixed> $base
+     * @param array<mixed, mixed> $override
+     *
+     * @return array<mixed, mixed>
+     */
+    private function mergeComposeMappings(array $base, array $override): array
+    {
+        foreach ($override as $topKey => $topVal) {
+            if ('services' === $topKey && \is_array($topVal)) {
+                $baseServices = isset($base['services']) && \is_array($base['services']) ? $base['services'] : [];
+                foreach ($topVal as $svcName => $svcOverride) {
+                    if (!isset($baseServices[$svcName]) || !\is_array($baseServices[$svcName]) || !\is_array($svcOverride)) {
+                        $baseServices[$svcName] = $svcOverride;
+                        continue;
+                    }
+                    $baseServices[$svcName] = $this->mergeServiceConfig($baseServices[$svcName], $svcOverride, (string) $svcName);
+                }
+                $base['services'] = $baseServices;
+                continue;
+            }
+
+            if ('volumes' === $topKey && \is_array($topVal)) {
+                $baseVolumes = isset($base['volumes']) && \is_array($base['volumes']) ? $base['volumes'] : [];
+                foreach ($topVal as $volName => $volConfig) {
+                    $baseVolumes[$volName] = $volConfig;
+                }
+                $base['volumes'] = $baseVolumes;
+                continue;
+            }
+
+            $base[$topKey] = $topVal;
+        }
+
+        return $base;
+    }
+
+    /**
+     * @param array<mixed, mixed> $baseSvc
+     * @param array<mixed, mixed> $overrideSvc
+     *
+     * @return array<mixed, mixed>
+     */
+    private function mergeServiceConfig(array $baseSvc, array $overrideSvc, string $serviceName): array
+    {
+        foreach ($overrideSvc as $key => $val) {
+            $keyStr = (string) $key;
+
+            if ('environment' === $keyStr && isset($baseSvc['environment'])) {
+                $baseEnv = $this->parseKeyValueMap($serviceName, 'environment', $baseSvc['environment']);
+                $overEnv = $this->parseKeyValueMap($serviceName, 'environment', $val);
+                $baseSvc['environment'] = array_merge($baseEnv, $overEnv);
+                continue;
+            }
+
+            if (\in_array($keyStr, ['volumes', 'ports', 'expose'], true) && isset($baseSvc[$keyStr]) && \is_array($baseSvc[$keyStr]) && \is_array($val)) {
+                $baseSvc[$keyStr] = array_values(array_unique(array_merge($baseSvc[$keyStr], $val), \SORT_REGULAR));
+                continue;
+            }
+
+            if ('depends_on' === $keyStr && isset($baseSvc['depends_on'])) {
+                $baseDeps = $this->parseDependsOn($serviceName, $baseSvc['depends_on']);
+                $overDeps = $this->parseDependsOn($serviceName, $val);
+                $baseSvc['depends_on'] = array_values(array_unique(array_merge($baseDeps, $overDeps)));
+                continue;
+            }
+
+            if ('build' === $keyStr && isset($baseSvc['build'])) {
+                $baseBuild = \is_string($baseSvc['build']) ? ['context' => $baseSvc['build']] : (\is_array($baseSvc['build']) ? $baseSvc['build'] : []);
+                $overBuild = \is_string($val) ? ['context' => $val] : (\is_array($val) ? $val : []);
+                if (isset($baseBuild['args'], $overBuild['args'])) {
+                    $overBuild['args'] = array_merge(
+                        $this->parseKeyValueMap($serviceName, 'build.args', $baseBuild['args']),
+                        $this->parseKeyValueMap($serviceName, 'build.args', $overBuild['args']),
+                    );
+                }
+                $baseSvc['build'] = array_merge($baseBuild, $overBuild);
+                continue;
+            }
+
+            if ('healthcheck' === $keyStr && isset($baseSvc['healthcheck']) && \is_array($baseSvc['healthcheck']) && \is_array($val)) {
+                $baseSvc['healthcheck'] = array_merge($baseSvc['healthcheck'], $val);
+                continue;
+            }
+
+            $baseSvc[$key] = $val;
+        }
+
+        return $baseSvc;
     }
 }

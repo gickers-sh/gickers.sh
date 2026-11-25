@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Deploy\Application\Query;
 
 use App\Deploy\Application\DeployAccessResolver;
+use App\Deploy\Application\ReconcileDeployments;
 use App\Deploy\Domain\ContainerOrchestrator;
 use App\Deploy\Domain\DeployQuota;
 use App\Deploy\Domain\DeployStore;
@@ -24,6 +25,7 @@ final readonly class QueryDeployments
         private DeployAccessResolver $accessResolver,
         private DeployStore $deployStore,
         private ContainerOrchestrator $orchestrator,
+        private ?ReconcileDeployments $reconcileDeployments = null,
     ) {
     }
 
@@ -56,6 +58,7 @@ final readonly class QueryDeployments
 
         $result = [];
         foreach ($environments as $environment) {
+            $this->reconcileDeployments?->reconcileContainerHealth($environment);
             $result[] = [
                 'environment' => $environment,
                 'latestRelease' => $this->deployStore->latestReleaseForEnvironment($environment),
@@ -104,6 +107,8 @@ final readonly class QueryDeployments
         if (null === $environment) {
             throw new NotFound(sprintf('deployment environment "%s" not found', $ref));
         }
+
+        $this->reconcileDeployments?->reconcileContainerHealth($environment);
 
         $releases = $this->deployStore->releasesForEnvironment($environment, 50);
         $activeRelease = null;
@@ -203,6 +208,9 @@ final readonly class QueryDeployments
                         $printedOffset = 0;
                     }
                     $log = $latest->buildLog();
+                    if (\strlen($log) < $printedOffset) {
+                        $printedOffset = 0;
+                    }
                     if (\strlen($log) > $printedOffset) {
                         $chunk = substr($log, $printedOffset);
                         $onOutput($chunk);
@@ -213,16 +221,24 @@ final readonly class QueryDeployments
             }
         }
 
-        // 1. If a release is currently building, stream its build log until done
+        // 1. Always stream the latest release's build log first (and follow while queued/building)
         $latest = $this->deployStore->latestReleaseForEnvironment($environment);
-        if (null !== $latest && in_array($latest->status(), [ReleaseStatus::Queued, ReleaseStatus::Building], true)) {
+        if (null !== $latest) {
+            $lastReleaseId = $latest->id();
             $printedOffset = 0;
             while (true) {
                 $latest = $this->deployStore->latestReleaseForEnvironment($environment);
                 if (null === $latest) {
                     break;
                 }
+                if ($latest->id() !== $lastReleaseId) {
+                    $lastReleaseId = $latest->id();
+                    $printedOffset = 0;
+                }
                 $log = $latest->buildLog();
+                if (\strlen($log) < $printedOffset) {
+                    $printedOffset = 0;
+                }
                 if (\strlen($log) > $printedOffset) {
                     $chunk = substr($log, $printedOffset);
                     $onOutput($chunk);

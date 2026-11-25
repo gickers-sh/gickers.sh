@@ -49,4 +49,11 @@ interface ContainerOrchestrator
      * @return array{exitCode: int, output: string}
      */
     public function exec(DeployEnvironment $environment, string $serviceName, array $command): array;
+
+    /**
+     * Inspects all containers belonging to the environment's Compose project.
+     *
+     * @return list<array{service: string, status: string, exitCode: int, restartCount: int, oomKilled: bool, error: string}>
+     */
+    public function inspectServices(DeployEnvironment $environment): array;
 }

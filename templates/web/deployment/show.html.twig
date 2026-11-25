@@ -147,7 +147,7 @@
                                     </span>
                                 </td>
                                 <td><code>{{ r.commitSha|slice(0, 7) }}</code></td>
-                                <td>{{ r.triggeredBy ? '@' ~ r.triggeredBy.username : 'git push' }}</td>
+                                <td>{{ r.triggerDisplay }}</td>
                                 <td>{{ r.startedAt|date('Y-m-d H:i:s') }}</td>
                                 <td>
                                     {% if r.finishedAt %}
