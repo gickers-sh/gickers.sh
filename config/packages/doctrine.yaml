@@ -36,6 +36,11 @@ doctrine:
                 is_bundle: false
                 dir: '%kernel.project_dir%/src/Deploy/Domain/Model'
                 prefix: 'App\Deploy\Domain\Model'
+            Wiki:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Wiki/Domain/Model'
+                prefix: 'App\Wiki\Domain\Model'
 
 when@prod:
     doctrine:

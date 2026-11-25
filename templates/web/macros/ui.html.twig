@@ -16,6 +16,9 @@
         {% if page != 'repositories' %}
             <a href="/repos" class="home-btn" title="Browse public repositories">Repositories</a>
         {% endif %}
+        {% if page != 'wiki' %}
+            <a href="/wiki" class="home-btn" title="Browse server wiki">Wiki</a>
+        {% endif %}
         {% if page != 'docs' %}
             <a href="/docs" class="home-btn" title="View complete CLI documentation">CLI Docs</a>
         {% endif %}

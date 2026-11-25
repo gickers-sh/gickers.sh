@@ -1,0 +1,125 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{% if page %}Edit {{ page.title }}{% else %}New Wiki Page{% endif %} - Wiki - {{ serverName }}{% endblock %}
+
+{% set nav_page = 'wiki' %}
+
+{% block header_identity %}
+    <h1 class="home-title">
+        <a href="/" style="text-decoration: none; color: inherit;"><span class="cli-prompt">&gt;_</span> {{ serverName }}</a>
+        <span class="cli-host">/ <a href="/wiki" style="text-decoration: none; color: inherit;">wiki</a> / {% if page %}edit / {{ page.slugString }}{% else %}new{% endif %}</span>
+    </h1>
+    <p class="description">Server Administrator Wiki Editor (Markdown).</p>
+{% endblock %}
+
+{% block main %}
+    <div class="doc-header-nav">
+        <a href="{% if page %}/wiki/{{ page.slugString }}{% else %}/wiki{% endif %}" class="doc-back-btn">
+            <span>&larr;</span> Back to {% if page %}<code>{{ page.slugString }}</code>{% else %}Wiki{% endif %}
+        </a>
+        <span class="cli-tier cli-tier-admin">Server Admin</span>
+    </div>
+
+    {% if error %}
+        <div class="doc-callout doc-callout-notes" role="alert" style="margin-bottom: 1.25rem;">
+            <span class="doc-callout-icon">⚠️</span>
+            <div class="doc-callout-body">
+                <strong class="doc-callout-title">Validation Error</strong>
+                <p class="doc-callout-text">{{ error }}</p>
+            </div>
+        </div>
+    {% endif %}
+
+    <section class="wiki-article-card">
+        <form action="/wiki/save" method="post" class="wiki-editor-form">
+            <input type="hidden" name="_token" value="{{ csrfToken }}">
+
+            <div class="wiki-form-grid">
+                <div class="cli-field">
+                    <label for="wiki-slug" class="cli-field-label">
+                        <span>Slug <span class="cli-req">*</span></span>
+                        <span class="cli-field-token">URL identifier (e.g. <code>getting-started</code>, <code>guides/deploy</code>)</span>
+                    </label>
+                    <input type="text" id="wiki-slug" name="slug" value="{{ form.slug }}" required pattern="[a-zA-Z0-9._-]+(/[a-zA-Z0-9._-]+)*" placeholder="getting-started" class="cli-field-input wiki-input">
+                </div>
+
+                <div class="cli-field">
+                    <label for="wiki-title" class="cli-field-label">
+                        <span>Title</span>
+                        <span class="cli-field-token">Display title (defaults to first <code># Heading</code>)</span>
+                    </label>
+                    <input type="text" id="wiki-title" name="title" value="{{ form.title }}" placeholder="Getting Started" class="cli-field-input wiki-input">
+                </div>
+
+                <div class="cli-field">
+                    <label for="wiki-category" class="cli-field-label">
+                        <span>Category</span>
+                        <span class="cli-field-token">Sidebar group section</span>
+                    </label>
+                    <input type="text" id="wiki-category" name="category" value="{{ form.category }}" placeholder="General" class="cli-field-input wiki-input">
+                </div>
+
+                <div class="cli-field">
+                    <label for="wiki-position" class="cli-field-label">
+                        <span>Position</span>
+                        <span class="cli-field-token">Sort order (0 = first)</span>
+                    </label>
+                    <input type="number" id="wiki-position" name="position" value="{{ form.position }}" class="cli-field-input wiki-input">
+                </div>
+            </div>
+
+            <div class="cli-field" style="margin-top: 1.25rem;">
+                <label for="wiki-content" class="cli-field-label">
+                    <span>Markdown Content <span class="cli-req">*</span></span>
+                    <span class="cli-field-token">GitHub Flavored Markdown (rendered in Web, TUI &amp; SSH CLI via Termstrap)</span>
+                </label>
+                <textarea id="wiki-content" name="content" rows="22" required placeholder="# Page Title&#10;&#10;Write your wiki documentation in GitHub Flavored Markdown..." class="cli-field-input wiki-textarea">{{ form.content }}</textarea>
+            </div>
+
+            <div class="wiki-form-actions">
+                <button type="submit" class="home-btn">Save Wiki Page</button>
+                <a href="{% if page %}/wiki/{{ page.slugString }}{% else %}/wiki{% endif %}" class="home-btn home-btn-subtle">Cancel</a>
+            </div>
+        </form>
+
+        <details class="wiki-editor-cheatsheet" style="margin-top: 2rem;">
+            <summary class="wiki-editor-cheatsheet-summary">
+                <span>📘 Markdown Formatting Reference</span>
+                <span class="wiki-cheatsheet-hint">Click to expand</span>
+            </summary>
+            <div class="wiki-editor-cheatsheet-body">
+                <div class="wiki-cheatsheet-grid">
+                    <div class="wiki-cheatsheet-col">
+                        <h4>Headings &amp; Text</h4>
+                        <pre><code># Heading 1
+## Heading 2
+### Heading 3
+**bold text**, *italic*, ~~strikethrough~~
+`inline code`</code></pre>
+                    </div>
+                    <div class="wiki-cheatsheet-col">
+                        <h4>Code Blocks</h4>
+                        <pre><code>```bash
+ssh codes.sh info
+git status
+```</code></pre>
+                    </div>
+                    <div class="wiki-cheatsheet-col">
+                        <h4>Blockquotes &amp; Notes</h4>
+                        <pre><code>&gt; **Note:** Useful tip or information.
+&gt; **Warning:** Critical notice.</code></pre>
+                    </div>
+                    <div class="wiki-cheatsheet-col">
+                        <h4>Tables</h4>
+                        <pre><code>| Header | Column |
+| :--- | :--- |
+| Cell 1 | Cell 2 |</code></pre>
+                    </div>
+                </div>
+            </div>
+        </details>
+    </section>
+{% endblock %}
+
+{% block footer_summary %}Wiki Editor{% endblock %}
+{% block footer_meta %}Admin Mode · {{ serverName }}{% endblock %}

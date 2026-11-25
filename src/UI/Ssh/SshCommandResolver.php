@@ -138,6 +138,21 @@ final class SshCommandResolver
             }
         }
 
+        // wiki <slug> -> wiki show <slug>
+        if (count($tokens) >= 2 && 'wiki' === $tokens[0]) {
+            $sub = $tokens[1];
+            $knownSubs = [
+                'list', 'ls',
+                'show', 'view', 'get', 'cat', 'read',
+                'search', 'grep', 'find',
+                'set', 'edit', 'create', 'save', 'write',
+                'delete', 'rm', 'del', 'remove',
+            ];
+            if (!in_array($sub, $knownSubs, true) && !str_starts_with($sub, '-')) {
+                array_splice($tokens, 1, 0, ['show']);
+            }
+        }
+
         return $tokens;
     }
 }

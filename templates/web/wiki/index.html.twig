@@ -1,0 +1,229 @@
+{% extends 'base.html.twig' %}
+{% import 'macros/ui.html.twig' as ui %}
+
+{% block title %}{% if activePage %}{{ activePage.title }} - {% endif %}Wiki - {{ serverName }}{% endblock %}
+
+{% set nav_page = 'wiki' %}
+
+{% set catIcons = {
+    'Overview': '🏠',
+    'Signup': '🚀',
+    'Login': '🔑',
+    'Repo': '📦',
+    'Deploy': '🚢',
+    'Collab': '👥'
+} %}
+
+{% block header_identity %}
+    <h1 class="home-title">
+        <a href="/" style="text-decoration: none; color: inherit;"><span class="cli-prompt">&gt;_</span> {{ serverName }}</a>
+        <span class="cli-host">/ <a href="/wiki" style="text-decoration: none; color: inherit;">wiki</a>{% if activePage %} / {{ activePage.slugString }}{% endif %}</span>
+    </h1>
+    <p class="description">Server knowledge base, guides, and documentation — accessible over Web, SSH CLI &amp; TUI.</p>
+{% endblock %}
+
+{% block main %}
+    <div class="wiki-toolbar">
+        <form action="/wiki" method="get" class="wiki-search-form" role="search">
+            <div class="wiki-search-input-wrap">
+                <span class="wiki-search-icon">&gt;_</span>
+                <input type="search" name="q" value="{{ searchQuery }}" placeholder="Search wiki pages (title, slug, content)..." class="cli-search wiki-search-input" aria-label="Search wiki pages">
+                <span class="wiki-search-hint" title="Press / to focus search"><kbd>/</kbd></span>
+            </div>
+            <button type="submit" class="home-btn home-btn-subtle">Search</button>
+            {% if searchQuery is not empty %}
+                <a href="/wiki" class="home-btn home-btn-subtle">Clear</a>
+            {% endif %}
+        </form>
+
+        <div class="wiki-toolbar-actions">
+            <div class="clone-box" title="Read wiki from terminal">
+                <code class="clone-code">{{ sshPrefix }} wiki {% if activePage %}show {{ activePage.slugString }}{% else %}list{% endif %}</code>
+                {{ ui.copy_btn(sshPrefix ~ ' wiki ' ~ (activePage ? 'show ' ~ activePage.slugString : 'list'), null, 'copy-btn-sm', 'Copy SSH wiki command') }}
+            </div>
+            {% if isAdmin %}
+                <a href="/wiki/new" class="home-btn">+ New Page</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="wiki-layout{% if activePage %} wiki-layout-with-toc{% endif %}">
+        <aside class="wiki-sidebar" aria-label="Wiki Pages Navigation">
+            <div class="wiki-sidebar-header">
+                <span class="wiki-sidebar-title">Documentation</span>
+            </div>
+
+            {% if groupedPages is empty %}
+                <p class="wiki-sidebar-empty">No pages yet.</p>
+            {% else %}
+                {% for category, pages in groupedPages %}
+                    <div class="wiki-category-group">
+                        <div class="wiki-category-label">{{ category }}</div>
+                        <ul class="wiki-nav-list">
+                            {% for p in pages %}
+                                <li>
+                                    <a href="/wiki/{{ p.slugString }}" class="wiki-nav-link{% if activePage and activePage.slugString == p.slugString %} active{% endif %}" title="{{ p.title }}">
+                                        {{ p.title }}
+                                    </a>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        </aside>
+
+        <div class="wiki-main">
+            {% if searchResults is not null %}
+                <section class="wiki-article-card" aria-label="Search results">
+                    <div class="wiki-article-header">
+                        <div>
+                            <div class="wiki-breadcrumbs">
+                                <a href="/wiki">Wiki</a> &rsaquo; <span>Search</span>
+                            </div>
+                            <h2 class="wiki-article-title">Search results for "{{ searchQuery }}"</h2>
+                            <span class="wiki-article-meta">{{ searchResults|length }} matching page{{ searchResults|length == 1 ? '' : 's' }}</span>
+                        </div>
+                    </div>
+
+                    {% if searchResults is empty %}
+                        <p class="notice" style="margin: 1.5rem 0;">No wiki pages matched your query <code>"{{ searchQuery }}"</code>. Try searching for a different keyword or browse pages in the sidebar.</p>
+                    {% else %}
+                        <ul class="repo-list" style="margin-top: 1rem;">
+                            {% for hit in searchResults %}
+                                <li class="repo-list-item">
+                                    <div>
+                                        <a href="/wiki/{{ hit.page.slugString }}" class="repo-list-link">{{ hit.page.title }}</a>
+                                        <span class="repo-list-badges">
+                                            <span class="doc-badge doc-badge-category">{{ hit.page.category }}</span>
+                                            <code class="wiki-slug-pill">{{ hit.page.slugString }}</code>
+                                        </span>
+                                    </div>
+                                    {% if hit.snippet %}
+                                        <div class="repo-list-desc">{{ hit.snippet }}</div>
+                                    {% endif %}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                </section>
+            {% elseif activePage %}
+                <article class="wiki-article-card">
+                    <nav class="wiki-breadcrumbs" aria-label="Breadcrumbs">
+                        <a href="/wiki">Wiki</a> &rsaquo;
+                        <span class="wiki-breadcrumb-cat">{{ activePage.category }}</span> &rsaquo;
+                        <span class="wiki-breadcrumb-current">{{ activePage.title }}</span>
+                    </nav>
+
+                    <header class="wiki-article-header">
+                        <div class="wiki-header-info">
+                            <div class="wiki-article-badges">
+                                <span class="doc-badge doc-badge-category">{{ catIcons[activePage.category]|default('📁') }} {{ activePage.category }}</span>
+                                <code class="wiki-slug-pill">{{ activePage.slugString }}</code>
+                                {% set words = activePage.content|split(' ')|length %}
+                                <span class="wiki-read-time" title="Estimated reading time">⏱️ {{ max(1, (words / 180)|round(0, 'ceil')) }} min read</span>
+                            </div>
+                            <h2 class="wiki-article-title">{{ activePage.title }}</h2>
+                            <div class="wiki-article-meta">
+                                <span>Updated {{ activePage.updatedAt|date('Y-m-d H:i') }}</span>
+                                {% if activePage.author %}
+                                    <span>by <a href="/@{{ activePage.author.username }}" class="user-pill-name">@{{ activePage.author.username }}</a></span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="wiki-header-side">
+                            <div class="wiki-quick-terminal" title="Run this command in your terminal to view via SSH CLI">
+                                <span class="wiki-quick-terminal-prefix">SSH CLI</span>
+                                <code>{{ sshPrefix }} wiki show {{ activePage.slugString }}</code>
+                                {{ ui.copy_btn(sshPrefix ~ ' wiki show ' ~ activePage.slugString, null, 'copy-btn-sm', 'Copy SSH command') }}
+                            </div>
+
+                            {% if isAdmin %}
+                                <div class="wiki-admin-actions">
+                                    <a href="/wiki/edit/{{ activePage.slugString }}" class="home-btn home-btn-subtle">Edit Page</a>
+                                    <form action="/wiki/delete/{{ activePage.slugString }}" method="post" class="wiki-delete-form" onsubmit="return confirm('Are you sure you want to delete this wiki page?');">
+                                        <input type="hidden" name="_token" value="{{ csrfToken }}">
+                                        <button type="submit" class="home-btn wiki-btn-danger">Delete</button>
+                                    </form>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </header>
+
+                    <div class="readme wiki-content">
+                        {{ renderedHtml }}
+                    </div>
+
+                    {% if prevPage or nextPage %}
+                        <nav class="wiki-pager" aria-label="Wiki article pagination">
+                            {% if prevPage %}
+                                <a href="/wiki/{{ prevPage.slugString }}" class="wiki-pager-link wiki-pager-prev">
+                                    <span class="wiki-pager-dir">&larr; Previous</span>
+                                    <span class="wiki-pager-title">{{ prevPage.title }}</span>
+                                    <span class="wiki-pager-cat">{{ prevPage.category }}</span>
+                                </a>
+                            {% else %}
+                                <div></div>
+                            {% endif %}
+
+                            {% if nextPage %}
+                                <a href="/wiki/{{ nextPage.slugString }}" class="wiki-pager-link wiki-pager-next">
+                                    <span class="wiki-pager-dir">Next &rarr;</span>
+                                    <span class="wiki-pager-title">{{ nextPage.title }}</span>
+                                    <span class="wiki-pager-cat">{{ nextPage.category }}</span>
+                                </a>
+                            {% endif %}
+                        </nav>
+                    {% endif %}
+                </article>
+            {% else %}
+                <section class="wiki-article-card wiki-empty-state">
+                    <h2 class="wiki-article-title">Welcome to the {{ serverName }} Wiki</h2>
+                    <p class="description">No wiki pages have been published yet.</p>
+                    {% if isAdmin %}
+                        <div style="margin-top: 1.25rem;">
+                            <a href="/wiki/new?slug=home" class="home-btn">+ Create First Page (home)</a>
+                        </div>
+                    {% else %}
+                        <div class="doc-terminal" style="margin-top: 1.25rem;">
+                            <div class="doc-terminal-bar">
+                                <div class="doc-terminal-dots">
+                                    <span class="doc-terminal-dot dot-red"></span>
+                                    <span class="doc-terminal-dot dot-yellow"></span>
+                                    <span class="doc-terminal-dot dot-green"></span>
+                                </div>
+                                <span class="doc-terminal-title">Server Administration</span>
+                            </div>
+                            <div class="doc-terminal-body">
+                                <p class="notice" style="margin: 0;">Server administrators can create pages from the Web UI or via SSH CLI:</p>
+                                <div class="doc-synopsis-line" style="margin-top: .75rem;">
+                                    <span class="doc-term-prompt">&gt;</span>
+                                    <span class="doc-term-cmd">{{ sshPrefix }} wiki set home "# Welcome"</span>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                </section>
+            {% endif %}
+        </div>
+
+        {% if activePage %}
+            <aside class="wiki-toc" aria-label="Table of Contents">
+                <div class="wiki-toc-sticky">
+                    <div class="wiki-toc-header">
+                        <span class="wiki-toc-title">On this page</span>
+                    </div>
+                    <nav class="wiki-toc-nav">
+                        <ul class="wiki-toc-list" id="wiki-toc-list">
+                            {# Populated dynamically by repo-web.js #}
+                        </ul>
+                    </nav>
+                </div>
+            </aside>
+        {% endif %}
+    </div>
+{% endblock %}
+
+{% block footer_summary %}Wiki · {{ totalPages }} page{{ totalPages == 1 ? '' : 's' }}{% endblock %}
+{% block footer_meta %}{% if isAdmin %}Admin Mode{% else %}Read-Only{% endif %} · {{ serverName }}{% endblock %}

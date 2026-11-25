@@ -8,6 +8,10 @@ use App\Identity\Domain\Model\SshKey;
 use App\Identity\Domain\Model\User;
 use App\Identity\Domain\UserStore;
 use App\Shared\Infrastructure\Config\ServerSettings;
+use App\Wiki\Application\DefaultWikiPages;
+use App\Wiki\Domain\Model\WikiPage;
+use App\Wiki\Domain\WikiSlug;
+use App\Wiki\Domain\WikiStore;
 use Psr\Clock\ClockInterface;
 
 final readonly class BootstrapServer
@@ -16,6 +20,7 @@ final readonly class BootstrapServer
         private UserStore $userStore,
         private ServerSettings $serverSettings,
         private ClockInterface $clock,
+        private ?WikiStore $wikiStore = null,
     ) {
     }
 
@@ -42,6 +47,23 @@ final readonly class BootstrapServer
             } elseif (!$owner->isAdmin()) {
                 $owner->setAdmin(true, $now);
                 $this->userStore->save($owner);
+            }
+        }
+
+        if (null !== $this->wikiStore) {
+            foreach (DefaultWikiPages::all() as $seed) {
+                $slug = new WikiSlug($seed['slug']);
+                if (null === $this->wikiStore->bySlug($slug)) {
+                    $this->wikiStore->save(new WikiPage(
+                        slug: $slug,
+                        title: $seed['title'],
+                        content: $seed['content'],
+                        category: $seed['category'],
+                        position: $seed['position'],
+                        author: $admin,
+                        createdAt: $now,
+                    ));
+                }
             }
         }
     }
