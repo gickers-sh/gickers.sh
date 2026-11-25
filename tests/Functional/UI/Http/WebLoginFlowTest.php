@@ -90,6 +90,24 @@ final class WebLoginFlowTest extends KernelTestCase
         $this->assertSame(404, $this->get('/'.$name, $cookie)->getStatusCode());
     }
 
+    public function testMagicLinkCannotBeReused(): void
+    {
+        $user = new User('singleuse-'.bin2hex(random_bytes(3)), false, new \DateTimeImmutable());
+        $this->users->save($user);
+
+        $ticket = $this->tokens->issueLoginTicket($user);
+
+        // 1. First redemption succeeds
+        $firstRedeem = $this->get('/login/'.$ticket);
+        $this->assertSame(Response::HTTP_SEE_OTHER, $firstRedeem->getStatusCode());
+        $this->assertNotNull($this->sessionCookie($firstRedeem));
+
+        // 2. Second redemption MUST be rejected (strict single-use)
+        $secondRedeem = $this->get('/login/'.$ticket);
+        $this->assertSame(Response::HTTP_UNAUTHORIZED, $secondRedeem->getStatusCode());
+        $this->assertStringContainsString('This sign-in link is invalid or has expired.', (string) $secondRedeem->getContent());
+    }
+
     public function testAnonymousPublicRepoHidesAdminCommands(): void
     {
         $owner = new User('wlpub-'.bin2hex(random_bytes(3)), false, new \DateTimeImmutable());

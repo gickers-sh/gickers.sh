@@ -32,6 +32,11 @@ final class DoctrineAccessTokenStore extends ServiceEntityRepository implements 
         return $this->findOneBy(['id' => $id, 'user' => $user]);
     }
 
+    public function byNameForUser(string $name, User $user): ?AccessToken
+    {
+        return $this->findOneBy(['name' => $name, 'user' => $user]);
+    }
+
     /**
      * @return list<AccessToken>
      */

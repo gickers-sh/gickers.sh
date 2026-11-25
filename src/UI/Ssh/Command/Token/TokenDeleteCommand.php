@@ -36,17 +36,17 @@ final class TokenDeleteCommand extends AbstractSshCommand
     {
         $this
             ->setDescription('Delete an access token')
-            ->addArgument('id', InputArgument::REQUIRED, 'Token ID to revoke');
+            ->addArgument('id', InputArgument::REQUIRED, 'Token ID or name to revoke');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $idRaw = $this->stringArgument($input, 'id');
-        if (!is_numeric($idRaw)) {
-            throw new InvalidInput('Invalid token ID');
+        $idRaw = trim($this->stringArgument($input, 'id'));
+        if ('' === $idRaw) {
+            throw new InvalidInput('Missing token ID or name');
         }
 
-        ($this->revokeAccessToken)($this->actor(), (int) $idRaw);
+        ($this->revokeAccessToken)($this->actor(), $idRaw);
 
         // Go soft serve outputs confirmation to stderr
         $this->errLine($output, 'Access token deleted');

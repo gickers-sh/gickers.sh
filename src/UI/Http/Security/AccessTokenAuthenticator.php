@@ -5,15 +5,19 @@ declare(strict_types=1);
 namespace App\UI\Http\Security;
 
 use App\Identity\Application\AuthenticateAccessToken;
+use App\Identity\Domain\Model\AccessToken;
 use App\Identity\Domain\UserStore;
+use App\Identity\Infrastructure\Security\LoginThrottler;
 use App\Identity\Infrastructure\Security\SecurityUser;
 use App\Identity\Infrastructure\WebAuth\WebSessionTokens;
+use App\Shared\Domain\Exception\AccessDenied;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
 use Symfony\Component\Security\Core\Exception\BadCredentialsException;
+use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
 use Symfony\Component\Security\Http\Authenticator\AbstractAuthenticator;
 use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
 use Symfony\Component\Security\Http\Authenticator\Passport\Passport;
@@ -34,6 +38,7 @@ final class AccessTokenAuthenticator extends AbstractAuthenticator
         private readonly AuthenticateAccessToken $authenticateAccessToken,
         private readonly UserPasswordHasherInterface $passwordHasher,
         private readonly WebSessionTokens $webSessionTokens,
+        private readonly LoginThrottler $loginThrottler,
     ) {}
 
     public function supports(Request $request): bool
@@ -68,12 +73,28 @@ final class AccessTokenAuthenticator extends AbstractAuthenticator
             return $this->authenticateSessionCookie($request);
         }
 
+        $repo = $this->extractRepoName($request);
+
         if (null !== $auth && str_starts_with(strtolower($auth), 'token ')) {
             $secret = trim(substr($auth, 6));
-            $user = ($this->authenticateAccessToken)($secret);
-            if (null === $user) {
+            $clientIp = $request->getClientIp() ?? '127.0.0.1';
+            $throttleTarget = 'token:' . substr(hash('sha256', $secret), 0, 16);
+            try {
+                $this->loginThrottler->assertNotLocked($throttleTarget, $clientIp);
+            } catch (AccessDenied $e) {
+                throw new CustomUserMessageAuthenticationException($e->getMessage());
+            }
+
+            $token = $this->authenticateAccessToken->findToken($secret);
+            if (null === $token) {
+                $this->loginThrottler->recordFailure($throttleTarget, $clientIp);
                 throw new BadCredentialsException('Invalid access token.');
             }
+
+            $this->assertTokenAllowed($token, $repo, $request);
+
+            $user = $token->user();
+            $this->loginThrottler->recordSuccess($throttleTarget, $clientIp);
 
             return new SelfValidatingPassport(new UserBadge($user->username(), static fn() => new SecurityUser($user)));
         }
@@ -95,34 +116,60 @@ final class AccessTokenAuthenticator extends AbstractAuthenticator
         }
 
         if ('' !== $username && '' !== $password) {
+            $clientIp = $request->getClientIp() ?? '127.0.0.1';
+            try {
+                $this->loginThrottler->assertNotLocked($username, $clientIp);
+            } catch (AccessDenied $e) {
+                throw new CustomUserMessageAuthenticationException($e->getMessage());
+            }
+
             $user = $this->userStore->byUsername($username);
             if (null !== $user) {
                 if ($this->passwordHasher->isPasswordValid(new SecurityUser($user), $password)) {
+                    $this->loginThrottler->recordSuccess($username, $clientIp);
+
                     return new SelfValidatingPassport(new UserBadge($user->username(), static fn() => new SecurityUser($user)));
                 }
 
                 // Check if password is an access token for this or another user
-                $tokenUser = ($this->authenticateAccessToken)($password);
-                if (null !== $tokenUser) {
+                $token = $this->authenticateAccessToken->findToken($password);
+                if (null !== $token) {
+                    $this->assertTokenAllowed($token, $repo, $request);
+                    $tokenUser = $token->user();
+
+                    $this->loginThrottler->recordSuccess($username, $clientIp);
+
                     return new SelfValidatingPassport(new UserBadge($tokenUser->username(), static fn() => new SecurityUser($tokenUser)));
                 }
+
+                $this->loginThrottler->recordFailure($username, $clientIp);
 
                 throw new BadCredentialsException('Invalid password or token.');
             }
 
             // Username not found, check if password is an access token
-            $tokenUser = ($this->authenticateAccessToken)($password);
-            if (null !== $tokenUser) {
+            $token = $this->authenticateAccessToken->findToken($password);
+            if (null !== $token) {
+                $this->assertTokenAllowed($token, $repo, $request);
+                $tokenUser = $token->user();
+
+                $this->loginThrottler->recordSuccess($username, $clientIp);
+
                 return new SelfValidatingPassport(new UserBadge($tokenUser->username(), static fn() => new SecurityUser($tokenUser)));
             }
+
+            $this->loginThrottler->recordFailure($username, $clientIp);
 
             throw new BadCredentialsException('User not found and invalid token.');
         }
 
         if ('' !== $username) {
             // Try username as an access token
-            $tokenUser = ($this->authenticateAccessToken)($username);
-            if (null !== $tokenUser) {
+            $token = $this->authenticateAccessToken->findToken($username);
+            if (null !== $token) {
+                $this->assertTokenAllowed($token, $repo, $request);
+                $tokenUser = $token->user();
+
                 return new SelfValidatingPassport(new UserBadge($tokenUser->username(), static fn() => new SecurityUser($tokenUser)));
             }
 
@@ -130,6 +177,33 @@ final class AccessTokenAuthenticator extends AbstractAuthenticator
         }
 
         throw new BadCredentialsException('Missing credentials.');
+    }
+
+    private function extractRepoName(Request $request): string
+    {
+        $attr = $request->attributes->get('repo');
+        if (\is_string($attr) && '' !== $attr) {
+            return preg_replace('/\.git$/', '', $attr) ?? $attr;
+        }
+
+        $path = $request->getPathInfo();
+        if (preg_match('#^/([^/]+?)(?:\.git)?(?:/.*)?$#', $path, $m)) {
+            return $m[1];
+        }
+
+        return '';
+    }
+
+    private function assertTokenAllowed(AccessToken $token, string $repo, Request $request): void
+    {
+        if ('' !== $repo && !$token->allowsRepo($repo)) {
+            throw new BadCredentialsException(sprintf('Access token is not authorized for repository "%s".', $repo));
+        }
+
+        $isPush = str_contains($request->getPathInfo(), 'git-receive-pack') || 'git-receive-pack' === $request->query->get('service');
+        if ($isPush && !$token->hasScope('repo:write') && !$token->hasScope('write') && !$token->hasScope('*') && !$token->hasScope('all')) {
+            throw new BadCredentialsException('Access token missing required write scope.');
+        }
     }
 
     /**
@@ -159,6 +233,13 @@ final class AccessTokenAuthenticator extends AbstractAuthenticator
 
     public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
     {
+        if ($exception instanceof CustomUserMessageAuthenticationException) {
+            return new Response($exception->getMessage(), Response::HTTP_TOO_MANY_REQUESTS, [
+                'Content-Type' => 'text/plain',
+                'Retry-After' => '900',
+            ]);
+        }
+
         // Mark bad credentials so authorizer/denyRead can answer 403 or 401 accordingly
         $request->attributes->set('_bad_credentials', true);
 

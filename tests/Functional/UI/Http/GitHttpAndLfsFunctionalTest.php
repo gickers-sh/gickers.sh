@@ -10,7 +10,7 @@ use App\Identity\Domain\Model\User;
 use App\Identity\Domain\UserStore;
 use App\Lfs\Application\IssueLfsToken;
 use App\Repo\Application\CreateRepo;
-use App\UI\Ssh\Command\JwtCommand;
+use App\UI\Ssh\Command\Token\TokenCreateCommand;
 use App\UI\Ssh\SshSession;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -18,7 +18,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Functional tests for Git HTTP transport, Git LFS, and JWT authentication.
+ * Functional tests for Git HTTP transport, Git LFS, and Bearer token authentication.
  * Uses Symfony Kernel::handle() directly for full HTTP pipeline testing.
  *
  * @phpstan-type LfsBatchObject array{
@@ -469,14 +469,14 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
         $this->assertSame(200, $this->handle($request)->getStatusCode());
     }
 
-    public function testJwtBearerAuthentication(): void
+    public function testTokenBearerAuthentication(): void
     {
-        $user = $this->newUser('jwtuser');
-        $repo = ($this->createRepo)($user, 'jwt-repo-'.bin2hex(random_bytes(4)), private: false);
+        $user = $this->newUser('tokenuser');
+        $repo = ($this->createRepo)($user, 'token-repo-'.bin2hex(random_bytes(4)), private: false);
 
         // 1. Valid token issued via IssueLfsToken
         $issued = ($this->issueLfsToken)($user, $repo->name(), 'upload');
-        $authHeader = $issued['header']['Authorization']; // 'Bearer <jwt>'
+        $authHeader = $issued['header']['Authorization']; // 'Bearer <token>'
 
         $request = Request::create(
             sprintf('/%s.git/info/lfs/objects/batch', $repo->name()->value),
@@ -496,7 +496,7 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
         );
         $this->assertSame(200, $this->handle($request)->getStatusCode());
 
-        // 2. Bad JWT token -> 401
+        // 2. Bad token -> 401
         $request = Request::create(
             sprintf('/%s.git/info/lfs/objects/batch', $repo->name()->value),
             'POST',
@@ -516,7 +516,7 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
         $this->assertSame(401, $this->handle($request)->getStatusCode());
     }
 
-    public function testSshJwtCommand(): void
+    public function testSshTokenCommand(): void
     {
         $container = static::getContainer();
         /** @var SshSession $session */
@@ -525,17 +525,21 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
         $user = $this->newUser('sshuser');
         $session->authenticate($user, 'test-fingerprint');
 
-        /** @var JwtCommand $command */
-        $command = $container->get(JwtCommand::class);
+        /** @var TokenCreateCommand $command */
+        $command = $container->get(TokenCreateCommand::class);
         $tester = new CommandTester($command);
 
         $exitCode = $tester->execute([
-            'repositories' => ['demo-repo', 'another/project'],
+            'name' => 'lfs-test-token',
+            '--scope' => ['lfs'],
+            '--repo' => ['demo-repo', 'another/project'],
         ]);
 
         $this->assertSame(0, $exitCode);
-        $token = trim($tester->getDisplay());
-        $this->assertNotEmpty($token);
+        $output = $tester->getDisplay();
+        $this->assertMatchesRegularExpression('/ss_[a-zA-Z0-9]+/', $output);
+        preg_match('/(ss_[a-zA-Z0-9]+)/', $output, $matches);
+        $token = $matches[1];
 
         // Verify the SSH-generated token works with the HTTP API!
         $request = Request::create(
@@ -554,7 +558,7 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
                 'objects' => [['oid' => str_repeat('a', 64), 'size' => 10]],
             ]),
         );
-        // Repository demo-repo does not exist in DB, but JWT authentication itself succeeded!
+        // Repository demo-repo does not exist in DB, but token authentication itself succeeded!
         // Because it doesn't exist, response is 404 repository not found (not 401 invalid token)!
         $this->assertSame(404, $this->handle($request)->getStatusCode());
     }

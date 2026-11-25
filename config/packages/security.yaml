@@ -21,7 +21,7 @@ security:
             custom_authenticators:
                 - App\UI\Http\Security\AccessTokenAuthenticator
             access_token:
-                token_handler: App\UI\Http\Security\JwtAccessTokenHandler
+                token_handler: App\UI\Http\Security\BearerAccessTokenHandler
                 failure_handler: App\UI\Http\Security\GitAuthChallenge
 
 when@test:

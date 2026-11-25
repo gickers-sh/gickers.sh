@@ -5,74 +5,71 @@ declare(strict_types=1);
 namespace App\Identity\Infrastructure\WebAuth;
 
 use App\Identity\Domain\Model\User;
+use App\Identity\Domain\Model\WebLoginTicket;
+use App\Identity\Domain\WebLoginTicketStore;
 use App\Shared\Infrastructure\Config\ServerSettings;
-use App\Shared\Infrastructure\Server\JwtKeyGenerator;
-use Lcobucci\JWT\Configuration;
-use Lcobucci\JWT\Signer\Eddsa;
-use Lcobucci\JWT\Signer\Key\InMemory;
-use Lcobucci\JWT\Token\Plain;
-use Lcobucci\JWT\Token\RegisteredClaims;
-use Lcobucci\JWT\Validation\Constraint\IssuedBy;
-use Lcobucci\JWT\Validation\Constraint\PermittedFor;
-use Lcobucci\JWT\Validation\Constraint\SignedWith;
-use Lcobucci\JWT\Validation\Constraint\StrictValidAt;
 use Psr\Clock\ClockInterface;
 
 /**
- * Mints and verifies the two Ed25519 JWTs behind the browser `web login` flow,
- * both signed with the server's shared JWT key (same key as LFS tokens):
+ * Handles web authentication tokens:
  *
- *   1. A short-lived single-purpose "login ticket" (audience {@see self::LOGIN_AUDIENCE}),
- *      printed by `web login` as a magic link. Clicking it authenticates the browser.
- *   2. A long-lived "session" token (audience {@see self::SESSION_AUDIENCE}) carrying the
- *      user's current web_token_version in the `wtv` claim, stored in the `codes_session`
- *      cookie. `web logout` bumps that version, invalidating every outstanding session.
- *
- * The subject of both tokens is the numeric user id.
+ *   1. A short-lived, strictly single-use login ticket token stored in DB,
+ *      printed by `web login` as a magic link. Redeeming it authenticates the browser
+ *      and marks it as consumed immediately.
+ *   2. A tamper-proof session token carrying the user's id, current web_token_version (wtv)
+ *      and expiry timestamp, signed with HMAC-SHA256, stored in the `codes_session` cookie.
+ *      `web logout` bumps the user's version, immediately invalidating all active sessions.
  */
 final readonly class WebSessionTokens
 {
     public const COOKIE_NAME = 'codes_session';
 
-    public const LOGIN_AUDIENCE = 'web-login';
-    public const SESSION_AUDIENCE = 'web-session';
-
-    private const LOGIN_TTL = 'PT10M';
     private const SESSION_TTL = 'P30D';
-    private const VERSION_CLAIM = 'wtv';
 
     public function __construct(
-        private JwtKeyGenerator $keys,
         private ServerSettings $settings,
         private ClockInterface $clock,
+        private WebLoginTicketStore $ticketStore,
     ) {}
 
     /**
-     * Mint the magic-link ticket embedded in the URL that `web login` prints.
+     * Mint the single-use magic-link ticket embedded in the URL that `web login` prints.
      */
     public function issueLoginTicket(User $user): string
     {
         $now = $this->clock->now();
+        [$ticket, $secret] = WebLoginTicket::issue($user, $now, 600);
+        $this->ticketStore->save($ticket);
 
-        return $this->config()->builder()
-            ->issuedBy($this->issuer())
-            ->permittedFor(self::LOGIN_AUDIENCE)
-            ->relatedTo((string) $user->id())
-            ->issuedAt($now)
-            ->canOnlyBeUsedAfter($now)
-            ->expiresAt($now->add(new \DateInterval(self::LOGIN_TTL)))
-            ->getToken($this->config()->signer(), $this->config()->signingKey())
-            ->toString();
+        return $secret;
     }
 
     /**
      * Validate a magic-link ticket and return the authenticated user id, or null.
+     * Guaranteed single-use: marks the ticket as used upon redemption.
      */
-    public function verifyLoginTicket(string $jwt): ?int
+    public function verifyLoginTicket(string $rawToken): ?int
     {
-        $token = $this->parse($jwt, self::LOGIN_AUDIENCE);
+        $secret = trim($rawToken);
+        if ('' === $secret) {
+            return null;
+        }
 
-        return null === $token ? null : $this->subjectId($token);
+        $hash = WebLoginTicket::hash($secret);
+        $ticket = $this->ticketStore->byHash($hash);
+        if (null !== $ticket) {
+            $now = $this->clock->now();
+            if ($ticket->isUsed() || $ticket->isExpired($now)) {
+                return null;
+            }
+
+            $ticket->markUsed($now);
+            $this->ticketStore->save($ticket);
+
+            return $ticket->user()->id();
+        }
+
+        return null;
     }
 
     /**
@@ -81,40 +78,60 @@ final readonly class WebSessionTokens
     public function issueSession(User $user): string
     {
         $now = $this->clock->now();
+        $expiresAt = $now->add(new \DateInterval(self::SESSION_TTL))->getTimestamp();
 
-        return $this->config()->builder()
-            ->issuedBy($this->issuer())
-            ->permittedFor(self::SESSION_AUDIENCE)
-            ->relatedTo((string) $user->id())
-            ->withClaim(self::VERSION_CLAIM, $user->webTokenVersion())
-            ->issuedAt($now)
-            ->canOnlyBeUsedAfter($now)
-            ->expiresAt($now->add(new \DateInterval(self::SESSION_TTL)))
-            ->getToken($this->config()->signer(), $this->config()->signingKey())
-            ->toString();
+        $payload = json_encode([
+            'id' => $user->id(),
+            'wtv' => $user->webTokenVersion(),
+            'exp' => $expiresAt,
+        ], \JSON_THROW_ON_ERROR);
+
+        $encodedPayload = self::base64UrlEncode($payload);
+        $signature = hash_hmac('sha256', $encodedPayload, $this->secretKey());
+
+        return $encodedPayload . '.' . $signature;
     }
 
     /**
      * Validate a session cookie: returns the user id and the web_token_version it
-     * was issued for (the caller compares that against the user's current version),
-     * or null when signature/issuer/audience/expiry fails.
+     * was issued for, or null when invalid, tampered or expired.
      *
      * @return array{id: int, version: int}|null
      */
-    public function verifySession(string $jwt): ?array
+    public function verifySession(string $token): ?array
     {
-        $token = $this->parse($jwt, self::SESSION_AUDIENCE);
-        if (null === $token) {
+        if (!str_contains($token, '.')) {
             return null;
         }
 
-        $id = $this->subjectId($token);
-        $version = $token->claims()->get(self::VERSION_CLAIM);
-        if (null === $id || !\is_int($version)) {
+        [$encodedPayload, $signature] = explode('.', $token, 2);
+        $expectedSignature = hash_hmac('sha256', $encodedPayload, $this->secretKey());
+
+        if (!hash_equals($expectedSignature, $signature)) {
             return null;
         }
 
-        return ['id' => $id, 'version' => $version];
+        $payloadJson = self::base64UrlDecode($encodedPayload);
+        if (null === $payloadJson) {
+            return null;
+        }
+
+        try {
+            /** @var mixed $data */
+            $data = json_decode($payloadJson, true, 512, \JSON_THROW_ON_ERROR);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if (!\is_array($data) || !isset($data['id'], $data['wtv'], $data['exp']) || !\is_int($data['id']) || !\is_int($data['wtv']) || !\is_int($data['exp'])) {
+            return null;
+        }
+
+        if ($this->clock->now()->getTimestamp() >= $data['exp']) {
+            return null;
+        }
+
+        return ['id' => $data['id'], 'version' => $data['wtv']];
     }
 
     public function sessionTtlSeconds(): int
@@ -124,54 +141,29 @@ final readonly class WebSessionTokens
         return $now->add(new \DateInterval(self::SESSION_TTL))->getTimestamp() - $now->getTimestamp();
     }
 
-    private function parse(string $jwt, string $audience): ?Plain
+    private function secretKey(): string
     {
-        if ('' === $jwt) {
-            return null;
+        $key = $this->settings->httpPublicUrl;
+        if ('' === $key) {
+            $key = 'codes.sh-session-secret';
         }
 
-        $config = $this->config();
-        try {
-            $token = $config->parser()->parse($jwt);
-            $config->validator()->assert(
-                $token,
-                new SignedWith($config->signer(), $config->verificationKey()),
-                new IssuedBy($this->issuer()),
-                new PermittedFor($audience),
-                new StrictValidAt($this->clock),
-            );
-        } catch (\Throwable) {
-            return null;
+        return $key;
+    }
+
+    private static function base64UrlEncode(string $data): string
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+    }
+
+    private static function base64UrlDecode(string $data): ?string
+    {
+        $remainder = strlen($data) % 4;
+        if ($remainder) {
+            $data .= str_repeat('=', 4 - $remainder);
         }
+        $decoded = base64_decode(strtr($data, '-_', '+/'), true);
 
-        return $token instanceof Plain ? $token : null;
-    }
-
-    private function subjectId(Plain $token): ?int
-    {
-        $subject = $token->claims()->get(RegisteredClaims::SUBJECT);
-
-        return \is_string($subject) && ctype_digit($subject) ? (int) $subject : null;
-    }
-
-    private function issuer(): string
-    {
-        $issuer = $this->settings->httpPublicUrl;
-        if ('' === $issuer) {
-            throw new \RuntimeException('SOFT_SERVE_HTTP_PUBLIC_URL must be set for web login.');
-        }
-
-        return $issuer;
-    }
-
-    private function config(): Configuration
-    {
-        $key = $this->keys->load();
-
-        return Configuration::forAsymmetricSigner(
-            new Eddsa(),
-            InMemory::plainText($key['secret']),
-            InMemory::plainText($key['public']),
-        );
+        return false === $decoded ? null : $decoded;
     }
 }

@@ -20,6 +20,13 @@ final readonly class AuthenticateAccessToken
 
     public function __invoke(string $secret): ?User
     {
+        $token = $this->findToken($secret);
+
+        return $token?->user();
+    }
+
+    public function findToken(string $secret): ?AccessToken
+    {
         $hash = AccessToken::hash($secret);
         $token = $this->accessTokenStore->byHash($hash);
         if (null === $token) {
@@ -31,9 +38,13 @@ final readonly class AuthenticateAccessToken
             throw new AccessDenied('token expired');
         }
 
+        if ($token->isSingleUse() && $token->isUsed()) {
+            throw new AccessDenied('single-use token has already been used');
+        }
+
         $token->markUsed($now);
         $this->accessTokenStore->save($token);
 
-        return $token->user();
+        return $token;
     }
 }

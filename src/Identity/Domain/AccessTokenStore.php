@@ -13,6 +13,8 @@ interface AccessTokenStore
 
     public function byIdForUser(int $id, User $user): ?AccessToken;
 
+    public function byNameForUser(string $name, User $user): ?AccessToken;
+
     /** @return list<AccessToken> ordered by creation */
     public function forUser(User $user): array;
 

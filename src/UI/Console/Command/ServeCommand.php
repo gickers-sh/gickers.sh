@@ -11,7 +11,6 @@ use App\Identity\Application\BootstrapServer;
 use App\Repo\Infrastructure\Git\HookSynchronizer;
 use App\Shared\Infrastructure\Config\ServerSettings;
 use App\Shared\Infrastructure\Server\DataDirectoryInitializer;
-use App\Shared\Infrastructure\Server\JwtKeyGenerator;
 use App\Shared\Infrastructure\Server\ListenAddress;
 use App\Shared\Infrastructure\Server\ProcessSupervisor;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -26,7 +25,7 @@ use Symfony\Component\Process\ExecutableFinder;
 use Symfony\Component\Process\Process;
 
 /**
- * `soft serve`: prepares the data directory, database and JWT key,
+ * `soft serve`: prepares the data directory and database,
  * then supervises codes-ssh, the HTTP server and the Messenger worker.
  * Listen addresses come from the SOFT_SERVE_* environment variables.
  */
@@ -40,7 +39,6 @@ final class ServeCommand extends Command
         private readonly ServerSettings $settings,
         private readonly ServerPolicy $serverPolicy,
         private readonly DataDirectoryInitializer $dataDirectory,
-        private readonly JwtKeyGenerator $jwtKeys,
         private readonly BootstrapServer $bootstrapServer,
         private readonly HookSynchronizer $hookSynchronizer,
         private readonly ProcessSupervisor $supervisor,
@@ -67,7 +65,7 @@ final class ServeCommand extends Command
     {
         $this
             ->addOption('only', null, InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, 'Run only the given component(s): init, ssh, http, worker (repeatable). Default: all.')
-            ->addOption('skip-init', null, InputOption::VALUE_NONE, 'Skip the one-time preparation (data dir, migrations, cache warmup, bootstrap, JWT keys)')
+            ->addOption('skip-init', null, InputOption::VALUE_NONE, 'Skip the one-time preparation (data dir, migrations, cache warmup, bootstrap)')
             ->addOption('sync-hooks', null, InputOption::VALUE_NONE, 'Synchronize the hooks of every repository before starting')
             ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Prepare everything, print the plan, and exit without starting processes');
     }
@@ -93,7 +91,6 @@ final class ServeCommand extends Command
             // Every SSH session and git hook boots bin/console: warm the cache once, up front.
             $this->runConsole('cache:warmup', [], $output);
             ($this->bootstrapServer)();
-            $this->jwtKeys->ensure();
 
             $syncedCount = $this->reconcileDeployments->reconcileCaddyRoutes(reload: false);
             if ($syncedCount > 0) {

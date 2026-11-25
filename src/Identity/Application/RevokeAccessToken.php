@@ -16,13 +16,16 @@ final readonly class RevokeAccessToken
     ) {
     }
 
-    public function __invoke(?User $actor, int $id): void
+    public function __invoke(?User $actor, int|string $idOrName): void
     {
         if (null === $actor) {
             throw new AccessDenied('unauthorized');
         }
 
-        $token = $this->accessTokenStore->byIdForUser($id, $actor);
+        $token = is_numeric($idOrName)
+            ? $this->accessTokenStore->byIdForUser((int) $idOrName, $actor)
+            : $this->accessTokenStore->byNameForUser((string) $idOrName, $actor);
+
         if (null === $token) {
             throw new NotFound('access token not found');
         }

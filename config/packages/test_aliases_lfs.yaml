@@ -21,15 +21,6 @@ when@test:
         test.lfs.storage:
             alias: App\Lfs\Domain\ObjectStorage
             public: true
-        test.lfs.token_issuer:
-            alias: App\Lfs\Domain\TokenIssuer
-            public: true
-        test.lfs.token_verifier:
-            alias: App\Lfs\Domain\TokenVerifier
-            public: true
-        test.lfs.jwt_keygen:
-            alias: App\Shared\Infrastructure\Server\JwtKeyGenerator
-            public: true
         test.http.authorizer:
             alias: App\UI\Http\Security\GitAccessAuthorizer
             public: true
@@ -39,6 +30,6 @@ when@test:
         test.ssh_session:
             alias: App\UI\Ssh\SshSession
             public: true
-        test.ssh.jwt_command:
-            alias: App\UI\Ssh\Command\JwtCommand
+        test.ssh.token_create_command:
+            alias: App\UI\Ssh\Command\Token\TokenCreateCommand
             public: true

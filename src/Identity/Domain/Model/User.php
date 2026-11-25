@@ -144,7 +144,7 @@ class User
 
     /**
      * Invalidates every outstanding web-session cookie by bumping the version
-     * carried in their JWT `wtv` claim (the `web logout` command).
+     * carried in their session token `wtv` claim (the `web logout` command).
      */
     public function revokeWebSessions(\DateTimeImmutable $now): void
     {

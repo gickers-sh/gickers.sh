@@ -19,15 +19,42 @@ final readonly class IssueAccessToken
     }
 
     /**
+     * @param list<string> $scopes
+     * @param list<string> $repos
      * @return array{AccessToken, string}
      */
-    public function __invoke(?User $actor, string $name, ?\DateTimeImmutable $expiresAt = null): array
-    {
+    public function __invoke(
+        ?User $actor,
+        string $name,
+        ?\DateTimeImmutable $expiresAt = null,
+        array $scopes = ['*'],
+        array $repos = [],
+        ?string $description = null,
+        ?User $targetUser = null,
+        bool $singleUse = false,
+    ): array {
         if (null === $actor) {
             throw new AccessDenied('unauthorized');
         }
 
-        [$token, $secret] = AccessToken::issue($actor, $name, $expiresAt, $this->clock->now());
+        $owner = $actor;
+        if (null !== $targetUser && $targetUser->id() !== $actor->id()) {
+            if (!$actor->isAdmin()) {
+                throw new AccessDenied('only admins can issue tokens for other users');
+            }
+            $owner = $targetUser;
+        }
+
+        [$token, $secret] = AccessToken::issue(
+            $owner,
+            $name,
+            $expiresAt,
+            $this->clock->now(),
+            $scopes,
+            $repos,
+            $description,
+            $singleUse,
+        );
         $this->accessTokenStore->save($token);
 
         return [$token, $secret];

@@ -74,7 +74,6 @@ final class SoftBinaryTest extends TestCase
         self::assertStringContainsString('--console=', $output);
         self::assertFileDoesNotExist($this->work.'/data/ssh/sshd_config');
         self::assertFileDoesNotExist($this->work.'/data/ssh/authorized_keys');
-        self::assertFileExists($this->work.'/data/ssh/jwt_ed25519');
     }
 
     /**
