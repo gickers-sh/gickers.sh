@@ -154,6 +154,14 @@ final class WikiPane extends View
 
     public function reload(): void
     {
+        $actor = $this->views->session()->actor;
+        if (null === $actor && !$this->views->serverPolicy->anonAccess()->canRead()) {
+            $this->filterableList->setAll([]);
+            $this->loaded = true;
+
+            return;
+        }
+
         $pages = $this->views->wikiQuery?->all() ?? [];
         $this->filterableList->setAll($pages);
         $this->loaded = true;

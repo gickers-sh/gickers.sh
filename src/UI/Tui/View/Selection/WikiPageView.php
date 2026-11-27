@@ -234,6 +234,13 @@ final class WikiPageView extends View
     private function loadPage(): void
     {
         $this->loaded = true;
+        $actor = $this->views->session()->actor;
+        if (null === $actor && !$this->views->serverPolicy->anonAccess()->canRead()) {
+            $this->doc->setLines(['', '  '.Theme::style('Wiki unavailable.', Theme::MUTED)]);
+
+            return;
+        }
+
         $query = $this->views->wikiQuery;
         if (null === $query) {
             $this->doc->setLines(['', '  '.Theme::style('Wiki unavailable.', Theme::MUTED)]);
