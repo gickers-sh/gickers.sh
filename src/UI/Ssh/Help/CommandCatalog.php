@@ -33,7 +33,19 @@ final class CommandCatalog
         $rootLong = <<<'DESC'
 Codes.sh is a self-hostable Git server for the command line. Your SSH key is not yet recognized. If self-service registration is enabled on this server, register yourself with the 'signup' command below to start creating and hosting repositories.
 DESC;
-        $root = new CommandSpec('', '', '', $rootLong, [], [], false);
+        $example = <<<'EX'
+  # Unified self-service signup & client onboarding (recommended)
+  {ssh} signup | bash             # Linux / macOS
+  {ssh} signup | iex              # Windows (PowerShell)
+
+  # Signup with a desired username in the installer wizard
+  {ssh} signup <username> | bash
+
+  # Recover existing account with backup password
+  {ssh} recover <username>
+EX;
+
+        $root = new CommandSpec('', '', '', $rootLong, [], [], false, example: $example);
         $root->addChild($this->signupSpec());
         $root->addChild($this->recoverSpec());
         $root->addChild($this->setupSpec());

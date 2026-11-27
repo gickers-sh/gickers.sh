@@ -165,6 +165,8 @@ final class SignupDispatchTest extends KernelTestCase
             $out = $tester->getDisplay();
             self::assertStringContainsString('Available Commands:', $out);
             self::assertStringContainsString('signup', $out);
+            self::assertStringContainsString('signup | bash', $out);
+            self::assertStringContainsString('signup | iex', $out);
             foreach (['repo', 'user', 'settings', 'token', 'pubkey', 'set-username'] as $hiddenCmd) {
                 self::assertStringNotContainsString("\n  ".$hiddenCmd, $out, sprintf('"%s" exposed "%s"', $cmd, $hiddenCmd));
             }
