@@ -7,8 +7,8 @@ namespace App\Identity\Infrastructure\WebAuth;
 use App\Identity\Domain\Model\User;
 use App\Identity\Domain\Model\WebLoginTicket;
 use App\Identity\Domain\WebLoginTicketStore;
-use App\Shared\Infrastructure\Config\ServerSettings;
 use Psr\Clock\ClockInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 /**
  * Handles web authentication tokens:
@@ -27,7 +27,8 @@ final readonly class WebSessionTokens
     private const SESSION_TTL = 'P30D';
 
     public function __construct(
-        private ServerSettings $settings,
+        #[Autowire('%kernel.secret%')]
+        private string $appSecret,
         private ClockInterface $clock,
         private WebLoginTicketStore $ticketStore,
     ) {}
@@ -143,12 +144,12 @@ final readonly class WebSessionTokens
 
     private function secretKey(): string
     {
-        $key = $this->settings->httpPublicUrl;
-        if ('' === $key) {
-            $key = 'codes.sh-session-secret';
+        $secret = trim($this->appSecret);
+        if ('' === $secret) {
+            throw new \LogicException('Application secret (APP_SECRET) must be configured for web session signing.');
         }
 
-        return $key;
+        return hash_hmac('sha256', 'codes.sh:web-session:v1', $secret, true);
     }
 
     private static function base64UrlEncode(string $data): string
