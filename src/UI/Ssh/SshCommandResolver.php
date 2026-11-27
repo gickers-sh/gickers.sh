@@ -69,7 +69,7 @@ final class SshCommandResolver
                 return new ResolvedCommand($this->aliasToCanonical[$candidate], $remaining);
             }
 
-            if (1 === $k && in_array($candidate, ['help', 'list'], true)) {
+            if (1 === $k && 'help' === $candidate) {
                 return new ResolvedCommand($candidate, $remaining);
             }
         }

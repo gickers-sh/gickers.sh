@@ -6,6 +6,7 @@ namespace App\UI\Ssh\Command;
 
 use App\Identity\Domain\Model\User;
 use App\Shared\Domain\Exception\AccessDenied;
+use App\Shared\Domain\Exception\InvalidInput;
 use App\UI\Ssh\SshSession;
 use App\UI\Tui\Render\Theme;
 use Symfony\Component\Console\Command\Command;
@@ -177,6 +178,16 @@ abstract class AbstractSshCommand extends Command
         $val = $input->getOption($name);
 
         return is_string($val) && '' !== trim($val) ? trim($val) : null;
+    }
+
+    protected function parseBooleanArgument(string $value, string $label = 'value'): bool
+    {
+        $parsed = filter_var(trim($value), \FILTER_VALIDATE_BOOL, \FILTER_NULL_ON_FAILURE);
+        if (null === $parsed) {
+            throw new InvalidInput(sprintf('invalid %s "%s": expected true or false', $label, $value));
+        }
+
+        return $parsed;
     }
 
     protected function resolveTerminalWidth(InputInterface $input, OutputInterface $output, int $defaultFallback = 100): int

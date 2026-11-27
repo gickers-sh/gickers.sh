@@ -232,16 +232,18 @@ function Select-Menu { Gum-Choose @args }
 __HEADER_CARD__
 '@ | Write-Host
 
-$hostName = "__HOST__"
+$hostName = '__HOST__'
 $username = "__USERNAME__"
-$portOpt = "__PORT_OPT__"
-$portLine = @"
+$portNum = '__PORT__'
+$portOpt = '__PORT_OPT__'
+$portArgs = if ($portNum -and $portNum -ne '22') { @('-p', $portNum) } else { @() }
+$portLine = @'
 __PORT_LINE__
-"@
+'@
 $defaultKey = "__DEFAULT_KEY_PATH__"
 $keyPath = $defaultKey
-$connectedKeyData = "__CONNECTED_KEY_DATA__"
-$connectedFingerprint = "__CONNECTED_FINGERPRINT__"
+$connectedKeyData = '__CONNECTED_KEY_DATA__'
+$connectedFingerprint = '__CONNECTED_FINGERPRINT__'
 $testCmd = "__TEST_CMD__"
 $isSignup = "__IS_SIGNUP__"
 $alreadyRegistered = "__ALREADY_REGISTERED__"

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\UI\Ssh\Setup;
 
+use App\Identity\Domain\Model\User;
+use App\Shared\Domain\Exception\InvalidInput;
 use App\Shared\Infrastructure\Config\ServerSettings;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Termstrap\Termstrap;
@@ -48,8 +50,9 @@ final class SetupScriptGenerator
 
     public function renderHeaderCard(string $username, string $host, bool $isSignup = false): string
     {
+        $safeUsername = htmlspecialchars(self::validateUsername($username, allowEmpty: true), \ENT_QUOTES | \ENT_SUBSTITUTE, 'UTF-8');
         $multiplexText = $this->isProd() ? 'Multiplexing 5ms &bull; ' : '';
-        $userBadge = '' !== trim($username) ? " (@{$username})" : '';
+        $userBadge = '' !== $safeUsername ? " (@{$safeUsername})" : '';
         $title = $isSignup
             ? "🚀 codes.sh &mdash; Inscription & Configuration{$userBadge}"
             : "🚀 codes.sh &mdash; Configuration & Onboarding{$userBadge}";
@@ -68,15 +71,17 @@ HTML;
 
     public function renderSuccessCard(string $username, string $host): string
     {
-        $userParam = '' !== trim($username) ? $username : '${USERNAME}';
+        $safeHost = htmlspecialchars(self::validateHost($host), \ENT_QUOTES | \ENT_SUBSTITUTE, 'UTF-8');
+        $validatedUser = self::validateUsername($username, allowEmpty: true);
+        $userParam = '' !== $validatedUser ? htmlspecialchars($validatedUser, \ENT_QUOTES | \ENT_SUBSTITUTE, 'UTF-8') : '${USERNAME}';
         $html = <<<HTML
 <div class="border rounded p-1" style="background-color: #1f2335;">
   <div class="text-success font-bold">&check; Inscription et configuration termin&eacute;es avec succ&egrave;s !</div>
   <div class="text-muted">Votre machine est pr&ecirc;te &agrave; interagir avec codes.sh :</div>
   <ul class="mb-0">
-    <li><code>git clone ssh://{$userParam}@{$host}/mon-repo.git</code></li>
-    <li><code>ssh {$userParam}@{$host} wiki show home</code></li>
-    <li><code>ssh {$userParam}@{$host} web login</code></li>
+    <li><code>git clone ssh://{$userParam}@{$safeHost}/mon-repo.git</code></li>
+    <li><code>ssh {$userParam}@{$safeHost} wiki show home</code></li>
+    <li><code>ssh {$userParam}@{$safeHost} web login</code></li>
   </ul>
 </div>
 HTML;
@@ -89,6 +94,10 @@ HTML;
 
     public function generateRawConfig(string $host, int $port, string $username, ?string $keyPath): string
     {
+        $host = self::validateHost($host);
+        $username = self::validateUsername($username, allowEmpty: false);
+        $keyPath = self::validateKeyPath($keyPath);
+
         $portLine = 22 !== $port ? sprintf("    Port %d\n", $port) : '';
         $resolvedKeyPath = $keyPath ?? sprintf('~/.ssh/codes_sh_%s', $username);
 
@@ -130,10 +139,16 @@ CONF;
         bool $isSignup = false,
         bool $alreadyRegistered = true,
     ): string {
+        $host = self::validateHost($host);
+        $username = self::validateUsername($username, allowEmpty: true);
+        $keyPath = self::validateKeyPath($keyPath);
+        $connectedKeyData = self::validateKeyData($connectedKeyData);
+        $connectedFingerprint = self::validateFingerprint($connectedFingerprint);
+
         $portOpt = 22 !== $port ? sprintf(' -p %d', $port) : '';
         $portLine = 22 !== $port ? sprintf("    Port %d\n", $port) : '';
-        $defaultKeyPath = $keyPath ?? ('' !== trim($username) ? sprintf('$HOME/.ssh/codes_sh_%s', $username) : '$HOME/.ssh/codes_sh_${USERNAME}');
-        $testCmd = '' !== trim($username) ? sprintf('ssh%s %s@%s info', $portOpt, $username, $host) : sprintf('ssh%s ${USERNAME}@%s info', $portOpt, $host);
+        $defaultKeyPath = $keyPath ?? ('' !== $username ? sprintf('$HOME/.ssh/codes_sh_%s', $username) : '$HOME/.ssh/codes_sh_${USERNAME}');
+        $testCmd = '' !== $username ? sprintf('ssh%s %s@%s info', $portOpt, $username, $host) : sprintf('ssh%s ${USERNAME}@%s info', $portOpt, $host);
         $headerCard = $this->renderHeaderCard($username, $host, $isSignup);
         $successCard = $this->renderSuccessCard($username, $host);
 
@@ -141,6 +156,7 @@ CONF;
 
         return $this->renderScript($templatePath, [
             '__HOST__' => $host,
+            '__PORT__' => (string) $port,
             '__PORT_OPT__' => $portOpt,
             '__PORT_LINE__' => $portLine,
             '__USERNAME__' => $username,
@@ -149,7 +165,7 @@ CONF;
             '__HEADER_CARD__' => $headerCard,
             '__SUCCESS_CARD__' => $successCard,
             '__CONNECTED_KEY_DATA__' => $connectedKeyData,
-            '__CONNECTED_FINGERPRINT__' => $connectedFingerprint ?? '',
+            '__CONNECTED_FINGERPRINT__' => $connectedFingerprint,
             '__IS_PROD__' => $this->isProd() ? '1' : '0',
             '__IS_SIGNUP__' => $isSignup ? '1' : '0',
             '__ALREADY_REGISTERED__' => $alreadyRegistered ? '1' : '0',
@@ -167,10 +183,16 @@ CONF;
         bool $isSignup = false,
         bool $alreadyRegistered = true,
     ): string {
+        $host = self::validateHost($host);
+        $username = self::validateUsername($username, allowEmpty: true);
+        $keyPath = self::validateKeyPath($keyPath);
+        $connectedKeyData = self::validateKeyData($connectedKeyData);
+        $connectedFingerprint = self::validateFingerprint($connectedFingerprint);
+
         $portOpt = 22 !== $port ? sprintf(' -p %d', $port) : '';
         $portLine = 22 !== $port ? sprintf("    Port %d\n", $port) : '';
-        $defaultKeyPath = $keyPath ?? ('' !== trim($username) ? sprintf('$HOME\.ssh\codes_sh_%s', $username) : '$HOME\.ssh\codes_sh_$username');
-        $testCmd = '' !== trim($username) ? sprintf('ssh%s %s@%s info', $portOpt, $username, $host) : sprintf('ssh%s $username@%s info', $portOpt, $host);
+        $defaultKeyPath = $keyPath ?? ('' !== $username ? sprintf('$HOME\\.ssh\\codes_sh_%s', $username) : '$HOME\\.ssh\\codes_sh_$username');
+        $testCmd = '' !== $username ? sprintf('ssh%s %s@%s info', $portOpt, $username, $host) : sprintf('ssh%s $username@%s info', $portOpt, $host);
         $headerCard = $this->renderHeaderCard($username, $host, $isSignup);
         $successCard = $this->renderSuccessCard($username, $host);
 
@@ -178,6 +200,7 @@ CONF;
 
         return $this->renderScript($templatePath, [
             '__HOST__' => $host,
+            '__PORT__' => (string) $port,
             '__PORT_OPT__' => $portOpt,
             '__PORT_LINE__' => $portLine,
             '__USERNAME__' => $username,
@@ -186,10 +209,80 @@ CONF;
             '__HEADER_CARD__' => $headerCard,
             '__SUCCESS_CARD__' => $successCard,
             '__CONNECTED_KEY_DATA__' => $connectedKeyData,
-            '__CONNECTED_FINGERPRINT__' => $connectedFingerprint ?? '',
+            '__CONNECTED_FINGERPRINT__' => $connectedFingerprint,
+            '__IS_PROD__' => $this->isProd() ? '1' : '0',
             '__IS_SIGNUP__' => $isSignup ? '1' : '0',
             '__ALREADY_REGISTERED__' => $alreadyRegistered ? '1' : '0',
         ]);
+    }
+
+    public static function validateUsername(string $username, bool $allowEmpty = false): string
+    {
+        $trimmed = trim($username);
+        if ('' === $trimmed) {
+            if ($allowEmpty) {
+                return '';
+            }
+            throw new InvalidInput('Username cannot be empty.');
+        }
+
+        if (1 !== preg_match('/^[a-zA-Z0-9._-]{1,64}$/', $trimmed)) {
+            throw new InvalidInput('Invalid username: only letters, numbers, dots, hyphens, and underscores are allowed.');
+        }
+
+        return User::normalizeUsername($trimmed);
+    }
+
+    public static function validateHost(string $host): string
+    {
+        $trimmed = trim($host);
+        if ('' === $trimmed || 1 !== preg_match('/^[a-zA-Z0-9._:-]{1,253}$/', $trimmed)) {
+            throw new InvalidInput('Invalid SSH host configuration.');
+        }
+
+        return $trimmed;
+    }
+
+    public static function validateKeyPath(?string $keyPath): ?string
+    {
+        if (null === $keyPath || '' === trim($keyPath)) {
+            return null;
+        }
+
+        $trimmed = trim($keyPath);
+        if (str_starts_with($trimmed, '-') || 1 !== preg_match('/^[a-zA-Z0-9_.\/~:\\\\-]{1,256}$/', $trimmed)) {
+            throw new InvalidInput('Invalid --key-path: contains forbidden characters.');
+        }
+
+        return $trimmed;
+    }
+
+    private static function validateKeyData(string $keyData): string
+    {
+        $trimmed = trim($keyData);
+        if ('' === $trimmed) {
+            return '';
+        }
+
+        if (1 !== preg_match('/^[A-Za-z0-9+\/=]{1,16384}$/', $trimmed)) {
+            throw new InvalidInput('Invalid SSH public key data.');
+        }
+
+        return $trimmed;
+    }
+
+    private static function validateFingerprint(?string $fingerprint): string
+    {
+        if (null === $fingerprint || '' === trim($fingerprint)) {
+            return '';
+        }
+
+        $trimmed = trim($fingerprint);
+        if (1 !== preg_match('/^(?:SHA256:[A-Za-z0-9+\/=]+|MD5:[0-9a-fA-F:]+)$/', $trimmed)) {
+            throw new InvalidInput('Invalid SSH public key fingerprint.');
+        }
+
+        return $trimmed;
     }
 
     /**

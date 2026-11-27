@@ -46,7 +46,7 @@ final class UserDeployAllowCommand extends AbstractSshCommand
             return Command::SUCCESS;
         }
 
-        $allowed = filter_var($allowedArg, \FILTER_VALIDATE_BOOLEAN);
+        $allowed = $this->parseBooleanArgument($allowedArg, 'allowed');
         ($this->setDeployAllowed)($this->actor(), $username, $allowed);
 
         return Command::SUCCESS;

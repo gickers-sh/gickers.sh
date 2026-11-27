@@ -39,7 +39,7 @@ final class UserSetAdminCommand extends AbstractSshCommand
         $username = $this->stringArgument($input, 'username');
         $adminArg = $this->stringArgument($input, 'admin');
 
-        $isAdmin = filter_var($adminArg, \FILTER_VALIDATE_BOOLEAN);
+        $isAdmin = $this->parseBooleanArgument($adminArg, 'admin');
 
         ($this->setAdmin)($this->actor(), $username, $isAdmin);
 

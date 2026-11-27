@@ -46,7 +46,7 @@ final class SettingsAllowKeylessCommand extends AbstractSshCommand
             return Command::SUCCESS;
         }
 
-        $allow = filter_var($allowArg, \FILTER_VALIDATE_BOOLEAN);
+        $allow = $this->parseBooleanArgument($allowArg, 'allow-keyless');
         $this->serverPolicy->setAllowKeyless($allow);
 
         // Go soft serve updates allow-keyless silently without stdout/stderr output.

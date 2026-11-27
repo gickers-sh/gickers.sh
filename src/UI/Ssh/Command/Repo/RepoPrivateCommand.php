@@ -48,7 +48,7 @@ final class RepoPrivateCommand extends AbstractSshCommand
             return Command::SUCCESS;
         }
 
-        $isPrivate = filter_var($privArg, \FILTER_VALIDATE_BOOLEAN);
+        $isPrivate = $this->parseBooleanArgument($privArg, 'private');
         ($this->updateRepoSettings)(
             actor: $this->actor(),
             name: $name,

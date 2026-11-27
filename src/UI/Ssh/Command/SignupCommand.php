@@ -71,7 +71,9 @@ final class SignupCommand extends AbstractSshCommand
                 $rawUsername = $envUser;
             }
         }
-        $username = null !== $rawUsername && '' !== trim($rawUsername) ? trim($rawUsername) : null;
+        $username = null !== $rawUsername && '' !== trim($rawUsername)
+            ? SetupScriptGenerator::validateUsername($rawUsername)
+            : null;
 
         $actor = $this->actor();
         $isExistingSelf = null !== $actor && (null === $username || $actor->username() === $username);

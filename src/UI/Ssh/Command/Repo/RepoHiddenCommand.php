@@ -56,7 +56,7 @@ final class RepoHiddenCommand extends AbstractSshCommand
             return Command::SUCCESS;
         }
 
-        $isHidden = filter_var($hiddenArg, \FILTER_VALIDATE_BOOLEAN);
+        $isHidden = $this->parseBooleanArgument($hiddenArg, 'hidden');
         ($this->updateRepoSettings)(
             actor: $this->actor(),
             name: $name,

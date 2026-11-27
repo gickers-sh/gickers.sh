@@ -32,7 +32,7 @@ final readonly class ExceptionRenderer
             'exception' => $exception,
         ]);
 
-        $this->writeError($errOutput, $exception->getMessage());
+        $this->writeError($errOutput, 'An internal server error occurred.');
 
         return 1;
     }

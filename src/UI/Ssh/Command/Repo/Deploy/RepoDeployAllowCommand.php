@@ -43,7 +43,7 @@ final class RepoDeployAllowCommand extends AbstractSshCommand
         $rawRef = $input->getOption('ref');
         $ref = \is_string($rawRef) && '' !== trim($rawRef) ? trim($rawRef) : null;
 
-        $allowed = null !== $allowedArg ? filter_var($allowedArg, \FILTER_VALIDATE_BOOLEAN) : null;
+        $allowed = null !== $allowedArg ? $this->parseBooleanArgument($allowedArg, 'allowed') : null;
         $effective = ($this->manageAllow)($this->actor(), $repo, $allowed, $ref);
 
         if (null === $allowedArg) {

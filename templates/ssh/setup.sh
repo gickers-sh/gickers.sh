@@ -388,8 +388,13 @@ EOF
 
 HOST="__HOST__"
 USERNAME="__USERNAME__"
+PORT_NUM="__PORT__"
 PORT_OPT="__PORT_OPT__"
 PORT_LINE="__PORT_LINE__"
+SSH_PORT_ARGS=()
+if [ "$PORT_NUM" != "22" ] && [ -n "$PORT_NUM" ]; then
+    SSH_PORT_ARGS=(-p "$PORT_NUM")
+fi
 DEFAULT_KEY="__DEFAULT_KEY_PATH__"
 KEY_PATH="$DEFAULT_KEY"
 CONNECTED_KEY_DATA="__CONNECTED_KEY_DATA__"
@@ -553,25 +558,26 @@ esac
 # Account registration on codes.sh for new signups
 if [ "$ALREADY_REGISTERED" = "0" ]; then
     REG_SUCCESS=0
-    KEY_OPT=""
+    REG_KEY_ARGS=()
     if [ "$CHOICE_IDX" -eq 1 ] && [ -f "${KEY_PATH}.pub" ]; then
         PUB_VAL=$(tr -d '\r\n' < "${KEY_PATH}.pub")
-        KEY_OPT="-k \"$PUB_VAL\""
+        REG_KEY_ARGS=(-k "$PUB_VAL")
     elif [ "$CHOICE_IDX" -eq 2 ] && [ -n "$PASTED_KEY" ]; then
-        KEY_OPT="-k \"$PASTED_KEY\""
+        REG_KEY_ARGS=(-k "$PASTED_KEY")
     fi
 
     while [ "$REG_SUCCESS" -eq 0 ]; do
         TMP_ERR=$(mktemp 2>/dev/null || echo "/tmp/codes_reg_err_$$")
-        if [ -n "$KEY_OPT" ]; then
-            REG_CMD="ssh${PORT_OPT} -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new \"${HOST}\" signup \"${USERNAME}\" --register ${KEY_OPT}"
+        REG_ARGS=("${SSH_PORT_ARGS[@]}")
+        if [ "${#REG_KEY_ARGS[@]}" -gt 0 ]; then
+            REG_ARGS+=(-o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new "$HOST" signup "$USERNAME" --register "${REG_KEY_ARGS[@]}")
         elif [ -n "$KEY_PATH" ] && [ -f "$KEY_PATH" ]; then
-            REG_CMD="ssh${PORT_OPT} -i \"$KEY_PATH\" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \"${HOST}\" signup \"${USERNAME}\" --register"
+            REG_ARGS+=(-i "$KEY_PATH" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "$HOST" signup "$USERNAME" --register)
         else
-            REG_CMD="ssh${PORT_OPT} -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new \"${HOST}\" signup \"${USERNAME}\" --register"
+            REG_ARGS+=(-o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new "$HOST" signup "$USERNAME" --register)
         fi
 
-        ( eval "$REG_CMD" >"$TMP_ERR" 2>&1 ) &
+        ( ssh "${REG_ARGS[@]}" >"$TMP_ERR" 2>&1 ) &
         gum_spin $! "Enregistrement de votre compte @${USERNAME} sur ${HOST}..."
         wait $! && REG_STATUS=0 || REG_STATUS=$?
 
@@ -861,7 +867,7 @@ export COLUMNS LINES 2>/dev/null || true
 ssh -O exit -o "ControlPath=~/.ssh/cm-%r@%h:%p" "$HOST" >/dev/null 2>&1 || true
 rm -f "$HOME/.ssh/cm-"*"-${HOST}:"* "$HOME/.ssh/cm-"*"@${HOST}:"* 2>/dev/null || true
 
-( $TEST_CMD >/dev/null 2>&1 ) &
+( ssh "${SSH_PORT_ARGS[@]}" "${USERNAME}@${HOST}" info >/dev/null 2>&1 ) &
 gum_spin $! "Vérification de la connexion vers ${HOST}..." || true
 
 # 5. [Facultatif] Initialisation du mot de passe de secours

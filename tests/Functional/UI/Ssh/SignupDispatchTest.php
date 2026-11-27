@@ -91,7 +91,7 @@ final class SignupDispatchTest extends KernelTestCase
         self::assertSame($username, $user->username());
     }
 
-    public function testKnownKeyCanSignUpAnotherUsername(): void
+    public function testKnownKeyCannotSignUpAnotherUsernameWithSameKey(): void
     {
         $key = self::generateKey();
         $user1 = 'user1'.bin2hex(random_bytes(4));
@@ -101,14 +101,14 @@ final class SignupDispatchTest extends KernelTestCase
         $tester1 = $this->dispatch('signup '.$user1.' --register', $key);
         self::assertSame(0, $tester1->getStatusCode(), self::text($tester1));
 
-        // Second signup with the exact same key
+        // Second signup reusing the exact same key must be rejected (strict global uniqueness)
         $tester2 = $this->dispatch('signup '.$user2.' --register', $key);
-        self::assertSame(0, $tester2->getStatusCode(), self::text($tester2));
-        self::assertStringContainsString('registered', self::text($tester2));
+        self::assertSame(1, $tester2->getStatusCode(), self::text($tester2));
+        self::assertStringContainsString('already registered', self::text($tester2));
 
         $fp = SshKey::parse($key)->fingerprint;
         self::assertNotNull($this->userStore->byFingerprintAndUsername($fp, $user1));
-        self::assertNotNull($this->userStore->byFingerprintAndUsername($fp, $user2));
+        self::assertNull($this->userStore->byFingerprintAndUsername($fp, $user2));
     }
 
     public function testUnknownKeyIsRestrictedToSignup(): void
@@ -309,15 +309,16 @@ final class SignupDispatchTest extends KernelTestCase
         $throttler = self::getContainer()->get(\App\Identity\Infrastructure\Security\SignupThrottler::class);
         $throttler->reset('127.0.0.1', $fp);
 
-        // 3 signups succeed for this key (maxPerKey = 3)
+        // 3 signups succeed for this session key using distinct target --key values (maxPerKey = 3)
         for ($i = 1; $i <= 3; ++$i) {
             $u = 'squat'.$i.bin2hex(random_bytes(4));
-            $tester = $this->dispatch('signup '.$u.' --register', $key);
+            $freshTargetKey = self::generateKey();
+            $tester = $this->dispatch(sprintf('signup %s -k %s --register', $u, escapeshellarg($freshTargetKey)), $key);
             self::assertSame(0, $tester->getStatusCode(), self::text($tester));
         }
 
-        // 4th signup with the same key is blocked by key rate limit
-        $blockedTester = $this->dispatch('signup squat4'.bin2hex(random_bytes(4)).' --register', $key);
+        // 4th signup with the same session key is blocked by key rate limit
+        $blockedTester = $this->dispatch(sprintf('signup squat4%s -k %s --register', bin2hex(random_bytes(4)), escapeshellarg(self::generateKey())), $key);
         self::assertSame(1, $blockedTester->getStatusCode());
         self::assertStringContainsString('Signup rate limit exceeded for this SSH key', self::text($blockedTester));
     }

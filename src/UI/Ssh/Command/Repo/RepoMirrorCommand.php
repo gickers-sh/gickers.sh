@@ -60,7 +60,7 @@ final class RepoMirrorCommand extends AbstractSshCommand
             throw new NotFound('repository not found');
         }
 
-        $isMirror = filter_var($mirrorArg, \FILTER_VALIDATE_BOOLEAN);
+        $isMirror = $this->parseBooleanArgument($mirrorArg, 'mirror');
         $repo->setMirror($isMirror, $this->clock->now());
         $this->repoStore->save($repo);
 

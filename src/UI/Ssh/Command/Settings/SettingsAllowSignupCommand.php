@@ -46,7 +46,7 @@ final class SettingsAllowSignupCommand extends AbstractSshCommand
             return Command::SUCCESS;
         }
 
-        $allow = filter_var($allowArg, \FILTER_VALIDATE_BOOLEAN);
+        $allow = $this->parseBooleanArgument($allowArg, 'allow-signup');
         $this->serverPolicy->setAllowSignup($allow);
 
         return Command::SUCCESS;
