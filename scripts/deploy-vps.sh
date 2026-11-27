@@ -58,7 +58,7 @@ DOMAIN="${DOMAIN:-gits.run}"
 APP_NAME="${APP_NAME:-Gickers.sh}"
 # By default, use current project directory (PWD/CWD); can be set explicitly via --dir
 INSTALL_DIR="${INSTALL_DIR:-$SCRIPT_DIR}"
-SSH_PORT="${SSH_PORT:-2223}"
+SSH_PORT="${SSH_PORT:-22}"
 HTTP_PORT="${HTTP_PORT:-80}"
 HTTPS_PORT="${HTTPS_PORT:-443}"
 POSTGRES_USER="${POSTGRES_USER:-gickers}"
