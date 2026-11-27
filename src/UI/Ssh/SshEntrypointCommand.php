@@ -474,31 +474,75 @@ final class SshEntrypointCommand extends Command
 
     private function denyUnknownKey(OutputInterface $errOutput, ?string $targetUsername = null): int
     {
+        $decorated = $this->shouldDecorate([], $errOutput);
+
         if (null !== $targetUsername) {
             $user = $this->userStore->byUsername($targetUsername);
             $sshCommand = Help\HelpRenderer::sshCommandFromPublicUrl($this->serverSettings->sshPublicUrl, $targetUsername);
             if (null === $user) {
-                $errOutput->writeln(
-                    sprintf("Account @%s does not exist. Claim this username with:\n  %s signup | bash    # Linux / macOS\n  %s signup | iex     # Windows", $targetUsername, $sshCommand, $sshCommand),
-                    OutputInterface::OUTPUT_RAW,
-                );
+                if ($decorated) {
+                    $banner = \App\UI\Tui\Render\Theme::style('⚡ codes.sh — Inscription & Onboarding', \App\UI\Tui\Render\Theme::CYAN, bold: true);
+                    $sub = sprintf('Account @%s does not exist. Claim this username with:', \App\UI\Tui\Render\Theme::style($targetUsername, \App\UI\Tui\Render\Theme::FG, bold: true));
+                    $cmdLinux = \App\UI\Ssh\Help\CliHighlighter::highlightLine(sprintf('%s signup | bash', $sshCommand));
+                    $cmdWin = \App\UI\Ssh\Help\CliHighlighter::highlightLine(sprintf('%s signup | iex', $sshCommand));
+                    $tip = \App\UI\Tui\Render\Theme::style("Le script d'onboarding configurera interactivement votre nom, vos clés SSH et votre ~/.ssh/config.", \App\UI\Tui\Render\Theme::MUTED);
+
+                    $msg = "\n"
+                        . $banner . "\n\n"
+                        . '  ' . $sub . "\n\n"
+                        . "     # macOS / Linux :\n"
+                        . '     ' . $cmdLinux . "\n\n"
+                        . "     # Windows (PowerShell) :\n"
+                        . '     ' . $cmdWin . "\n\n"
+                        . '  ' . $tip . "\n";
+                } else {
+                    $msg = sprintf("Account @%s does not exist. Claim this username with:\n  %s signup | bash    # Linux / macOS\n  %s signup | iex     # Windows", $targetUsername, $sshCommand, $sshCommand);
+                }
+
+                $errOutput->writeln($msg, OutputInterface::OUTPUT_RAW);
 
                 return Command::FAILURE;
             }
 
-            $errOutput->writeln(
-                sprintf("Your SSH key is not registered for @%s. If this is your account, recover access with:\n  %s recover", $targetUsername, $sshCommand),
-                OutputInterface::OUTPUT_RAW,
-            );
+            if ($decorated) {
+                $banner = \App\UI\Tui\Render\Theme::style('⚡ codes.sh — Clé non autorisée', \App\UI\Tui\Render\Theme::SELECTOR, bold: true);
+                $sub = sprintf('Your SSH key is not registered for @%s. If this is your account, recover access with:', \App\UI\Tui\Render\Theme::style($targetUsername, \App\UI\Tui\Render\Theme::FG, bold: true));
+                $recCmd = \App\UI\Ssh\Help\CliHighlighter::highlightLine(sprintf('%s recover', $sshCommand));
+
+                $msg = "\n"
+                    . $banner . "\n\n"
+                    . '  ' . $sub . "\n"
+                    . '     ' . $recCmd . "\n";
+            } else {
+                $msg = sprintf("Your SSH key is not registered for @%s. If this is your account, recover access with:\n  %s recover", $targetUsername, $sshCommand);
+            }
+
+            $errOutput->writeln($msg, OutputInterface::OUTPUT_RAW);
 
             return Command::FAILURE;
         }
 
         $sshCommand = Help\HelpRenderer::sshCommandFromPublicUrl($this->serverSettings->sshPublicUrl);
-        $errOutput->writeln(
-            sprintf("Your SSH key is not registered. Claim a username with:\n  %s signup | bash    # Linux / macOS\n  %s signup | iex     # Windows", $sshCommand, $sshCommand),
-            OutputInterface::OUTPUT_RAW,
-        );
+        if ($decorated) {
+            $banner = \App\UI\Tui\Render\Theme::style('⚡ codes.sh — Inscription & Onboarding', \App\UI\Tui\Render\Theme::CYAN, bold: true);
+            $sub = 'Your SSH key is not registered. Claim a username with:';
+            $cmdLinux = \App\UI\Ssh\Help\CliHighlighter::highlightLine(sprintf('%s signup | bash', $sshCommand));
+            $cmdWin = \App\UI\Ssh\Help\CliHighlighter::highlightLine(sprintf('%s signup | iex', $sshCommand));
+            $tip = \App\UI\Tui\Render\Theme::style("Le script d'onboarding configurera interactivement votre nom, vos clés SSH et votre ~/.ssh/config.", \App\UI\Tui\Render\Theme::MUTED);
+
+            $msg = "\n"
+                . $banner . "\n\n"
+                . '  ' . $sub . "\n\n"
+                . "     # macOS / Linux :\n"
+                . '     ' . $cmdLinux . "\n\n"
+                . "     # Windows (PowerShell) :\n"
+                . '     ' . $cmdWin . "\n\n"
+                . '  ' . $tip . "\n";
+        } else {
+            $msg = sprintf("Your SSH key is not registered. Claim a username with:\n  %s signup | bash    # Linux / macOS\n  %s signup | iex     # Windows", $sshCommand, $sshCommand);
+        }
+
+        $errOutput->writeln($msg, OutputInterface::OUTPUT_RAW);
 
         return Command::FAILURE;
     }
