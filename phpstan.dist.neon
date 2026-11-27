@@ -17,6 +17,7 @@ parameters:
             function: ['getenv()', 'putenv()']
             message: 'inject ServerSettings or an %env()% parameter instead'
             allowIn:
+                - src/Shared/Infrastructure/Process/MinimalProcessEnv.php
                 - src/UI/Ssh/SshEntrypointCommand.php
                 - src/UI/Ssh/Command/*
                 - src/UI/Http/Controller/Dev/ConsoleDebugController.php
@@ -26,6 +27,7 @@ parameters:
             superglobal: ['$_SERVER', '$_ENV']
             message: 'inject ServerSettings or an %env()% parameter instead'
             allowIn:
+                - src/Shared/Infrastructure/Process/MinimalProcessEnv.php
                 - src/UI/Ssh/SshEntrypointCommand.php
                 - src/UI/Ssh/Command/*
                 - src/UI/Http/Controller/Dev/ConsoleDebugController.php
