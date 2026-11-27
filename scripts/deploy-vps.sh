@@ -58,7 +58,7 @@ DOMAIN="${DOMAIN:-gits.run}"
 APP_NAME="${APP_NAME:-Gickers.sh}"
 # By default, use current project directory (PWD/CWD); can be set explicitly via --dir
 INSTALL_DIR="${INSTALL_DIR:-$SCRIPT_DIR}"
-SSH_PORT="${SSH_PORT:-22}"
+SSH_PORT="${SSH_PORT:-2223}"
 HTTP_PORT="${HTTP_PORT:-80}"
 HTTPS_PORT="${HTTPS_PORT:-443}"
 POSTGRES_USER="${POSTGRES_USER:-gickers}"
@@ -66,6 +66,7 @@ POSTGRES_DB="${POSTGRES_DB:-gickers}"
 ADMIN_SSH_KEY="${ADMIN_SSH_KEY:-}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
 DRY_RUN="${DRY_RUN:-0}"
+SKIP_SYSTEM="${SKIP_SYSTEM:-0}"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -86,6 +87,10 @@ while [[ $# -gt 0 ]]; do
             ADMIN_SSH_KEY="$2"
             shift 2
             ;;
+        --skip-system|--no-root|--no-sudo)
+            SKIP_SYSTEM=1
+            shift
+            ;;
         -y|--yes|--non-interactive)
             NON_INTERACTIVE=1
             shift
@@ -102,6 +107,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --dir <path>             Installation directory (default: current project directory)"
             echo "  --ssh-port <port>        Public SSH port for Git/CLI (default: 2223)"
             echo "  --admin-key <pubkey>     Initial admin SSH public key"
+            echo "  --skip-system            Skip OS packages, UFW firewall and systemd (run as non-root)"
             echo "  -y, --non-interactive    Run non-interactively with defaults"
             echo "  --dry-run                Simulate deployment without applying changes"
             echo "  -h, --help               Show this help message"
@@ -122,10 +128,17 @@ banner
 log_info "Vérification des prérequis système..."
 
 if [[ $EUID -ne 0 ]]; then
-    if [[ "$DRY_RUN" -eq 1 ]]; then
+    if [[ "$SKIP_SYSTEM" -eq 1 ]]; then
+        log_info "Mode sans privilèges root (--skip-system). Les étapes système (apt, ufw, systemd) seront ignorées."
+    elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+        log_warn "Exécution en tant qu'utilisateur non-root ($(whoami)) avec accès Docker détecté."
+        log_info "Activation automatique du mode --skip-system (gestion système ignorée)."
+        SKIP_SYSTEM=1
+    elif [[ "$DRY_RUN" -eq 1 ]]; then
         log_warn "[DRY-RUN] Exécution en tant qu'utilisateur non-root ($(whoami)). Le déploiement réel nécessitera sudo/root."
     else
-        log_error "Ce script doit être exécuté en tant que root (ou via sudo)."
+        log_error "Ce script nécessite les privilèges root (sudo) pour installer Docker, configurer le pare-feu et systemd."
+        log_error "Si votre VPS est déjà configuré et que votre utilisateur a accès à Docker, relancez avec : $0 --skip-system"
         exit 1
     fi
 fi
@@ -185,80 +198,90 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
     exit 0
 fi
 
-# ------------------------------------------------------------------------------
-# 3. Installation des paquets système
-# ------------------------------------------------------------------------------
-log_info "Mise à jour des dépôts et installation des dépendances système..."
+if [[ "$SKIP_SYSTEM" -eq 0 ]]; then
+    # ------------------------------------------------------------------------------
+    # 3. Installation des paquets système
+    # ------------------------------------------------------------------------------
+    log_info "Mise à jour des dépôts et installation des dépendances système..."
 
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
-apt-get install -y --no-install-recommends \
-    apt-transport-https \
-    ca-certificates \
-    curl \
-    gnupg \
-    git \
-    git-lfs \
-    jq \
-    ufw \
-    fail2ban \
-    openssl \
-    tar
-
-# ------------------------------------------------------------------------------
-# 4. Installation officielle de Docker CE & Docker Compose Plugin
-# ------------------------------------------------------------------------------
-if ! command -v docker >/dev/null 2>&1; then
-    log_info "Installation de Docker CE officiel..."
-    install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/"$OS_NAME"/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes
-    chmod a+r /etc/apt/keyrings/docker.gpg
-
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$OS_NAME $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
-        > /etc/apt/sources.list.d/docker.list
-
+    export DEBIAN_FRONTEND=noninteractive
     apt-get update -y
     apt-get install -y --no-install-recommends \
-        docker-ce \
-        docker-ce-cli \
-        containerd.io \
-        docker-buildx-plugin \
-        docker-compose-plugin
-    log_success "Docker CE installé avec succès."
+        apt-transport-https \
+        ca-certificates \
+        curl \
+        gnupg \
+        git \
+        git-lfs \
+        jq \
+        ufw \
+        fail2ban \
+        openssl \
+        tar
+
+    # ------------------------------------------------------------------------------
+    # 4. Installation officielle de Docker CE & Docker Compose Plugin
+    # ------------------------------------------------------------------------------
+    if ! command -v docker >/dev/null 2>&1; then
+        log_info "Installation de Docker CE officiel..."
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/"$OS_NAME"/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes
+        chmod a+r /etc/apt/keyrings/docker.gpg
+
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$OS_NAME $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+            > /etc/apt/sources.list.d/docker.list
+
+        apt-get update -y
+        apt-get install -y --no-install-recommends \
+            docker-ce \
+            docker-ce-cli \
+            containerd.io \
+            docker-buildx-plugin \
+            docker-compose-plugin
+        log_success "Docker CE installé avec succès."
+    else
+        log_info "Docker est déjà installé ($(docker --version))."
+    fi
+
+    systemctl enable --now docker
+
+    # Add non-root sudo user to docker group if applicable
+    if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
+        usermod -aG docker "$SUDO_USER" 2>/dev/null || true
+        log_info "Utilisateur non-root '$SUDO_USER' ajouté au groupe docker."
+    fi
+
+    # ------------------------------------------------------------------------------
+    # 5. Configuration du Pare-feu (UFW)
+    # ------------------------------------------------------------------------------
+    log_info "Configuration des règles de pare-feu UFW..."
+
+    # Preserve current SSH port
+    CURRENT_SSH_PORT=$(ss -tlnp 2>/dev/null | grep -E 'sshd|ssh' | awk '{print $4}' | awk -F: '{print $NF}' | head -n 1 || echo "22")
+    if [[ -z "$CURRENT_SSH_PORT" ]]; then
+        CURRENT_SSH_PORT="22"
+    fi
+
+    log_info "Autorisation du port SSH système ($CURRENT_SSH_PORT/tcp)..."
+    ufw allow "$CURRENT_SSH_PORT"/tcp comment 'Host SSH daemon' || true
+
+    # Allow HTTP & HTTPS
+    log_info "Autorisation des ports Web (80/tcp, 443/tcp)..."
+    ufw allow "$HTTP_PORT"/tcp comment 'Gickers HTTP / ACME' || true
+    ufw allow "$HTTPS_PORT"/tcp comment 'Gickers HTTPS' || true
+
+    # Allow Gickers SSH port if different from system SSH
+    if [[ "$SSH_PORT" != "$CURRENT_SSH_PORT" ]]; then
+        log_info "Autorisation du port Git SSH gickers ($SSH_PORT/tcp)..."
+        ufw allow "$SSH_PORT"/tcp comment 'Gickers Git SSH' || true
+    fi
+
+    # Enable UFW non-interactively
+    ufw --force enable || true
+    log_success "Pare-feu configuré."
 else
-    log_info "Docker est déjà installé ($(docker --version))."
+    log_info "Étapes système ignorées (--skip-system)."
 fi
-
-systemctl enable --now docker
-
-# ------------------------------------------------------------------------------
-# 5. Configuration du Pare-feu (UFW)
-# ------------------------------------------------------------------------------
-log_info "Configuration des règles de pare-feu UFW..."
-
-# Preserve current SSH port
-CURRENT_SSH_PORT=$(ss -tlnp 2>/dev/null | grep -E 'sshd|ssh' | awk '{print $4}' | awk -F: '{print $NF}' | head -n 1 || echo "22")
-if [[ -z "$CURRENT_SSH_PORT" ]]; then
-    CURRENT_SSH_PORT="22"
-fi
-
-log_info "Autorisation du port SSH système ($CURRENT_SSH_PORT/tcp)..."
-ufw allow "$CURRENT_SSH_PORT"/tcp comment 'Host SSH daemon' || true
-
-# Allow HTTP & HTTPS
-log_info "Autorisation des ports Web (80/tcp, 443/tcp)..."
-ufw allow "$HTTP_PORT"/tcp comment 'Gickers HTTP / ACME' || true
-ufw allow "$HTTPS_PORT"/tcp comment 'Gickers HTTPS' || true
-
-# Allow Gickers SSH port if different from system SSH
-if [[ "$SSH_PORT" != "$CURRENT_SSH_PORT" ]]; then
-    log_info "Autorisation du port Git SSH gickers ($SSH_PORT/tcp)..."
-    ufw allow "$SSH_PORT"/tcp comment 'Gickers Git SSH' || true
-fi
-
-# Enable UFW non-interactively
-ufw --force enable || true
-log_success "Pare-feu configuré."
 
 # ------------------------------------------------------------------------------
 # 6. Déploiement des fichiers de l'application
@@ -379,9 +402,10 @@ docker compose --env-file .env.docker up -d
 # ------------------------------------------------------------------------------
 # 9. Service Systemd pour persistance au démarrage du VPS
 # ------------------------------------------------------------------------------
-log_info "Configuration du service systemd gickers.service..."
+if [[ "$SKIP_SYSTEM" -eq 0 && $EUID -eq 0 ]]; then
+    log_info "Configuration du service systemd gickers.service..."
 
-cat > /etc/systemd/system/gickers.service << EOF
+    cat > /etc/systemd/system/gickers.service << EOF
 [Unit]
 Description=Gickers.sh Git Forge & Container Platform
 Requires=docker.service
@@ -401,9 +425,15 @@ TimeoutStartSec=300
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
-systemctl enable gickers.service
-log_success "Service systemd gickers.service activé."
+    systemctl daemon-reload
+    systemctl enable gickers.service
+    log_success "Service systemd gickers.service activé."
+fi
+
+# Restore file ownership to non-root user if run with sudo
+if [[ $EUID -eq 0 && -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
+    chown -R "$SUDO_USER":"$SUDO_USER" "$INSTALL_DIR" 2>/dev/null || true
+fi
 
 # ------------------------------------------------------------------------------
 # 10. Validation & Résumé
