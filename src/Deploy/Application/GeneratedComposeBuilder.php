@@ -76,19 +76,19 @@ final readonly class GeneratedComposeBuilder
 
             if (null !== $service->build) {
                 $buildDef = [
-                    'context' => '.' === $service->build->context ? '.' : './'.$service->build->context,
-                    'dockerfile' => $service->build->dockerfile,
+                    'context' => self::escapeDollar('.' === $service->build->context ? '.' : './'.$service->build->context),
+                    'dockerfile' => self::escapeDollar($service->build->dockerfile),
                 ];
                 if ([] !== $service->build->args) {
-                    $buildDef['args'] = $service->build->args;
+                    $buildDef['args'] = self::escapeStringMap($service->build->args);
                 }
                 if (null !== $service->build->target) {
-                    $buildDef['target'] = $service->build->target;
+                    $buildDef['target'] = self::escapeDollar($service->build->target);
                 }
                 $def['build'] = $buildDef;
                 $def['image'] = sprintf('%s_%s:latest', $projectSlug, $serviceName);
             } elseif (null !== $service->image) {
-                $def['image'] = $service->image;
+                $def['image'] = self::escapeDollar($service->image);
             }
 
             if (null !== $runtime) {
@@ -96,18 +96,18 @@ final readonly class GeneratedComposeBuilder
             }
 
             if (null !== $service->command) {
-                $def['command'] = $service->command;
+                $def['command'] = self::escapeStringOrList($service->command);
             }
             if (null !== $service->entrypoint) {
-                $def['entrypoint'] = $service->entrypoint;
+                $def['entrypoint'] = self::escapeStringOrList($service->entrypoint);
             }
             if (null !== $service->workingDir) {
-                $def['working_dir'] = $service->workingDir;
+                $def['working_dir'] = self::escapeDollar($service->workingDir);
             }
 
             $mergedEnv = array_merge($service->environment, $decryptedEnvVars);
             if ([] !== $mergedEnv) {
-                $def['environment'] = $mergedEnv;
+                $def['environment'] = self::escapeStringMap($mergedEnv);
             }
 
             $volumes = [];
@@ -117,7 +117,7 @@ final readonly class GeneratedComposeBuilder
                     continue;
                 }
                 $prefixedVolume = sprintf('%s_%s', $projectSlug, $mount->source);
-                $volumes[] = sprintf('%s:%s%s', $prefixedVolume, $mount->target, $mount->readOnly ? ':ro' : '');
+                $volumes[] = self::escapeDollar(sprintf('%s:%s%s', $prefixedVolume, $mount->target, $mount->readOnly ? ':ro' : ''));
             }
             if ([] !== $volumes) {
                 $def['volumes'] = $volumes;
@@ -128,18 +128,18 @@ final readonly class GeneratedComposeBuilder
             }
 
             if (null !== $service->healthcheck) {
-                $hc = ['test' => $service->healthcheck->test];
+                $hc = ['test' => self::escapeStringOrList($service->healthcheck->test)];
                 if (null !== $service->healthcheck->interval) {
-                    $hc['interval'] = $service->healthcheck->interval;
+                    $hc['interval'] = self::escapeDollar($service->healthcheck->interval);
                 }
                 if (null !== $service->healthcheck->timeout) {
-                    $hc['timeout'] = $service->healthcheck->timeout;
+                    $hc['timeout'] = self::escapeDollar($service->healthcheck->timeout);
                 }
                 if (null !== $service->healthcheck->retries) {
                     $hc['retries'] = $service->healthcheck->retries;
                 }
                 if (null !== $service->healthcheck->startPeriod) {
-                    $hc['start_period'] = $service->healthcheck->startPeriod;
+                    $hc['start_period'] = self::escapeDollar($service->healthcheck->startPeriod);
                 }
                 $def['healthcheck'] = $hc;
             }
@@ -215,5 +215,42 @@ final readonly class GeneratedComposeBuilder
         }
 
         return Yaml::dump($doc, 6, 2);
+    }
+
+    /**
+     * Escapes `$` to `$$` so Docker Compose never interpolates worker/host environment variables.
+     */
+    private static function escapeDollar(string $value): string
+    {
+        return str_replace('$', '$$', $value);
+    }
+
+    /**
+     * @param string|list<string> $value
+     *
+     * @return string|list<string>
+     */
+    private static function escapeStringOrList(string|array $value): string|array
+    {
+        if (\is_string($value)) {
+            return self::escapeDollar($value);
+        }
+
+        return array_map(self::escapeDollar(...), $value);
+    }
+
+    /**
+     * @param array<string, string> $map
+     *
+     * @return array<string, string>
+     */
+    private static function escapeStringMap(array $map): array
+    {
+        $escaped = [];
+        foreach ($map as $k => $v) {
+            $escaped[$k] = self::escapeDollar($v);
+        }
+
+        return $escaped;
     }
 }

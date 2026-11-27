@@ -7,11 +7,14 @@ namespace App\Deploy\Infrastructure\Docker;
 use App\Deploy\Application\GeneratedComposeBuilder;
 use App\Deploy\Domain\ContainerOrchestrator;
 use App\Deploy\Domain\DeployQuota;
+use App\Deploy\Domain\Model\DeployDomain;
 use App\Deploy\Domain\Model\DeployEnvironment;
 use App\Deploy\Domain\Spec\ComposeSpec;
 use App\Deploy\Domain\Spec\ServiceSpec;
 use App\Repo\Domain\RepoDirectory;
+use App\Shared\Domain\Exception\InvalidInput;
 use App\Shared\Infrastructure\Config\ServerSettings;
+use App\Shared\Infrastructure\Process\MinimalProcessEnv;
 use Symfony\Component\DependencyInjection\Attribute\AsAlias;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Filesystem\Filesystem;
@@ -64,14 +67,14 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
         $barePath = $this->repoDirectory->pathFor($environment->repo()->name());
         $tarFile = $workDir.'/.commit.tar';
 
-        $archiveProc = new Process(['git', 'archive', '--format=tar', '-o', $tarFile, $commitSha], $barePath);
+        $archiveProc = new Process(['git', 'archive', '--format=tar', '-o', $tarFile, $commitSha], $barePath, MinimalProcessEnv::build());
         $archiveProc->setTimeout(120);
         $archiveProc->run();
         if (!$archiveProc->isSuccessful()) {
             throw new \RuntimeException(sprintf('git archive failed: %s', trim($archiveProc->getErrorOutput())));
         }
 
-        $untarProc = new Process(['tar', '-xf', $tarFile, '-C', $workDir]);
+        $untarProc = new Process(['tar', '-xf', $tarFile, '-C', $workDir], null, MinimalProcessEnv::build());
         $untarProc->setTimeout(120);
         $untarProc->run();
         @unlink($tarFile);
@@ -126,7 +129,7 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
             '-p',
             $environment->projectSlug(),
             'stop',
-        ]);
+        ], null, $this->dockerEnv());
         $proc->setTimeout(120);
         $proc->run();
     }
@@ -139,7 +142,7 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
             '-p',
             $environment->projectSlug(),
             'restart',
-        ]);
+        ], null, $this->dockerEnv());
         $proc->setTimeout(120);
         $proc->run();
         if (!$proc->isSuccessful()) {
@@ -157,7 +160,7 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
             'down',
             '--volumes',
             '--remove-orphans',
-        ]);
+        ], null, $this->dockerEnv());
         $proc->setTimeout(180);
         $proc->run();
 
@@ -179,10 +182,11 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
             '--tail='.(string) $tail,
         ];
         if (null !== $serviceName && '' !== trim($serviceName)) {
-            $cmd[] = trim($serviceName);
+            $cmd[] = '--';
+            $cmd[] = DeployDomain::normalizeServiceName($serviceName);
         }
 
-        $proc = new Process($cmd);
+        $proc = new Process($cmd, null, $this->dockerEnv());
         $proc->setTimeout(30);
         $proc->run();
 
@@ -209,10 +213,11 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
             '--tail='.(string) $tail,
         ];
         if (null !== $serviceName && '' !== trim($serviceName)) {
-            $cmd[] = trim($serviceName);
+            $cmd[] = '--';
+            $cmd[] = DeployDomain::normalizeServiceName($serviceName);
         }
 
-        $proc = new Process($cmd);
+        $proc = new Process($cmd, null, $this->dockerEnv());
         $proc->setTimeout(null);
         $proc->run(static function ($type, $buffer) use ($onOutput): void {
             $onOutput($buffer);
@@ -221,6 +226,7 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
 
     public function exec(DeployEnvironment $environment, string $serviceName, array $command): array
     {
+        $normalizedService = DeployDomain::normalizeServiceName($serviceName);
         $cmd = [
             'docker',
             'compose',
@@ -228,11 +234,12 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
             $environment->projectSlug(),
             'exec',
             '-T',
-            $serviceName,
+            '--',
+            $normalizedService,
             ...$command,
         ];
 
-        $proc = new Process($cmd);
+        $proc = new Process($cmd, null, $this->dockerEnv());
         $proc->setTimeout(300);
         $proc->run();
 
@@ -252,7 +259,7 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
             'ps',
             '-a',
             '-q',
-        ]);
+        ], null, $this->dockerEnv());
         $psProc->setTimeout(15);
         $psProc->run();
         if (!$psProc->isSuccessful()) {
@@ -274,7 +281,7 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
             '--format',
             '{{index .Config.Labels "com.docker.compose.service"}}|{{.State.Status}}|{{.State.ExitCode}}|{{.RestartCount}}|{{.State.OOMKilled}}|{{.State.Error}}',
             ...$containerIds,
-        ]);
+        ], null, $this->dockerEnv());
         $inspectProc->setTimeout(15);
         $inspectProc->run();
         if (!$inspectProc->isSuccessful()) {
@@ -316,7 +323,7 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
         $loggedWaiting = false;
 
         for ($elapsed = 0; $elapsed < $maxWaitSeconds; $elapsed += 2) {
-            $ping = new Process(['docker', 'info']);
+            $ping = new Process(['docker', 'info'], null, $this->dockerEnv());
             $ping->setTimeout(5);
             $ping->run();
             if ($ping->isSuccessful()) {
@@ -370,9 +377,9 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
                 '-d',
                 '--build',
                 '--remove-orphans',
-            ], $workDir, [
+            ], $workDir, $this->dockerEnv([
                 'BUILDKIT_PROGRESS' => 'plain',
-            ]);
+            ]));
             $upProc->setTimeout(900);
             $upProc->run(static function (string $type, string $buffer) use ($onLog, &$capturedOutput): void {
                 $capturedOutput .= $buffer;
@@ -468,17 +475,36 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
 
     private function ensureProxyNetwork(): void
     {
-        $inspect = new Process(['docker', 'network', 'inspect', GeneratedComposeBuilder::PROXY_NETWORK]);
+        $inspect = new Process(['docker', 'network', 'inspect', GeneratedComposeBuilder::PROXY_NETWORK], null, $this->dockerEnv());
         $inspect->run();
         if ($inspect->isSuccessful()) {
             return;
         }
 
-        $create = new Process(['docker', 'network', 'create', GeneratedComposeBuilder::PROXY_NETWORK]);
+        $create = new Process(['docker', 'network', 'create', GeneratedComposeBuilder::PROXY_NETWORK], null, $this->dockerEnv());
         $create->run();
     }
 
-    private function prepareRelativeMountBake(string $workDir, ServiceSpec $service): ServiceSpec
+    /**
+     * @param array<string, string> $overrides
+     *
+     * @return array<string, string|false>
+     */
+    private function dockerEnv(array $overrides = []): array
+    {
+        return MinimalProcessEnv::build($overrides, [
+            'PATH',
+            'HOME',
+            'TMPDIR',
+            'TZ',
+            'DOCKER_HOST',
+            'DOCKER_TLS_VERIFY',
+            'DOCKER_CERT_PATH',
+            'DOCKER_CONFIG',
+        ]);
+    }
+
+    public function prepareRelativeMountBake(string $workDir, ServiceSpec $service): ServiceSpec
     {
         $relativeMounts = array_values(array_filter(
             $service->volumes,
@@ -489,15 +515,36 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
             return $service;
         }
 
+        $realWorkDir = realpath($workDir);
+        if (false === $realWorkDir) {
+            throw new \RuntimeException(sprintf('Deployment workspace "%s" does not exist.', $workDir));
+        }
+
+        foreach ($relativeMounts as $mount) {
+            self::assertSafeDockerfileToken($mount->source, 'volume source');
+            self::assertSafeDockerfileToken($mount->target, 'volume target');
+            if ('.' !== $mount->source) {
+                $candidateSrc = $workDir.'/'.$mount->source;
+                if (file_exists($candidateSrc) || is_link($candidateSrc)) {
+                    $this->assertPathInsideWorkDir($realWorkDir, $candidateSrc);
+                }
+            }
+        }
+
         // Case 1: Image-only service with relative bind-mounts (e.g. nginx mounting ./:/var/www/html)
         if (null === $service->build && null !== $service->image) {
+            self::assertSafeDockerfileToken($service->image, 'service image');
             $synthDockerfile = sprintf('.Dockerfile.codes.%s', $service->name);
+            $synthPath = $workDir.'/'.$synthDockerfile;
+            if (is_link($synthPath)) {
+                throw new InvalidInput(sprintf('service "%s": symlink at "%s" is forbidden', $service->name, $synthDockerfile));
+            }
             $lines = [sprintf('FROM %s', $service->image)];
             foreach ($relativeMounts as $mount) {
                 $src = '.' === $mount->source ? '.' : './'.$mount->source;
                 $lines[] = sprintf('COPY %s %s', $src, $mount->target);
             }
-            $this->filesystem->dumpFile($workDir.'/'.$synthDockerfile, implode("\n", $lines)."\n");
+            $this->filesystem->dumpFile($synthPath, implode("\n", $lines)."\n");
 
             return new ServiceSpec(
                 name: $service->name,
@@ -519,8 +566,14 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
         // Append the relative mount COPY instructions to the target Dockerfile so the commit snapshot is baked in.
         if (null !== $service->build) {
             $contextDir = '.' === $service->build->context ? $workDir : $workDir.'/'.$service->build->context;
+            $this->assertPathInsideWorkDir($realWorkDir, $contextDir);
+
             $dockerfilePath = $contextDir.'/'.$service->build->dockerfile;
+            if (is_link($dockerfilePath)) {
+                throw new InvalidInput(sprintf('service "%s": Dockerfile "%s" cannot be a symbolic link', $service->name, $service->build->dockerfile));
+            }
             if (is_file($dockerfilePath)) {
+                $this->assertPathInsideWorkDir($realWorkDir, $dockerfilePath);
                 $existingContent = (string) file_get_contents($dockerfilePath);
                 $appendLines = ['', '# Auto-injected by codes.sh Deploy Engine from relative compose volume mounts'];
                 foreach ($relativeMounts as $mount) {
@@ -532,5 +585,28 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
         }
 
         return $service;
+    }
+
+    private static function assertSafeDockerfileToken(string $token, string $label): void
+    {
+        if ('' === $token || 1 === preg_match('/[\r\n\0\s]/', $token)) {
+            throw new InvalidInput(sprintf('invalid %s for Dockerfile generation', $label));
+        }
+    }
+
+    private function assertPathInsideWorkDir(string $realWorkDir, string $path): void
+    {
+        if (is_link($path)) {
+            throw new InvalidInput('symbolic links escaping or replacing deployment build paths are forbidden');
+        }
+
+        $resolved = realpath($path);
+        if (false === $resolved) {
+            throw new InvalidInput('deployment build path does not resolve inside workspace');
+        }
+
+        if ($resolved !== $realWorkDir && !str_starts_with($resolved, $realWorkDir.\DIRECTORY_SEPARATOR)) {
+            throw new InvalidInput('deployment build path escapes repository workspace');
+        }
     }
 }

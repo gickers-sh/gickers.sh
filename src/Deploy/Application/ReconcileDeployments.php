@@ -14,10 +14,8 @@ use App\Deploy\Domain\ReverseProxyRouter;
 use App\Identity\Domain\Model\User;
 use App\Repo\Domain\RepoDirectory;
 use App\Repo\Domain\RepoName;
-use App\Repo\Domain\RepoStore;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
 use App\Shared\Domain\Exception\AccessDenied;
-use App\Shared\Domain\Exception\NotFound;
 use Psr\Clock\ClockInterface;
 
 final readonly class ReconcileDeployments
@@ -26,7 +24,7 @@ final readonly class ReconcileDeployments
         private DeployStore $deployStore,
         private ReverseProxyRouter $proxyRouter,
         private TriggerDeploy $triggerDeploy,
-        private RepoStore $repoStore,
+        private DeployAccessResolver $deployAccessResolver,
         private RepoDirectory $repoDirectory,
         private GitRepositoryReader $gitReader,
         private ClockInterface $clock,
@@ -224,14 +222,11 @@ final readonly class ReconcileDeployments
             throw new \InvalidArgumentException('repository name is required unless --all is specified');
         }
 
-        $repoName = $repoName instanceof RepoName ? $repoName : RepoName::fromInput($repoName);
-        $repo = $this->repoStore->byName($repoName);
-        if (null === $repo) {
-            throw new NotFound('repository not found');
-        }
+        $normalizedRef = null !== $ref && '' !== trim($ref) ? trim($ref) : null;
+        $repo = $this->deployAccessResolver->assertCanManageDeploy($actor, $repoName, $normalizedRef);
 
-        if (null !== $ref && '' !== trim($ref)) {
-            return [($this->triggerDeploy)($actor, $repo->name(), trim($ref))];
+        if (null !== $normalizedRef) {
+            return [($this->triggerDeploy)($actor, $repo->name(), $normalizedRef)];
         }
 
         $releases = [];

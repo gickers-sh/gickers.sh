@@ -76,9 +76,9 @@ final readonly class DeployAccessResolver
         $policy = $this->serverPolicy->deployPolicy();
 
         return match ($policy) {
-            DeployPolicy::AdminsOnly => (null !== $actor && $actor->isAdmin()) || $repo->owner()->isAdmin(),
-            DeployPolicy::Authorized => (null !== $actor && $actor->isDeployAllowed()) || $repo->owner()->isDeployAllowed(),
-            DeployPolicy::RepoAdmins => null === $actor || $this->accessResolver->levelFor($actor, $repo->name(), $repo)->isAdmin() || $repo->owner()->isDeployAllowed() || true,
+            DeployPolicy::AdminsOnly => null !== $actor ? $actor->isAdmin() : $repo->owner()->isAdmin(),
+            DeployPolicy::Authorized => null !== $actor ? ($actor->isAdmin() || $actor->isDeployAllowed()) : $repo->owner()->isDeployAllowed(),
+            DeployPolicy::RepoAdmins => null === $actor || $this->accessResolver->levelFor($actor, $repo->name(), $repo)->isAdmin(),
         };
     }
 

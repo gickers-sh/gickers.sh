@@ -174,7 +174,11 @@ final readonly class QueryDeployments
             return trim($buildLog."\n".$runtimeLog);
         }
 
-        return $this->orchestrator->serviceLogs($environment, $serviceName);
+        $normalizedService = '' !== trim($serviceName)
+            ? DeployDomain::normalizeServiceName($serviceName)
+            : null;
+
+        return $this->orchestrator->serviceLogs($environment, $normalizedService);
     }
 
     /**
@@ -251,11 +255,15 @@ final readonly class QueryDeployments
             }
         }
 
+        $normalizedService = null !== $serviceName && '' !== trim($serviceName)
+            ? DeployDomain::normalizeServiceName($serviceName)
+            : null;
+
         // 2. Stream container logs continuously without stopping unless killed
         // @phpstan-ignore while.alwaysTrue
         while (true) {
             try {
-                $this->orchestrator->streamServiceLogs($environment, $serviceName, $onOutput);
+                $this->orchestrator->streamServiceLogs($environment, $normalizedService, $onOutput);
             } catch (\Throwable) {
             }
             usleep(1_000_000);

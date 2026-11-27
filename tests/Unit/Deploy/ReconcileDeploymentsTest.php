@@ -161,7 +161,7 @@ final class ReconcileDeploymentsTest extends KernelTestCase
             $this->deployStore,
             $container->get(ReverseProxyRouter::class),
             $container->get(\App\Deploy\Application\TriggerDeploy::class),
-            $container->get(RepoStore::class),
+            $container->get(\App\Deploy\Application\DeployAccessResolver::class),
             $container->get(\App\Repo\Domain\RepoDirectory::class),
             $container->get(\App\Repo\Infrastructure\Git\GitRepositoryReader::class),
             $container->get(\Psr\Clock\ClockInterface::class),

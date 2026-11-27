@@ -231,6 +231,9 @@ final readonly class ComposeAllowlistParser
                 throw new InvalidInput(sprintf('service "%s": "image" must be a non-empty string', $name));
             }
             $image = trim($config['image']);
+            if (!preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._\/:@-]{0,255}$/', $image)) {
+                throw new InvalidInput(sprintf('service "%s": invalid "image" reference', $name));
+            }
         }
 
         $build = isset($config['build']) ? $this->parseBuild($name, $config['build']) : null;
@@ -323,8 +326,8 @@ final readonly class ComposeAllowlistParser
     private function assertSafeRelativePath(string $serviceName, string $field, string $path): string
     {
         $path = trim($path);
-        if ('' === $path || str_starts_with($path, '/') || str_starts_with($path, '~') || str_contains($path, "\0")) {
-            throw new InvalidInput(sprintf('service "%s": "%s" cannot be an absolute or home path ("%s")', $serviceName, $field, $path));
+        if ('' === $path || str_starts_with($path, '/') || str_starts_with($path, '~') || 1 === preg_match('/[\r\n\0]/', $path)) {
+            throw new InvalidInput(sprintf('service "%s": "%s" cannot be an absolute or invalid path ("%s")', $serviceName, $field, $path));
         }
 
         $normalized = str_replace('\\', '/', $path);
@@ -431,6 +434,10 @@ final readonly class ComposeAllowlistParser
             $source = trim($parts[0]);
             $target = trim($parts[1]);
             $mode = isset($parts[2]) ? trim($parts[2]) : 'rw';
+
+            if (1 === preg_match('/[\r\n\0\s]/', $source) || 1 === preg_match('/[\r\n\0\s]/', $target)) {
+                throw new InvalidInput(sprintf('service "%s": volume path cannot contain whitespace or control characters', $serviceName));
+            }
 
             if (!str_starts_with($target, '/') || str_contains($target, '..')) {
                 throw new InvalidInput(sprintf('service "%s": volume target "%s" must be an absolute path inside the container', $serviceName, $target));
