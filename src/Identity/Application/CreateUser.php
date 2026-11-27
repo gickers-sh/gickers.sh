@@ -33,12 +33,17 @@ final readonly class CreateUser
         }
 
         $parsedKeys = [];
+        $seenFingerprints = [];
         foreach ($keys as $keyLine) {
             $sshKey = SshKey::parse($keyLine);
-            $existing = $this->userStore->byFingerprintAndUsername($sshKey->fingerprint, $normalized);
+            if (isset($seenFingerprints[$sshKey->fingerprint])) {
+                continue;
+            }
+            $existing = $this->userStore->byFingerprint($sshKey->fingerprint);
             if (null !== $existing) {
                 throw new Conflict(sprintf('public key already belongs to user "%s"', $existing->username()));
             }
+            $seenFingerprints[$sshKey->fingerprint] = true;
             $parsedKeys[] = $sshKey;
         }
 

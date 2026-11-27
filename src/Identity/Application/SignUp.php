@@ -39,9 +39,9 @@ final readonly class SignUp
         }
 
         $key = SshKey::parse($keyLine);
-        $existing = $this->userStore->byFingerprintAndUsername($key->fingerprint, $normalized);
+        $existing = $this->userStore->byFingerprint($key->fingerprint);
         if (null !== $existing) {
-            throw new Conflict(sprintf('this public key already belongs to user "%s"', $existing->username()));
+            throw new Conflict('this public key is already registered');
         }
 
         $now = $this->clock->now();

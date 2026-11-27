@@ -68,14 +68,14 @@ final class SignUpTest extends KernelTestCase
         self::assertSame($user->id(), $byFingerprint->id());
     }
 
-    public function testSignupAllowsSameKeyForDifferentUsers(): void
+    public function testSignupRejectsSameKeyForDifferentUsers(): void
     {
         $keyLine = self::generateKey();
-        $user1 = ($this->signUp)(self::freshName(), $keyLine);
-        $user2 = ($this->signUp)(self::freshName(), $keyLine);
+        ($this->signUp)(self::freshName(), $keyLine);
 
-        self::assertNotSame($user1->id(), $user2->id());
-        self::assertCount(2, $this->userStore->allByFingerprint(SshKey::parse($keyLine)->fingerprint));
+        $this->expectException(Conflict::class);
+        $this->expectExceptionMessage('already registered');
+        ($this->signUp)(self::freshName(), $keyLine);
     }
 
     public function testSignupRejectsTakenUsername(): void

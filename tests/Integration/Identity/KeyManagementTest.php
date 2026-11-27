@@ -66,7 +66,7 @@ final class KeyManagementTest extends KernelTestCase
         $this->assertSame('alice', $authenticated->username());
     }
 
-    public function testSharedKeyAcrossMultipleAccounts(): void
+    public function testDuplicateKeyAcrossAccountsIsRejected(): void
     {
         $admin = $this->createAdminActor();
         $user1 = ($this->createUser)($admin, 'alice', false);
@@ -74,30 +74,23 @@ final class KeyManagementTest extends KernelTestCase
 
         ($this->addPublicKey)($user1, 'alice', self::KEY1);
 
-        // Bob adds the exact same public key (shared key / multi-accounts)
-        $pkBob = ($this->addPublicKey)($user2, 'bob', self::KEY1);
-        $this->assertNotNull($pkBob);
-
         $parsedKey1 = SshKey::parse(self::KEY1);
 
-        // Authenticating without target user resolves to first registered user (alice)
+        // Authenticating resolves strictly to alice
         $authDefault = ($this->authSshKey)($parsedKey1->fingerprint);
         $this->assertNotNull($authDefault);
         $this->assertSame('alice', $authDefault->username());
 
-        // Authenticating with target user resolves to that specific user
         $authAlice = ($this->authSshKey)($parsedKey1->fingerprint, 'alice');
         $this->assertNotNull($authAlice);
         $this->assertSame('alice', $authAlice->username());
 
-        $authBob = ($this->authSshKey)($parsedKey1->fingerprint, 'bob');
-        $this->assertNotNull($authBob);
-        $this->assertSame('bob', $authBob->username());
+        $this->assertNull(($this->authSshKey)($parsedKey1->fingerprint, 'bob'));
 
-        // Alice cannot add the same key twice to her own account
+        // Bob cannot attach a public key already owned by Alice (strict global uniqueness)
         $this->expectException(Conflict::class);
         $this->expectExceptionMessage('already belongs to user "alice"');
-        ($this->addPublicKey)($user1, 'alice', self::KEY1);
+        ($this->addPublicKey)($user2, 'bob', self::KEY1);
     }
 
     public function testRemovePublicKey(): void

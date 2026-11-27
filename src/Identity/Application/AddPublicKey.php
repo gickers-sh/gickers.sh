@@ -40,7 +40,7 @@ final readonly class AddPublicKey
         }
 
         $key = SshKey::parse($keyLine);
-        $existing = $this->userStore->byFingerprintAndUsername($key->fingerprint, $normalizedTarget);
+        $existing = $this->userStore->byFingerprint($key->fingerprint);
         if (null !== $existing) {
             throw new Conflict(sprintf('public key already belongs to user "%s"', $existing->username()));
         }

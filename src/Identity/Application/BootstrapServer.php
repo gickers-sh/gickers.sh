@@ -13,6 +13,7 @@ use App\Wiki\Domain\Model\WikiPage;
 use App\Wiki\Domain\WikiSlug;
 use App\Wiki\Domain\WikiStore;
 use Psr\Clock\ClockInterface;
+use Psr\Log\LoggerInterface;
 
 final readonly class BootstrapServer
 {
@@ -21,6 +22,7 @@ final readonly class BootstrapServer
         private ServerSettings $serverSettings,
         private ClockInterface $clock,
         private ?WikiStore $wikiStore = null,
+        private ?LoggerInterface $logger = null,
     ) {
     }
 
@@ -44,9 +46,11 @@ final readonly class BootstrapServer
             if (null === $owner) {
                 $admin->addPublicKey($sshKey, $now);
                 $this->userStore->save($admin);
-            } elseif (!$owner->isAdmin()) {
-                $owner->setAdmin(true, $now);
-                $this->userStore->save($owner);
+            } elseif ($owner->id() !== $admin->id()) {
+                $this->logger?->warning('Initial admin SSH key is already registered to another user; refusing to promote non-admin account.', [
+                    'fingerprint' => $sshKey->fingerprint,
+                    'existing_user' => $owner->username(),
+                ]);
             }
         }
 
