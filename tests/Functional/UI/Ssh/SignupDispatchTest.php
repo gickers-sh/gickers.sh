@@ -281,6 +281,23 @@ final class SignupDispatchTest extends KernelTestCase
         self::assertStringContainsString('signup | iex', $out);
     }
 
+    public function testSignupWhenPipedOutputsSetupScript(): void
+    {
+        putenv('SSH_PIPED=1');
+        $_SERVER['SSH_PIPED'] = '1';
+        try {
+            $key = self::generateKey();
+            $tester = $this->dispatch('signup', $key);
+            self::assertSame(0, $tester->getStatusCode(), self::text($tester));
+            $out = self::text($tester);
+            self::assertStringContainsString('#!/usr/bin/env bash', $out);
+            self::assertStringContainsString('gum_choose', $out);
+        } finally {
+            putenv('SSH_PIPED');
+            unset($_SERVER['SSH_PIPED']);
+        }
+    }
+
     public function testSignupRateLimitBlocksMassReservation(): void
     {
         $key = self::generateKey();

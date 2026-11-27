@@ -84,60 +84,67 @@ final class SignupCommand extends AbstractSshCommand
             return Command::SUCCESS;
         }
 
-        // 2. Piped script generation (e.g. `ssh codes.sh signup | bash` or `ssh codes.sh signup | iex`)
+        // 2. Explicit script format options (--bash or --ps1)
+        $isExplicitScript = (bool) $input->getOption('bash') || (bool) $input->getOption('ps1');
         $isWindows = (bool) $input->getOption('ps1')
             || ('windows' === (getenv('SSH_CLIENT_OS') ?: ($_SERVER['SSH_CLIENT_OS'] ?? '')) && !(bool) $input->getOption('bash'));
 
-        $isPiped = '1' === (getenv('SSH_PIPED') ?: ($_SERVER['SSH_PIPED'] ?? ''));
-        $isExplicitScript = (bool) $input->getOption('bash') || (bool) $input->getOption('ps1');
-
-        if ($isExplicitScript || $isPiped) {
-            [$host, $port] = $this->scriptGenerator->resolveHostAndPort();
-
-            $connectedKey = $this->sshSession->authorizedKey() ?? $customKey ?? '';
-            $connectedFingerprint = $this->sshSession->publicKeyFingerprint();
-            $connectedKeyData = '';
-            $connectedComment = '';
-            $parts = preg_split('/\s+/', trim($connectedKey));
-            if (isset($parts[1])) {
-                $connectedKeyData = $parts[1];
+        // 3. If neither --bash nor --ps1 is specified, probe whether stdout is an interactive terminal or a pipe
+        if (!$isExplicitScript) {
+            $isInteractive = $this->probeInteractiveTerminal($input, $output);
+            if ($isInteractive) {
+                return $this->renderHelper($output, $username, $actor);
             }
-            if (isset($parts[2])) {
-                $connectedComment = $parts[2];
-            }
-
-            $scriptUsername = $resolvedUser?->username() ?? $username ?? '';
-
-            if ($isWindows) {
-                $this->writeRaw($output, $this->scriptGenerator->generatePowerShellScript(
-                    $host,
-                    $port,
-                    $scriptUsername,
-                    null,
-                    $connectedKeyData,
-                    $connectedFingerprint,
-                    $connectedComment,
-                    isSignup: true,
-                    alreadyRegistered: $alreadyRegistered,
-                ));
-            } else {
-                $this->writeRaw($output, $this->scriptGenerator->generateBashScript(
-                    $host,
-                    $port,
-                    $scriptUsername,
-                    null,
-                    $connectedKeyData,
-                    $connectedFingerprint,
-                    $connectedComment,
-                    isSignup: true,
-                    alreadyRegistered: $alreadyRegistered,
-                ));
-            }
-
-            return Command::SUCCESS;
         }
 
-        // 3. Interactive terminal without pipe: instruct user to run via `| bash` or `| iex`
+        // 4. Either explicit script or pipe detected: generate onboarding setup script
+        [$host, $port] = $this->scriptGenerator->resolveHostAndPort();
+
+        $connectedKey = $this->sshSession->authorizedKey() ?? $customKey ?? '';
+        $connectedFingerprint = $this->sshSession->publicKeyFingerprint();
+        $connectedKeyData = '';
+        $connectedComment = '';
+        $parts = preg_split('/\s+/', trim($connectedKey));
+        if (isset($parts[1])) {
+            $connectedKeyData = $parts[1];
+        }
+        if (isset($parts[2])) {
+            $connectedComment = $parts[2];
+        }
+
+        $scriptUsername = $resolvedUser?->username() ?? $username ?? '';
+
+        if ($isWindows) {
+            $this->writeRaw($output, $this->scriptGenerator->generatePowerShellScript(
+                $host,
+                $port,
+                $scriptUsername,
+                null,
+                $connectedKeyData,
+                $connectedFingerprint,
+                $connectedComment,
+                isSignup: true,
+                alreadyRegistered: $alreadyRegistered,
+            ));
+        } else {
+            $this->writeRaw($output, $this->scriptGenerator->generateBashScript(
+                $host,
+                $port,
+                $scriptUsername,
+                null,
+                $connectedKeyData,
+                $connectedFingerprint,
+                $connectedComment,
+                isSignup: true,
+                alreadyRegistered: $alreadyRegistered,
+            ));
+        }
+
+        return Command::SUCCESS;
+    }
+
+    private function renderHelper(OutputInterface $output, ?string $username, ?\App\Identity\Domain\Model\User $actor): int
+    {
         $targetUser = $username ?? $actor?->username();
         $userSuffix = null !== $targetUser && '' !== trim($targetUser) ? ' ' . trim($targetUser) : '';
         $sshCmd = HelpRenderer::sshCommandFromPublicUrl($this->serverSettings->sshPublicUrl);
