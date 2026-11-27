@@ -158,6 +158,15 @@ final class ConsoleDebugController extends AbstractController
         $startTime = hrtime(true);
         $memBefore = memory_get_usage();
 
+        $savedEnv = [];
+        foreach (['COLUMNS', 'LINES', 'TERM', 'NO_COLOR', 'SSH_TTY', 'SSH_USER', 'SSH_ORIGINAL_COMMAND', 'SSH_PIPED'] as $envKey) {
+            $savedEnv[$envKey] = [
+                'env' => getenv($envKey),
+                'hasServer' => \array_key_exists($envKey, $_SERVER),
+                'server' => $_SERVER[$envKey] ?? null,
+            ];
+        }
+
         // Set realistic SSH environment variables matching real Go SSH gateway
         putenv("COLUMNS={$cols}");
         $_SERVER['COLUMNS'] = (string) $cols;
@@ -251,6 +260,19 @@ final class ConsoleDebugController extends AbstractController
                     'actor' => $actorUsername,
                 ],
             ]);
+        } finally {
+            foreach ($savedEnv as $envKey => $prev) {
+                if (false === $prev['env']) {
+                    putenv($envKey);
+                } else {
+                    putenv($envKey . '=' . $prev['env']);
+                }
+                if ($prev['hasServer']) {
+                    $_SERVER[$envKey] = $prev['server'];
+                } else {
+                    unset($_SERVER[$envKey]);
+                }
+            }
         }
     }
 
