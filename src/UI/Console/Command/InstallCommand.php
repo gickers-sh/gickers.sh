@@ -48,7 +48,14 @@ final class InstallCommand extends Command
             ->addOption('yes', 'y', InputOption::VALUE_NONE, 'Non-interactive mode: accept all defaults/options')
             ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Simulate deployment without modifying system')
             ->addOption('skip-docker', null, InputOption::VALUE_NONE, 'Skip Docker CE installation')
-            ->addOption('skip-sshd-switch', null, InputOption::VALUE_NONE, 'Do not switch host OpenSSH port from 22');
+            ->addOption('skip-sshd-switch', null, InputOption::VALUE_NONE, 'Do not switch host OpenSSH port from 22')
+            ->addOption('skip-firewall', null, InputOption::VALUE_NONE, 'Skip UFW firewall rules configuration')
+            ->addOption('skip-systemd', null, InputOption::VALUE_NONE, 'Skip systemd service registration')
+            ->addOption('sudo', null, InputOption::VALUE_NONE, 'Enable sudo mode for system operations')
+            ->addOption('step-docker', null, InputOption::VALUE_REQUIRED, 'Docker step mode: auto, skip, or show')
+            ->addOption('step-sshd', null, InputOption::VALUE_REQUIRED, 'SSH switch step mode: auto, skip, or show')
+            ->addOption('step-firewall', null, InputOption::VALUE_REQUIRED, 'Firewall step mode: auto, skip, or show')
+            ->addOption('step-systemd', null, InputOption::VALUE_REQUIRED, 'Systemd step mode: auto, skip, or show');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -93,6 +100,35 @@ final class InstallCommand extends Command
             if ((bool) $input->getOption('skip-sshd-switch')) {
                 $cmdArgs[] = '--skip-sshd-switch';
             }
+            if ((bool) $input->getOption('skip-firewall')) {
+                $cmdArgs[] = '--skip-firewall';
+            }
+            if ((bool) $input->getOption('skip-systemd')) {
+                $cmdArgs[] = '--skip-systemd';
+            }
+            if ((bool) $input->getOption('sudo')) {
+                $cmdArgs[] = '--sudo';
+            }
+            $stepDocker = $input->getOption('step-docker');
+            if (is_string($stepDocker) && '' !== trim($stepDocker)) {
+                $cmdArgs[] = '--step-docker';
+                $cmdArgs[] = trim($stepDocker);
+            }
+            $stepSshd = $input->getOption('step-sshd');
+            if (is_string($stepSshd) && '' !== trim($stepSshd)) {
+                $cmdArgs[] = '--step-sshd';
+                $cmdArgs[] = trim($stepSshd);
+            }
+            $stepFirewall = $input->getOption('step-firewall');
+            if (is_string($stepFirewall) && '' !== trim($stepFirewall)) {
+                $cmdArgs[] = '--step-firewall';
+                $cmdArgs[] = trim($stepFirewall);
+            }
+            $stepSystemd = $input->getOption('step-systemd');
+            if (is_string($stepSystemd) && '' !== trim($stepSystemd)) {
+                $cmdArgs[] = '--step-systemd';
+                $cmdArgs[] = trim($stepSystemd);
+            }
 
             $process = new Process($cmdArgs);
             $process->setTimeout(null);
@@ -129,6 +165,11 @@ final class InstallCommand extends Command
         $allowKeyless = $input->getOption('allow-keyless');
         $lfs = $input->getOption('lfs');
 
+        $stepDocker = $input->getOption('step-docker');
+        $stepSshd = $input->getOption('step-sshd');
+        $stepFirewall = $input->getOption('step-firewall');
+        $stepSystemd = $input->getOption('step-systemd');
+
         return [
             'domain' => is_string($domain) && '' !== trim($domain) ? trim($domain) : null,
             'dir' => is_string($dir) && '' !== trim($dir) ? trim($dir) : null,
@@ -147,6 +188,15 @@ final class InstallCommand extends Command
             'lfs' => is_string($lfs) ? 'true' === $lfs : (is_bool($lfs) ? $lfs : null),
             'non_interactive' => (bool) $input->getOption('yes'),
             'dry_run' => (bool) $input->getOption('dry-run'),
+            'sudo' => (bool) $input->getOption('sudo'),
+            'skip_docker' => (bool) $input->getOption('skip-docker'),
+            'skip_sshd_switch' => (bool) $input->getOption('skip-sshd-switch'),
+            'skip_firewall' => (bool) $input->getOption('skip-firewall'),
+            'skip_systemd' => (bool) $input->getOption('skip-systemd'),
+            'step_docker' => is_string($stepDocker) && '' !== trim($stepDocker) ? trim($stepDocker) : null,
+            'step_sshd' => is_string($stepSshd) && '' !== trim($stepSshd) ? trim($stepSshd) : null,
+            'step_firewall' => is_string($stepFirewall) && '' !== trim($stepFirewall) ? trim($stepFirewall) : null,
+            'step_systemd' => is_string($stepSystemd) && '' !== trim($stepSystemd) ? trim($stepSystemd) : null,
         ];
     }
 }

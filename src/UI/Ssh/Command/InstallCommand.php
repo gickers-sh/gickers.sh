@@ -62,7 +62,14 @@ final class InstallCommand extends AbstractSshCommand
             ->addOption('yes', 'y', InputOption::VALUE_NONE, 'Non-interactive mode: accept all defaults/options')
             ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Simulate deployment without modifying system')
             ->addOption('skip-docker', null, InputOption::VALUE_NONE, 'Skip Docker CE installation')
-            ->addOption('skip-sshd-switch', null, InputOption::VALUE_NONE, 'Do not switch host OpenSSH port from 22');
+            ->addOption('skip-sshd-switch', null, InputOption::VALUE_NONE, 'Do not switch host OpenSSH port from 22')
+            ->addOption('skip-firewall', null, InputOption::VALUE_NONE, 'Skip UFW firewall rules configuration')
+            ->addOption('skip-systemd', null, InputOption::VALUE_NONE, 'Skip systemd service registration')
+            ->addOption('sudo', null, InputOption::VALUE_NONE, 'Enable sudo mode for system operations')
+            ->addOption('step-docker', null, InputOption::VALUE_REQUIRED, 'Docker step mode: auto, skip, or show')
+            ->addOption('step-sshd', null, InputOption::VALUE_REQUIRED, 'SSH switch step mode: auto, skip, or show')
+            ->addOption('step-firewall', null, InputOption::VALUE_REQUIRED, 'Firewall step mode: auto, skip, or show')
+            ->addOption('step-systemd', null, InputOption::VALUE_REQUIRED, 'Systemd step mode: auto, skip, or show');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -97,6 +104,15 @@ final class InstallCommand extends AbstractSshCommand
             'lfs' => null !== $this->nullableStringOption($input, 'lfs') ? 'true' === $this->nullableStringOption($input, 'lfs') : null,
             'non_interactive' => (bool) $input->getOption('yes'),
             'dry_run' => (bool) $input->getOption('dry-run'),
+            'sudo' => (bool) $input->getOption('sudo'),
+            'skip_docker' => (bool) $input->getOption('skip-docker'),
+            'skip_sshd_switch' => (bool) $input->getOption('skip-sshd-switch'),
+            'skip_firewall' => (bool) $input->getOption('skip-firewall'),
+            'skip_systemd' => (bool) $input->getOption('skip-systemd'),
+            'step_docker' => $this->nullableStringOption($input, 'step-docker'),
+            'step_sshd' => $this->nullableStringOption($input, 'step-sshd'),
+            'step_firewall' => $this->nullableStringOption($input, 'step-firewall'),
+            'step_systemd' => $this->nullableStringOption($input, 'step-systemd'),
         ];
 
         $isWindows = (bool) $input->getOption('ps1')
