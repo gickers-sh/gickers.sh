@@ -39,7 +39,7 @@ DESC;
   {ssh} signup | iex              # Windows (PowerShell)
 
   # Signup with a desired username in the installer wizard
-  {ssh} signup <username> | bash
+  {ssh:<username>} signup | bash
 
   # Recover existing account with backup password
   {ssh} recover <username>
@@ -48,7 +48,6 @@ EX;
         $root = new CommandSpec('', '', '', $rootLong, [], [], false, example: $example);
         $root->addChild($this->signupSpec());
         $root->addChild($this->recoverSpec());
-        $root->addChild($this->setupSpec());
 
         return $root;
     }
@@ -268,7 +267,6 @@ EX;
 
         $root->addChild($this->signupSpec());
         $root->addChild($this->recoverSpec());
-        $root->addChild($this->setupSpec());
         if ($includeAdmin) {
             $root->addChild($this->settings());
         }
@@ -504,28 +502,41 @@ EX;
     private function signupSpec(): CommandSpec
     {
         $signupLong = <<<'DESC'
-Registers your SSH key as a new user account on codes.sh. Once registered, you can immediately create, clone, and push Git repositories.
+Registers your SSH key as a new user account on codes.sh, or configures your client OpenSSH setup (~/.ssh/config).
+
+Enables automatic TTY allocation (RequestTTY auto) for proper terminal width, connection multiplexing (5ms execution), and per-user key binding.
 
 Scope:
-  Unregistered SSH keys only. Requires server setting 'allow-signup' to be enabled.
+  Public (all SSH keys, registered or unregistered).
 
 Arguments:
-  USERNAME    Desired unique username for your account.
+  USERNAME    Desired unique username for your account (or target account to configure).
 
 Flags:
-  -k, --key string    Register a specific public key instead of the key you connected with.
+      --bash              force Bash installer script
+  -k, --key string        register a specific public key instead of the key you connected with
+      --key-path string   predefined private key path
+      --ps1               force PowerShell installer script
+  -r, --raw               print raw ~/.ssh/config snippet only
 DESC;
         $signupExample = <<<'EX'
   # Unified self-service signup & client onboarding (recommended)
   {ssh} signup | bash             # Linux / macOS
   {ssh} signup | iex              # Windows (PowerShell)
 
-  # Signup with a predefined username in the installer wizard
-  {ssh} signup alice | bash
+  # Configure client for an existing user
+  {ssh} setup | bash
+
+  # Output raw ~/.ssh/config block
+  {ssh} setup --raw >> ~/.ssh/config
 EX;
 
-        return $this->leaf('signup USERNAME', 'Register yourself as a new user with your SSH key', $signupLong, [], [
-            new FlagSpec('k', 'key', 'string', 'public key to register instead of the one you connected with'),
+        return $this->leaf('signup USERNAME', 'Register yourself as a new user with your SSH key', $signupLong, ['setup', 'config'], [
+            new FlagSpec('', 'bash', 'bool', 'force Bash installer script'),
+            new FlagSpec('k', 'key', 'string', 'register a specific public key instead of the key you connected with'),
+            new FlagSpec('', 'key-path', 'string', 'predefined private key path'),
+            new FlagSpec('', 'ps1', 'bool', 'force PowerShell installer script'),
+            new FlagSpec('r', 'raw', 'bool', 'print raw ~/.ssh/config snippet only'),
         ], $signupExample)->withUi(
             category: 'identity',
             title: 'Sign Up',
@@ -568,55 +579,6 @@ EX;
         );
     }
 
-    private function setupSpec(): CommandSpec
-    {
-        $setupLong = <<<'DESC'
-Generates a recommended OpenSSH client configuration (~/.ssh/config) or an interactive setup wizard.
-
-Enables automatic TTY allocation (RequestTTY auto) for proper terminal width, connection multiplexing (5ms execution), and per-user key binding (Match host codes.sh user <username>).
-
-Scope:
-  Public (all authenticated users and unregistered keys during onboarding).
-
-Arguments:
-  USERNAME    Target username to configure (optional, defaults to your account).
-
-Flags:
-      --bash              force Bash installer script
-  -k, --key-path string   predefined private key path
-      --ps1               force PowerShell installer script
-  -r, --raw               print raw ~/.ssh/config snippet only
-DESC;
-        $setupExample = <<<'EX'
-  # Run interactive client configuration wizard
-  {ssh} setup | bash
-
-  # Run wizard for a specific user
-  {ssh} setup alice | bash
-
-  # On Windows PowerShell
-  {ssh} setup | iex
-
-  # Output raw ~/.ssh/config block
-  {ssh} setup --raw >> ~/.ssh/config
-EX;
-
-        return $this->leaf('setup [USERNAME]', 'Generate client SSH config or setup wizard', $setupLong, ['config'], [
-            new FlagSpec('', 'bash', 'bool', 'force Bash installer script'),
-            new FlagSpec('k', 'key-path', 'string', 'predefined private key path'),
-            new FlagSpec('', 'ps1', 'bool', 'force PowerShell installer script'),
-            new FlagSpec('r', 'raw', 'bool', 'print raw ~/.ssh/config snippet only'),
-        ], $setupExample)->withUi(
-            category: 'identity',
-            title: 'Setup Client',
-            tier: 'read',
-            description: 'Generate client SSH config or setup wizard',
-            baseTemplate: 'setup',
-            fields: [FieldSpec::arg('username', 'Target username', 'alice', false)],
-            scope: 'global',
-            order: 13,
-        );
-    }
 
     private function pubkey(): CommandSpec
     {

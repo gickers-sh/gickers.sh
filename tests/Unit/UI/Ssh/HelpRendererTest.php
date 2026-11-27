@@ -78,6 +78,44 @@ final class HelpRendererTest extends TestCase
         self::assertSame('ssh alice@git.example.com', HelpRenderer::sshCommandFromPublicUrl('ssh://git.example.com:22', 'alice'));
     }
 
+    public function testInterpolateSsh(): void
+    {
+        $template = "{ssh} signup | bash\n{ssh:<username>} signup | bash\n{ssh-base} info";
+
+        // Without user in session
+        $res1 = HelpRenderer::interpolateSsh($template, 'ssh codes.sh');
+        self::assertSame(
+            "ssh codes.sh signup | bash\nssh <username>@codes.sh signup | bash\nssh codes.sh info",
+            $res1
+        );
+
+        // With user in session
+        $res2 = HelpRenderer::interpolateSsh($template, 'ssh klmklm@codes.sh');
+        self::assertSame(
+            "ssh klmklm@codes.sh signup | bash\nssh <username>@codes.sh signup | bash\nssh codes.sh info",
+            $res2
+        );
+
+        // With port and user in session
+        $res3 = HelpRenderer::interpolateSsh($template, 'ssh -p 2222 klmklm@codes.sh');
+        self::assertSame(
+            "ssh -p 2222 klmklm@codes.sh signup | bash\nssh -p 2222 <username>@codes.sh signup | bash\nssh -p 2222 codes.sh info",
+            $res3
+        );
+    }
+
+    public function testRestrictedRootForUnknownKeyShowsCustomUserExample(): void
+    {
+        $catalog = new CommandCatalog();
+        $renderer = new HelpRenderer();
+        $root = $catalog->restrictedRootForUnknownKey();
+
+        $rendered = $renderer->render($root, 'ssh klmklm@codes.sh');
+        self::assertStringContainsString('ssh klmklm@codes.sh signup | bash', $rendered);
+        self::assertStringContainsString('ssh <username>@codes.sh signup | bash', $rendered);
+        self::assertStringNotContainsString('ssh klmklm@codes.sh signup <username> | bash', $rendered);
+    }
+
     public function testNonAdminCatalogHidesAdminCommands(): void
     {
         $catalog = new CommandCatalog();

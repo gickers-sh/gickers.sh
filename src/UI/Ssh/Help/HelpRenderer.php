@@ -126,7 +126,7 @@ final class HelpRenderer
         }
         if ('' !== $command->example) {
             $examplesHeading = $decorated ? Theme::style('Examples:', Theme::BLUE, bold: true) : 'Examples:';
-            $exampleBody = str_replace('{ssh}', $sshCommand, ltrim(rtrim($command->example), "\r\n"));
+            $exampleBody = self::interpolateSsh($command->example, $sshCommand);
             if ($decorated) {
                 $styledLines = [];
                 foreach (explode("\n", $exampleBody) as $line) {
@@ -379,6 +379,36 @@ final class HelpRenderer
         }
 
         return $out;
+    }
+
+    /**
+     * Interpolates SSH command placeholders in example text:
+     * - `{ssh}` -> Full SSH command for the current session (e.g. `ssh -p 2222 user@host` or `ssh host`)
+     * - `{ssh-base}` -> SSH command without user prefix (e.g. `ssh -p 2222 host` or `ssh host`)
+     * - `{ssh:<user>}` -> SSH command targeting a custom user (e.g. `ssh -p 2222 <user>@host` or `ssh <user>@host`)
+     */
+    public static function interpolateSsh(string $text, string $sshCommand): string
+    {
+        $trimmed = trim($sshCommand);
+        if (1 === preg_match('/^(.*?\bssh(?:\s+-[a-zA-Z0-9]+(?:\s+[^\s]+)?)*)\s+(?:([^@\s]+)@)?([^\s]+)$/', $trimmed, $matches)) {
+            $prefix = $matches[1];
+            $host = $matches[3];
+            $baseSsh = $prefix . ' ' . $host;
+        } else {
+            $prefix = 'ssh';
+            $host = 'codes.sh';
+            $baseSsh = $sshCommand;
+        }
+
+        $result = str_replace(
+            ['{ssh-base}', '{ssh}'],
+            [$baseSsh, $sshCommand],
+            ltrim(rtrim($text), "\r\n")
+        );
+
+        return (string) preg_replace_callback('/\{ssh:([^}]+)\}/', static function (array $m) use ($prefix, $host): string {
+            return $prefix . ' ' . $m[1] . '@' . $host;
+        }, $result);
     }
 
     /**

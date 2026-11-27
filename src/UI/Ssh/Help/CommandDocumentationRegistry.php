@@ -224,7 +224,7 @@ final readonly class CommandDocumentationRegistry
 
         $cmdPath = trim($node->commandPath());
         $slug = str_replace(' ', '/', $cmdPath);
-        $example = str_replace('{ssh}', $sshPrefix, $node->example);
+        $example = HelpRenderer::interpolateSsh($node->example, $sshPrefix);
         $synopsis = trim($sshPrefix . ' ' . $cmdPath);
 
         $parentPath = ($node->parent && '' !== trim($node->parent->commandPath())) ? trim($node->parent->commandPath()) : null;

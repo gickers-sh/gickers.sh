@@ -28,7 +28,6 @@ Available Commands:
   repo                 Manage repositories
   set-username         Set your username
   settings             Manage server settings
-  setup                Generate client SSH config or setup wizard
   signup               Register yourself as a new user with your SSH key
   token                Manage access tokens
   user                 Manage users
