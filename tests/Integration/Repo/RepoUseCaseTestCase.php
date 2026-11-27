@@ -149,7 +149,7 @@ abstract class RepoUseCaseTestCase extends KernelTestCase
     {
         $repoName = RepoName::fromInput($name);
         $gitRepo = $this->storage->init($repoName, 'main');
-        GitTestHelper::writeFile($gitRepo, 'main', 'README.md', "# {$name}\n", 'init', 'Tester', 'tester@codes.sh');
+        GitTestHelper::writeFile($gitRepo, 'main', 'README.md', "# {$name}\n", 'init', 'Tester', 'tester@gickers.sh');
 
         return $this->storage->open($repoName);
     }

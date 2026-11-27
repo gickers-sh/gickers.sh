@@ -774,6 +774,7 @@ func TestBuildChildEnvAllowlistAndStripsSensitiveVars(t *testing.T) {
 		"APP_ENV=prod",
 		"SOFT_SERVE_DATA_PATH=/app/.data",
 		"CODES_TOKEN=ss_leaked_token",
+		"GICKERS_TOKEN=ss_leaked_token",
 		"SSH_TOKEN=ss_leaked_ssh_token",
 		"SSH_PIPED=1",
 		"SSH_CLIENT_OS=windows",
@@ -799,7 +800,7 @@ func TestBuildChildEnvAllowlistAndStripsSensitiveVars(t *testing.T) {
 		}
 	}
 
-	for _, forbidden := range []string{"CODES_TOKEN", "SSH_TOKEN", "SSH_PIPED", "SSH_CLIENT_OS", "SSH_CLIENT_COLORTERM", "AWS_SECRET_ACCESS_KEY", "RANDOM_HOST_SECRET", "LC_CUSTOM_EVIL"} {
+	for _, forbidden := range []string{"CODES_TOKEN", "GICKERS_TOKEN", "SSH_TOKEN", "SSH_PIPED", "SSH_CLIENT_OS", "SSH_CLIENT_COLORTERM", "AWS_SECRET_ACCESS_KEY", "RANDOM_HOST_SECRET", "LC_CUSTOM_EVIL"} {
 		if v, exists := envMap[forbidden]; exists {
 			t.Errorf("expected %s to be stripped, got %q", forbidden, v)
 		}

@@ -21,7 +21,7 @@ final class ManCommand extends Command
         \assert(null !== $application);
 
         $lines = [
-            '.TH SOFT 1 "'.date('F Y').'" "codes.sh" "Soft Serve Manual"',
+            '.TH SOFT 1 "'.date('F Y').'" "gickers.sh" "Soft Serve Manual"',
             '.SH NAME',
             'soft \- A self-hostable Git server for the command line',
             '.SH SYNOPSIS',

@@ -194,7 +194,7 @@ final class WikiPane extends View
     {
         $raw = trim($this->views->settings->sshPublicUrl);
         if ('' === $raw) {
-            return 'ssh codes.sh wiki show '.$slug;
+            return 'ssh gickers.sh wiki show '.$slug;
         }
 
         $url = str_contains($raw, '://') ? $raw : 'ssh://'.$raw;

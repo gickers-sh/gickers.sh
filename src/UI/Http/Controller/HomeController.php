@@ -14,8 +14,8 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
- * `GET /`: landing and onboarding page for codes.sh.
- * Highlights SSH onboarding commands (`ssh codes.sh`, `ssh codes.sh signup`),
+ * `GET /`: landing and onboarding page for gickers.sh.
+ * Highlights SSH onboarding commands (`ssh gickers.sh`, `ssh gickers.sh signup`),
  * interactive TUI usage, web magic link authentication, and prominent links to documentation and repositories.
  */
 final readonly class HomeController
@@ -39,7 +39,7 @@ final readonly class HomeController
         $sshSignupUserExample = $this->sshUserCommand('<username>', 'signup | bash');
 
         $html = $this->twig->render('home.html.twig', [
-            'serverName' => $this->settings->name ?: 'codes.sh',
+            'serverName' => $this->settings->name ?: 'gickers.sh',
             'currentUsername' => $user?->username(),
             'sshPrefix' => $sshPrefix,
             'sshSignupCommand' => $sshSignupCommand,
@@ -87,13 +87,13 @@ final readonly class HomeController
     }
 
     /**
-     * Base SSH invocation advertised for this server (e.g. `ssh codes.sh` or `ssh -p 2222 codes.sh`).
+     * Base SSH invocation advertised for this server (e.g. `ssh gickers.sh` or `ssh -p 2222 gickers.sh`).
      */
     private function sshPrefix(): string
     {
         $raw = trim($this->settings->sshPublicUrl);
         if ('' === $raw) {
-            return 'ssh codes.sh';
+            return 'ssh gickers.sh';
         }
 
         $url = str_contains($raw, '://') ? $raw : 'ssh://' . $raw;
@@ -111,12 +111,12 @@ final readonly class HomeController
     }
 
     /**
-     * Constructs user-targeted SSH invocation (e.g. `ssh <username>@codes.sh signup`).
+     * Constructs user-targeted SSH invocation (e.g. `ssh <username>@gickers.sh signup`).
      */
     private function sshUserCommand(string $username, string $subcommand = ''): string
     {
         $raw = trim($this->settings->sshPublicUrl);
-        $host = 'codes.sh';
+        $host = 'gickers.sh';
         $port = null;
 
         if ('' !== $raw) {

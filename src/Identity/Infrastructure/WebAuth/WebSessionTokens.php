@@ -17,12 +17,12 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  *      printed by `web login` as a magic link. Redeeming it authenticates the browser
  *      and marks it as consumed immediately.
  *   2. A tamper-proof session token carrying the user's id, current web_token_version (wtv)
- *      and expiry timestamp, signed with HMAC-SHA256, stored in the `codes_session` cookie.
+ *      and expiry timestamp, signed with HMAC-SHA256, stored in the `gickers_session` cookie.
  *      `web logout` bumps the user's version, immediately invalidating all active sessions.
  */
 final readonly class WebSessionTokens
 {
-    public const COOKIE_NAME = 'codes_session';
+    public const COOKIE_NAME = 'gickers_session';
 
     private const SESSION_TTL = 'P30D';
 
@@ -149,7 +149,7 @@ final readonly class WebSessionTokens
             throw new \LogicException('Application secret (APP_SECRET) must be configured for web session signing.');
         }
 
-        return hash_hmac('sha256', 'codes.sh:web-session:v1', $secret, true);
+        return hash_hmac('sha256', 'gickers.sh:web-session:v1', $secret, true);
     }
 
     private static function base64UrlEncode(string $data): string

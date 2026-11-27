@@ -47,8 +47,8 @@ final class GitRepositoryWriter
         string $tagName,
         string $target = 'HEAD',
         ?string $message = null,
-        string $authorName = 'codes.sh',
-        string $authorEmail = 'noreply@codes.sh',
+        string $authorName = 'gickers.sh',
+        string $authorEmail = 'noreply@gickers.sh',
     ): void {
         if (null !== $message) {
             $env = [

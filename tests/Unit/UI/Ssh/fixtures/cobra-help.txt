@@ -1,5 +1,5 @@
 ########## ROOT help
-Codes.sh is a self-hostable Git server (inspired by Soft Serve) for the command line. It provides Git repository hosting, fine-grained access control, branch protections, commit signature enforcement, and webhooks driven entirely via SSH, HTTP, and an interactive TUI.
+Gickers.sh is a self-hostable Git server (inspired by Soft Serve) for the command line. It provides Git repository hosting, fine-grained access control, branch protections, commit signature enforcement, and webhooks driven entirely via SSH, HTTP, and an interactive TUI.
 
 Usage:
   ssh -p 2223 localhost [command]
@@ -170,7 +170,7 @@ Examples:
 Flags:
   -h, --help   help for remove
 ########## help repo
-Create, configure, inspect, and administer Git repositories hosted on codes.sh.
+Create, configure, inspect, and administer Git repositories hosted on gickers.sh.
 
 Scope:
   Permissions vary by command (from public read-only to repository admin / server admin).
@@ -534,7 +534,7 @@ Flags:
   -h, --help    help for commit
   -p, --patch   Output patch only
 ########## help repo create
-Initializes a new bare Git repository on codes.sh. The authenticated creator automatically becomes the repository owner with full admin permissions.
+Initializes a new bare Git repository on gickers.sh. The authenticated creator automatically becomes the repository owner with full admin permissions.
 
 Scope:
   Authenticated user.
@@ -738,7 +738,7 @@ Scope:
   Authenticated user.
 
 Arguments:
-  REPOSITORY    Target repository name on codes.sh.
+  REPOSITORY    Target repository name on gickers.sh.
   REMOTE        Remote Git repository URL (https://... or git://...).
 
 Flags:
@@ -1087,7 +1087,7 @@ Flags:
 
 Use "ssh -p 2223 localhost repo webhook [command] --help" for more information about a command.
 ########## help repo webhook create
-Registers a new webhook endpoint. When subscribed Git events occur, codes.sh sends an HTTP POST request with a signed payload to the target URL.
+Registers a new webhook endpoint. When subscribed Git events occur, gickers.sh sends an HTTP POST request with a signed payload to the target URL.
 
 Scope:
   Repository Admin or Server Admin.
@@ -1180,7 +1180,7 @@ Examples:
 Flags:
   -h, --help   help for set-username
 ########## help settings
-Manage global codes.sh server configuration, anonymous access permissions, keyless cloning, and self-registration policies.
+Manage global gickers.sh server configuration, anonymous access permissions, keyless cloning, and self-registration policies.
 
 Scope:
   Server Admin only (hidden from non-admin users in command listings).

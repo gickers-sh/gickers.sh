@@ -10,7 +10,7 @@ use Doctrine\DBAL\Schema\Schema;
 use Doctrine\Migrations\AbstractMigration;
 
 /**
- * Initial codes.sh schema (redesigned, see specs/symfony-modular-architecture/TECH.md §2.3).
+ * Initial gickers.sh schema (redesigned, see specs/symfony-modular-architecture/TECH.md §2.3).
  * Supports SQLite and PostgreSQL.
  */
 final class Version20261104000000 extends AbstractMigration

@@ -16,7 +16,7 @@ final class TuiViewBuilderTest extends TestCase
         $html = <<<'HTML'
 <div>
     <header class="header">
-        <h1>codes.sh</h1>
+        <h1>gickers.sh</h1>
     </header>
     <tui:container direction="horizontal">
         <tui:input id="search-box" class="indent"></tui:input>

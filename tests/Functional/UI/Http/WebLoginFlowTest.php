@@ -16,7 +16,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * The `web login` browser flow: an SSH-minted magic link sets a `codes_session`
+ * The `web login` browser flow: an SSH-minted magic link sets a `gickers_session`
  * cookie, after which repository pages detect the user (without any URL change)
  * and reveal the admin command palette. `web logout` (version bump) revokes it.
  */
@@ -56,7 +56,7 @@ final class WebLoginFlowTest extends KernelTestCase
         $this->assertSame(Response::HTTP_SEE_OTHER, $redeem->getStatusCode());
         $this->assertSame('/@'.$owner->username(), $redeem->headers->get('Location'));
         $cookie = $this->sessionCookie($redeem);
-        $this->assertNotNull($cookie, 'login must set a codes_session cookie');
+        $this->assertNotNull($cookie, 'login must set a gickers_session cookie');
 
         // The dashboard at "/@{username}" lists the owned repository with its role.
         $dashboard = $this->get('/@'.$owner->username(), $cookie);

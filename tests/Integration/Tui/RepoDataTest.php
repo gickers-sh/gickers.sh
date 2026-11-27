@@ -57,7 +57,7 @@ final class RepoDataTest extends KernelTestCase
         $tui = new Tui(terminal: $vt);
         $this->async = new AsyncLoader($tui);
 
-        $this->state = new RepoState($git, null, null, 'git@codes.sh:acme/demo.git');
+        $this->state = new RepoState($git, null, null, 'git@gickers.sh:acme/demo.git');
         $this->data = new RepoData($this->state, $this->reader, $this->async);
     }
 
@@ -79,7 +79,7 @@ final class RepoDataTest extends KernelTestCase
     {
         $this->assertSame('main', $this->state->ref);
         $this->assertSame('', $this->state->subpath);
-        $this->assertSame('git clone git@codes.sh:acme/demo.git/'.basename($this->tempDir).'.git', $this->state->cloneCommand());
+        $this->assertSame('git clone git@gickers.sh:acme/demo.git/'.basename($this->tempDir).'.git', $this->state->cloneCommand());
         $this->assertTrue($this->state->currentRefIsBranch());
         $this->assertSame($this->headSha, $this->state->sha());
         $this->assertSame($this->headSha, $this->data->sha());

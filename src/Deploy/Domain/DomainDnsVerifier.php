@@ -8,7 +8,7 @@ interface DomainDnsVerifier
 {
     /**
      * Verifies step 3 of the domain pipeline: checks that the domain resolves in public DNS
-     * and points to the codes.sh server (or is a sub-domain of the server's public host).
+     * and points to the gickers.sh server (or is a sub-domain of the server's public host).
      */
     public function verifyPublicDns(string $domain): void;
 }

@@ -59,7 +59,7 @@ EOF
 #      - Cross-bridge traffic (`-i br-X -o br-Y`) between different deployed projects
 #      - Any new connection from a container/build (`! -i eth0 -o eth0`) to private/internal
 #        IPv4/IPv6 ranges (RFC 1918, CGNAT, loopback, link-local/Cloud Metadata 169.254.169.254),
-#        which completely shields the codes.sh control plane and host network.
+#        which completely shields the gickers.sh control plane and host network.
 # ---------------------------------------------------------------------------
 setup_firewall() {
     iptables -N DOCKER-USER 2>/dev/null || true
@@ -75,7 +75,7 @@ setup_firewall() {
     iptables -A INPUT -i br-+ -p tcp --dport 2375 -j DROP 2>/dev/null || true
 
     # 3. Anti-SSRF: Block any new outbound connection leaving via eth0 towards private, link-local,
-    #    loopback, CGNAT, or cloud metadata IPv4 subnets (protects codes-internal and host LAN)
+    #    loopback, CGNAT, or cloud metadata IPv4 subnets (protects gickers-internal and host LAN)
     for cidr in \
         0.0.0.0/8 \
         10.0.0.0/8 \

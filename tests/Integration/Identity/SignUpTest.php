@@ -40,7 +40,7 @@ final class SignUpTest extends KernelTestCase
         $dir = sys_get_temp_dir() . '/codes-signup-' . bin2hex(random_bytes(6));
         $path = $dir . '/id_ed25519';
         mkdir($dir, 0700, true);
-        exec(sprintf('ssh-keygen -q -t ed25519 -N %s -C %s -f %s', escapeshellarg(''), escapeshellarg('test@codes.sh'), escapeshellarg($path)), $out, $code);
+        exec(sprintf('ssh-keygen -q -t ed25519 -N %s -C %s -f %s', escapeshellarg(''), escapeshellarg('test@gickers.sh'), escapeshellarg($path)), $out, $code);
         if (0 !== $code) {
             self::fail('ssh-keygen failed');
         }

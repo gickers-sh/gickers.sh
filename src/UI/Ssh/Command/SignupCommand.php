@@ -20,9 +20,9 @@ use Symfony\Component\Console\Output\OutputInterface;
  * Self-service registration, onboarding, and client SSH setup.
  *
  * Designed to be executed via pipe:
- *   ssh codes.sh signup | bash     (Linux / macOS)
- *   ssh codes.sh signup | iex      (Windows)
- *   ssh codes.sh setup | bash      (Client configuration)
+ *   ssh gickers.sh signup | bash     (Linux / macOS)
+ *   ssh gickers.sh signup | iex      (Windows)
+ *   ssh gickers.sh setup | bash      (Client configuration)
  *
  * For non-interactive or automated registrations, the setup script (or caller)
  * invokes direct registration via the --register flag.
@@ -98,7 +98,7 @@ final class SignupCommand extends AbstractSshCommand
         [$host, $port] = $this->scriptGenerator->resolveHostAndPort();
         $keyPath = $this->nullableStringOption($input, 'key-path');
 
-        // 2. Raw config snippet output (e.g. `ssh codes.sh setup --raw`)
+        // 2. Raw config snippet output (e.g. `ssh gickers.sh setup --raw`)
         if ((bool) $input->getOption('raw')) {
             $targetUser = $resolvedUser?->username() ?? $username;
             if (null === $targetUser || '' === trim($targetUser)) {
@@ -109,7 +109,7 @@ final class SignupCommand extends AbstractSshCommand
             return Command::SUCCESS;
         }
 
-        // 3. Piped script generation (e.g. `ssh codes.sh signup | bash` or `ssh codes.sh signup | iex`)
+        // 3. Piped script generation (e.g. `ssh gickers.sh signup | bash` or `ssh gickers.sh signup | iex`)
         $isWindows = (bool) $input->getOption('ps1')
             || ('windows' === (getenv('SSH_CLIENT_OS') ?: ($_SERVER['SSH_CLIENT_OS'] ?? '')) && !(bool) $input->getOption('bash'));
 
@@ -180,11 +180,11 @@ final class SignupCommand extends AbstractSshCommand
         $cmdName = $alreadyRegistered ? 'setup' : 'signup';
 
         $title = $alreadyRegistered
-            ? '⚡ codes.sh — Configuration client via | (bash|iex)'
-            : '⚡ codes.sh — Inscription unifiée via | (bash|iex)';
+            ? '⚡ gickers.sh — Configuration client via | (bash|iex)'
+            : '⚡ gickers.sh — Inscription unifiée via | (bash|iex)';
         $instruction = $alreadyRegistered
-            ? "La configuration de codes.sh doit être exécutée via le script d'onboarding :"
-            : "L'inscription à codes.sh doit impérativement être exécutée via le script d'onboarding :";
+            ? "La configuration de gickers.sh doit être exécutée via le script d'onboarding :"
+            : "L'inscription à gickers.sh doit impérativement être exécutée via le script d'onboarding :";
 
         if ($this->isDecorated($output)) {
             $this->line($output, \App\UI\Tui\Render\Theme::style($title, \App\UI\Tui\Render\Theme::CYAN, bold: true));

@@ -217,7 +217,7 @@ final readonly class ComposeAllowlistParser
         foreach (array_keys($config) as $key) {
             $keyStr = (string) $key;
             if (\in_array($keyStr, self::IGNORED_LOCAL_DEV_SERVICE_KEYS, true)) {
-                $infoLogs[] = sprintf('[info] Service "%s": ignoring local-dev option "%s" (managed by codes.sh).', $name, $keyStr);
+                $infoLogs[] = sprintf('[info] Service "%s": ignoring local-dev option "%s" (managed by gickers.sh).', $name, $keyStr);
                 continue;
             }
             if (!\in_array($keyStr, self::ALLOWED_SERVICE_KEYS, true)) {

@@ -80,7 +80,7 @@ BASH;
                 'pre-receive', 'post-receive' => '--repo "$SOFT_SERVE_REPO_NAME" --actor "$SOFT_SERVE_USERNAME"',
             };
 
-            // 4. Soft-serve / codes.sh hook inside ${hook}.d (matching hooksTmpl from pkg/hooks/gen.go).
+            // 4. Soft-serve / gickers.sh hook inside ${hook}.d (matching hooksTmpl from pkg/hooks/gen.go).
             // The PHP binary is absolute, like Go's os.Executable(): sshd sessions get a minimal PATH.
             $phpBinary = PhpBinary::find();
             $softHookPath = $hookDDir.'/soft-serve';

@@ -193,9 +193,9 @@ final class AboutPane extends View
     {
         if (null !== $this->views->twigTui) {
             $lines = $this->views->twigTui->renderLines('@tui/pages/about/index.html.twig', [
-                'server_name' => '' !== $this->views->settings->name ? $this->views->settings->name : 'codes.sh',
+                'server_name' => '' !== $this->views->settings->name ? $this->views->settings->name : 'gickers.sh',
                 'description' => 'Manage, browse, and collaborate on Git repositories straight from your terminal. No passwords, zero friction.',
-                'host' => 'codes.sh',
+                'host' => 'gickers.sh',
             ], 80);
             $this->doc->setLines($lines);
 

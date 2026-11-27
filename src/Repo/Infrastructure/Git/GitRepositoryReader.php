@@ -111,7 +111,10 @@ final class GitRepositoryReader
 
         // Project name (read from git config if present)
         $projectName = null;
-        $pnameProcess = GitCommand::run($realPath, ['config', 'codes.project-name']);
+        $pnameProcess = GitCommand::run($realPath, ['config', 'gickers.project-name']);
+        if (!$pnameProcess->isSuccessful() || '' === trim($pnameProcess->getOutput())) {
+            $pnameProcess = GitCommand::run($realPath, ['config', 'codes.project-name']);
+        }
         if ($pnameProcess->isSuccessful()) {
             $pname = trim($pnameProcess->getOutput());
             if ('' !== $pname) {

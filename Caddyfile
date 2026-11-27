@@ -5,7 +5,8 @@
 }
 
 # soft:serve passes SOFT_SERVE_HTTP_PORT and SOFT_SERVE_HTTP_HOST.
-codes.sh, *.codes.sh {
+# Production domain (defaults to gits.run, configurable via APP_DOMAIN) alongside gickers.sh
+{$APP_DOMAIN:gits.run}, *.{$APP_DOMAIN:gits.run}, gickers.sh, *.gickers.sh {
 	{$CADDY_TLS}
 
 	root * public/

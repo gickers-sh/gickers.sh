@@ -1,4 +1,4 @@
-module codes.sh/cmd/codes-ssh
+module gickers.sh/cmd/gickers-ssh
 
 go 1.26.0
 

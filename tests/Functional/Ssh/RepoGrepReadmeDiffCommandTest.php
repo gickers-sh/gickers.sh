@@ -179,7 +179,7 @@ final class RepoGrepReadmeDiffCommandTest extends KernelTestCase
         $tester = $this->tester('test.repo_grep_command');
 
         $this->expectException(InvalidInput::class);
-        $tester->execute(['repository' => $this->repoName->value, 'pattern' => 'needle', 'reference' => '--output=/tmp/codes-sh-grep-pwned']);
+        $tester->execute(['repository' => $this->repoName->value, 'pattern' => 'needle', 'reference' => '--output=/tmp/gickers-sh-grep-pwned']);
     }
 
     public function testReadmePrintsSeededContentVerbatim(): void
@@ -258,7 +258,7 @@ final class RepoGrepReadmeDiffCommandTest extends KernelTestCase
         $tester = $this->tester('test.repo_diff_command');
 
         $this->expectException(InvalidInput::class);
-        $tester->execute(['repository' => $this->repoName->value, 'from' => '--output=/tmp/codes-sh-diff-pwned']);
+        $tester->execute(['repository' => $this->repoName->value, 'from' => '--output=/tmp/gickers-sh-diff-pwned']);
     }
 
     /**

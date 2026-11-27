@@ -17,7 +17,7 @@ use Symfony\Component\Tui\Terminal\TerminalInterface;
 
 #[AsCommand(
     name: 'soft:tui',
-    description: 'Launch the full multi-repository codes.sh TUI',
+    description: 'Launch the full multi-repository gickers.sh TUI',
     aliases: ['tui'],
 )]
 final class TuiCommand extends Command

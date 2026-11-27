@@ -37,7 +37,7 @@ final readonly class PublicDomainDnsVerifier implements DomainDnsVerifier
             $serverIps = false !== @inet_pton($serverHost) ? [$serverHost] : $this->resolveHost($serverHost);
             if ([] !== $serverIps && [] === array_intersect($ips, $serverIps)) {
                 throw new InvalidInput(sprintf(
-                    'DNS check failed: domain "%s" resolves to [%s], which does not match codes.sh server IP [%s]',
+                    'DNS check failed: domain "%s" resolves to [%s], which does not match gickers.sh server IP [%s]',
                     $domain,
                     implode(', ', $ips),
                     implode(', ', $serverIps),

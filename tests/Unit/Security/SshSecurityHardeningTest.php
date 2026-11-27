@@ -59,12 +59,12 @@ final class SshSecurityHardeningTest extends TestCase
     private function serverSettings(): ServerSettings
     {
         return new ServerSettings(
-            name: 'Codes.sh',
+            name: 'Gickers.sh',
             dataPath: sys_get_temp_dir().'/codes-sec-unit-'.bin2hex(random_bytes(4)),
             sshListenAddr: '127.0.0.1:2223',
-            sshPublicUrl: 'ssh://codes.sh:2223',
+            sshPublicUrl: 'ssh://gickers.sh:2223',
             httpListenAddr: '127.0.0.1:8080',
-            httpPublicUrl: 'https://codes.sh',
+            httpPublicUrl: 'https://gickers.sh',
             lfsEnabled: true,
             anonAccess: 'read-only',
             allowKeyless: false,
@@ -141,10 +141,10 @@ final class SshSecurityHardeningTest extends TestCase
             'wtv' => 0,
             'exp' => (new \DateTimeImmutable('2026-12-27T12:00:00Z'))->getTimestamp(),
         ])), '+/', '-_'), '=');
-        $forgedWithUrl = $payload.'.'.hash_hmac('sha256', $payload, 'https://codes.sh');
+        $forgedWithUrl = $payload.'.'.hash_hmac('sha256', $payload, 'https://gickers.sh');
         self::assertNull($tokens->verifySession($forgedWithUrl));
 
-        $forgedWithFallback = $payload.'.'.hash_hmac('sha256', $payload, 'codes.sh-session-secret');
+        $forgedWithFallback = $payload.'.'.hash_hmac('sha256', $payload, 'gickers.sh-session-secret');
         self::assertNull($tokens->verifySession($forgedWithFallback));
     }
 
@@ -285,7 +285,7 @@ YAML, new DeployQuota());
 
         foreach (['alice"; id #', '$(whoami)', "alice\nProxyCommand sh", 'alice`id`'] as $badUser) {
             try {
-                $generator->generateRawConfig('codes.sh', 2223, $badUser, null);
+                $generator->generateRawConfig('gickers.sh', 2223, $badUser, null);
                 self::fail('Expected InvalidInput for username: '.$badUser);
             } catch (InvalidInput) {
                 $this->addToAssertionCount(1);
@@ -294,14 +294,14 @@ YAML, new DeployQuota());
 
         foreach (['~/.ssh/id_ed25519;id', "~/.ssh/key\nProxyCommand evil", '$(id)', '-oProxyCommand=evil'] as $badKeyPath) {
             try {
-                $generator->generateBashScript('codes.sh', 2223, 'alice', $badKeyPath, '', null, '');
+                $generator->generateBashScript('gickers.sh', 2223, 'alice', $badKeyPath, '', null, '');
                 self::fail('Expected InvalidInput for keyPath: '.$badKeyPath);
             } catch (InvalidInput) {
                 $this->addToAssertionCount(1);
             }
         }
 
-        $bashScript = $generator->generateBashScript('codes.sh', 2223, 'alice', null, '', null, '');
+        $bashScript = $generator->generateBashScript('gickers.sh', 2223, 'alice', null, '', null, '');
         self::assertStringNotContainsString('eval "$REG_CMD"', $bashScript);
         self::assertStringContainsString('ssh "${REG_ARGS[@]}"', $bashScript);
     }

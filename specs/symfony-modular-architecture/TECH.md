@@ -1,6 +1,6 @@
-# TECH — Restructuration de `codes.sh` en monolithe modulaire Symfony
+# TECH — Restructuration de `gickers.sh` en monolithe modulaire Symfony
 
-Statut : proposé · Cible : PHP 8.5, Symfony 8.1 (dont `symfony/tui`), Doctrine ORM 3, FrankenPHP · Dépôt sans commit : références = chemins relatifs à `codes.sh/` à l'état du 2026-11-04 (baseline `vendor/bin/phpunit tests` : 158 tests / 866 assertions OK).
+Statut : proposé · Cible : PHP 8.5, Symfony 8.1 (dont `symfony/tui`), Doctrine ORM 3, FrankenPHP · Dépôt sans commit : références = chemins relatifs à `gickers.sh/` à l'état du 2026-11-04 (baseline `vendor/bin/phpunit tests` : 158 tests / 866 assertions OK).
 
 Décisions déjà actées :
 - Architecture **option C** : modules par domaine (`src/<Module>/{Domain,Application,Infrastructure}`) + couche `src/UI/*`, dans le modèle Symfony standard (Kernel, autowiring, attributs).
@@ -9,7 +9,7 @@ Décisions déjà actées :
 
 ## 1. Contexte
 
-`codes.sh` est un portage PHP de `codes.sh.src` (Soft Serve, Go) qui reprend 1:1 le découpage des paquets Go, avec Symfony utilisé comme simple bibliothèque. 23,6 k lignes (src + tests).
+`gickers.sh` est un portage PHP de `gickers.sh.src` (Soft Serve, Go) qui reprend 1:1 le découpage des paquets Go, avec Symfony utilisé comme simple bibliothèque. 23,6 k lignes (src + tests).
 
 ### 1.1 Amorçage et DI
 - `bin/console` et `bin/soft:96-111` construisent un `ContainerBuilder` à la main, le **recompilent à chaque appel** et instancient toutes les commandes (dont `TermstrapRenderer` → tentative FFI) même pour `admin migrate`. Chaque connexion SSH (`authorized_keys` → `soft:ssh:dispatch`) et chaque hook git paie ce coût.
@@ -39,7 +39,7 @@ Décisions déjà actées :
 ### 2.1 Arborescence cible
 
 ```
-codes.sh/
+gickers.sh/
   bin/console                 # symfony/runtime
   bin/soft                    # mapping "soft admin migrate" -> commandes, rien d'autre
   public/index.php            # front controller (FrankenPHP worker)
@@ -121,17 +121,17 @@ Compromis assumé : les entités du `Domain` portent les attributs `#[ORM\…]` 
 - Dépendances ajoutées : `symfony/framework-bundle`, `runtime`, `dotenv`, `security-bundle`, `messenger`, `scheduler`, `http-client`, `validator`, `password-hasher`, `clock`, `uid`, `monolog-bundle`, `doctrine/doctrine-bundle`, `doctrine/orm`, `doctrine/doctrine-migrations-bundle`, `lcobucci/jwt`, `runtime/frankenphp-symfony` (ou support natif `symfony/runtime` si présent). Dev : `phpstan/phpstan` + `phpstan-symfony` + `phpstan-doctrine`, `friendsofphp/php-cs-fixer`, `qossmic/deptrac`, `dama/doctrine-test-bundle`, `symfony/maker-bundle`.
 - `src/Kernel.php` (`MicroKernelTrait`) ; `bin/console` via `symfony/runtime` ; conteneur et métadonnées Doctrine en cache (`cache.system`) — impératif car `bin/console` est lancé à chaque session SSH et chaque hook.
 - `config/services.yaml` : `public: false`, exclusions `src/*/Domain/{Model,Event}/`, `src/Kernel.php` ; bloc dédié aux commandes SSH (voir 2.5).
-- **Configuration** : `Service/Config/ServerConfig.php` est supprimé, ainsi que la lecture de `config.yaml`. Toutes les valeurs passent par `.env` / variables d'environnement en gardant les noms `SOFT_SERVE_*` existants (opérations inchangées). Un objet immuable `Shared\Infrastructure\Config\ServerSettings` est construit par DI depuis `config/packages/codes_sh.yaml` :
+- **Configuration** : `Service/Config/ServerConfig.php` est supprimé, ainsi que la lecture de `config.yaml`. Toutes les valeurs passent par `.env` / variables d'environnement en gardant les noms `SOFT_SERVE_*` existants (opérations inchangées). Un objet immuable `Shared\Infrastructure\Config\ServerSettings` est construit par DI depuis `config/packages/gickers_sh.yaml` :
 
 ```yaml
 parameters:
-  codes_sh.data_path: '%env(default:codes_sh.default_data_path:SOFT_SERVE_DATA_PATH)%'
-  codes_sh.default_data_path: '%kernel.project_dir%/.data'
+  gickers_sh.data_path: '%env(default:gickers_sh.default_data_path:SOFT_SERVE_DATA_PATH)%'
+  gickers_sh.default_data_path: '%kernel.project_dir%/.data'
 services:
   App\Shared\Infrastructure\Config\ServerSettings:
     arguments:
       $name: '%env(default::SOFT_SERVE_NAME)%'
-      $dataPath: '%codes_sh.data_path%'
+      $dataPath: '%gickers_sh.data_path%'
       $sshListenAddr: '%env(SOFT_SERVE_SSH_LISTEN_ADDR)%'
       $sshPublicUrl: '%env(SOFT_SERVE_SSH_PUBLIC_URL)%'
       $httpPublicUrl: '%env(SOFT_SERVE_HTTP_PUBLIC_URL)%'
@@ -287,12 +287,12 @@ flowchart LR
 ```
 
 - **Phase 0** : toutes les dépendances Composer installées d'un coup (évite les conflits de `composer.lock` entre phases parallèles) ; Kernel ; `bin/console` runtime ; `services.yaml` privé ; passage cs-fixer seul dans un commit (formatage pur) ; baseline PHPStan ; deptrac en mode rapport.
-- **Phase 2** : la migration Doctrine initiale unique (`Version20261104000000`) contient toutes les entités de la section 2.3 (PR, Webhook, Lfs compris) et le SQL des **deux** plateformes (SQLite et PostgreSQL, choisies à l'exécution), pour que les phases 3-6 ne touchent pas aux migrations. Pas d'adaptateur : `BackendService`/`DataStore` gèrent PR et webhooks que les nouveaux modules ne couvrent pas encore, et un adaptateur partiel obligerait à deux bases simultanées. On applique donc le schéma *strangler* : l'ancien chemin (PDO, `.data/soft-serve.db`) continue de servir les points d'entrée existants pendant que les nouveaux modules (`.data/codes-sh.db`) sont construits et testés à côté ; chaque phase 3-6 bascule un point d'entrée, la phase 7 supprime l'ancien chemin.
+- **Phase 2** : la migration Doctrine initiale unique (`Version20261104000000`) contient toutes les entités de la section 2.3 (PR, Webhook, Lfs compris) et le SQL des **deux** plateformes (SQLite et PostgreSQL, choisies à l'exécution), pour que les phases 3-6 ne touchent pas aux migrations. Pas d'adaptateur : `BackendService`/`DataStore` gèrent PR et webhooks que les nouveaux modules ne couvrent pas encore, et un adaptateur partiel obligerait à deux bases simultanées. On applique donc le schéma *strangler* : l'ancien chemin (PDO, `.data/soft-serve.db`) continue de servir les points d'entrée existants pendant que les nouveaux modules (`.data/gickers-sh.db`) sont construits et testés à côté ; chaque phase 3-6 bascule un point d'entrée, la phase 7 supprime l'ancien chemin.
 - **Phase 7** : suppression de `src/Service`, `src/Command`, `src/Model`, `src/Tui` ; deptrac en mode bloquant ; README/Makefile mis à jour (`run`, `serve`, `e2e`).
 
 ## 3. Tests et validation
 
-Organisation : `tests/Unit` (domaine pur, stores en mémoire), `tests/Integration` (Doctrine SQLite fichier temporaire + DAMA, git réel dans `sys_get_temp_dir()`), `tests/Functional` (`KernelTestCase`/`WebTestCase`, `CommandTester`). Plus aucun test n'écrit dans `codes.sh/.data` ni n'utilise le dépôt réel `codes.sh.src` (`GitServiceTest.php:19-21`, `ShortcutsTest`, `SshDispatcherTest::createBackendDispatcher` le font aujourd'hui) ; plus de `putenv` (paramètres de test via `.env.test`).
+Organisation : `tests/Unit` (domaine pur, stores en mémoire), `tests/Integration` (Doctrine SQLite fichier temporaire + DAMA, git réel dans `sys_get_temp_dir()`), `tests/Functional` (`KernelTestCase`/`WebTestCase`, `CommandTester`). Plus aucun test n'écrit dans `gickers.sh/.data` ni n'utilise le dépôt réel `gickers.sh.src` (`GitServiceTest.php:19-21`, `ShortcutsTest`, `SshDispatcherTest::createBackendDispatcher` le font aujourd'hui) ; plus de `putenv` (paramètres de test via `.env.test`).
 
 | Comportement | Preuve |
 |---|---|

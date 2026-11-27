@@ -167,7 +167,7 @@ final class BareRepositoryStorageTest extends TestCase
             content: "Hello from source!\n",
             message: 'init source',
             authorName: 'Author',
-            authorEmail: 'author@codes.sh',
+            authorEmail: 'author@gickers.sh',
         );
 
         $forkedRepo = $this->storage->fork($sourceName, $targetName, 'Forked repository');
@@ -194,7 +194,7 @@ final class BareRepositoryStorageTest extends TestCase
 
         $reader = new GitRepositoryReader();
         $sourceRepo = $reader->openRepository($sourceDir);
-        GitTestHelper::writeFile($sourceRepo, 'main', 'file.txt', "import content\n", 'init', 'Importer', 'import@codes.sh');
+        GitTestHelper::writeFile($sourceRepo, 'main', 'file.txt', "import content\n", 'init', 'Importer', 'import@gickers.sh');
 
         $targetName = RepoName::fromInput('mirrored-target');
         $mirrored = $this->storage->importMirror($sourceDir, $targetName, true, enforcePublicRemote: false);

@@ -7,7 +7,7 @@ set -eu
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 SSH_PORT=${E2E_SSH_PORT:-29231}
 HTTP_PORT=${E2E_HTTP_PORT:-29232}
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/codes-sh-e2e.XXXXXX")
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/gickers-sh-e2e.XXXXXX")
 SERVE_PID=
 
 cleanup() {
@@ -31,7 +31,7 @@ ssh-keygen -q -N '' -t ed25519 -f "$WORK/id_ed25519" -C e2e
 
 export APP_ENV="${E2E_APP_ENV:-dev}"
 export SOFT_SERVE_DATA_PATH="$WORK/data"
-export DATABASE_URL="sqlite:///$WORK/data/codes-sh.db"
+export DATABASE_URL="sqlite:///$WORK/data/gickers-sh.db"
 export SOFT_SERVE_INITIAL_ADMIN_KEYS="$(cat "$WORK/id_ed25519.pub")"
 export SOFT_SERVE_SSH_LISTEN_ADDR="127.0.0.1:$SSH_PORT"
 export SOFT_SERVE_SSH_PUBLIC_URL="ssh://127.0.0.1:$SSH_PORT"
@@ -83,7 +83,7 @@ step "git push over SSH"
 git init -q -b main "$WORK/src"
 printf 'hello e2e\n' >"$WORK/src/README.md"
 git -C "$WORK/src" add README.md
-git -C "$WORK/src" -c user.name=e2e -c user.email=e2e@codes.sh commit -qm "initial commit"
+git -C "$WORK/src" -c user.name=e2e -c user.email=e2e@gickers.sh commit -qm "initial commit"
 git -C "$WORK/src" remote add origin "ssh://127.0.0.1:$SSH_PORT/demo"
 git -C "$WORK/src" push -q origin main
 
@@ -99,7 +99,7 @@ git -C "$WORK/src" lfs install --local >/dev/null
 git -C "$WORK/src" lfs track '*.bin' >/dev/null
 head -c 4096 /dev/urandom >"$WORK/src/blob.bin"
 git -C "$WORK/src" add .gitattributes blob.bin
-git -C "$WORK/src" -c user.name=e2e -c user.email=e2e@codes.sh commit -qm "lfs object"
+git -C "$WORK/src" -c user.name=e2e -c user.email=e2e@gickers.sh commit -qm "lfs object"
 git -C "$WORK/src" push -q origin main
 GIT_LFS_SKIP_SMUDGE=0 git clone -q "ssh://127.0.0.1:$SSH_PORT/demo" "$WORK/lfs-clone"
 cmp -s "$WORK/src/blob.bin" "$WORK/lfs-clone/blob.bin" || { echo "!! LFS object not restored on clone" >&2; exit 1; }

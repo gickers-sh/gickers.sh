@@ -197,20 +197,20 @@ class DeployEnvironment
 
     public function projectSlug(): string
     {
-        $raw = sprintf('codes_%d_%d', $this->repo->id(), $this->id());
+        $raw = sprintf('gickers_%d_%d', $this->repo->id(), $this->id());
 
         return strtolower((string) preg_replace('/[^a-zA-Z0-9_-]/', '_', $raw));
     }
 
     public function networkName(): string
     {
-        return sprintf('codes_env_%d', $this->id());
+        return sprintf('gickers_env_%d', $this->id());
     }
 
     public function proxyAlias(string $serviceName): string
     {
         $cleanService = strtolower((string) preg_replace('/[^a-zA-Z0-9-]/', '-', $serviceName));
 
-        return sprintf('codes-env-%d-%s', $this->id(), $cleanService);
+        return sprintf('gickers-env-%d-%s', $this->id(), $cleanService);
     }
 }

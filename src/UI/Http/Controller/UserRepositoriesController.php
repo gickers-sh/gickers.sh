@@ -52,7 +52,7 @@ final readonly class UserRepositoriesController
             : $this->repositoriesForViewer($targetUser, $viewer);
 
         $html = $this->twig->render('user/repositories.html.twig', [
-            'serverName' => $this->settings->name ?: 'codes.sh',
+            'serverName' => $this->settings->name ?: 'gickers.sh',
             'targetUsername' => $targetUser->username(),
             'currentUsername' => $viewer?->username(),
             'isOwner' => $isOwner,
@@ -82,7 +82,7 @@ final readonly class UserRepositoriesController
         $sshPrefix = $this->sshPrefix();
 
         $html = $this->twig->render('user/repositories.html.twig', [
-            'serverName' => $this->settings->name ?: 'codes.sh',
+            'serverName' => $this->settings->name ?: 'gickers.sh',
             'targetUsername' => null,
             'currentUsername' => null,
             'isOwner' => false,
@@ -207,13 +207,13 @@ final readonly class UserRepositoriesController
     }
 
     /**
-     * Base SSH invocation advertised for this server (e.g. `ssh codes.sh`).
+     * Base SSH invocation advertised for this server (e.g. `ssh gickers.sh`).
      */
     private function sshPrefix(): string
     {
         $raw = trim($this->settings->sshPublicUrl);
         if ('' === $raw) {
-            return 'ssh codes.sh';
+            return 'ssh gickers.sh';
         }
 
         $url = str_contains($raw, '://') ? $raw : 'ssh://' . $raw;

@@ -18,7 +18,7 @@ final class SoftBinaryTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->work = sys_get_temp_dir().'/codes-sh-bin-'.bin2hex(random_bytes(4));
+        $this->work = sys_get_temp_dir().'/gickers-sh-bin-'.bin2hex(random_bytes(4));
         mkdir($this->work, 0o700, true);
     }
 
@@ -67,7 +67,7 @@ final class SoftBinaryTest extends TestCase
             self::assertMatchesRegularExpression('/^\s+'.$process.'\s+\S/m', $output, $process.' is planned');
         }
 
-        self::assertStringContainsString('bin/codes-ssh', $output);
+        self::assertStringContainsString('bin/gickers-ssh', $output);
         self::assertStringContainsString('--listen=', $output);
         self::assertStringContainsString('--host-key='.$this->work.'/data/ssh/soft_serve_host_ed25519', $output);
         self::assertStringContainsString('--php=', $output);

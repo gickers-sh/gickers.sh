@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Shared\Infrastructure\Config;
 
 /**
- * Immutable server configuration resolved from environment variables (see config/packages/codes_sh.yaml).
+ * Immutable server configuration resolved from environment variables (see config/packages/gickers_sh.yaml).
  */
 final readonly class ServerSettings
 {
@@ -65,7 +65,7 @@ final readonly class ServerSettings
     }
 
     /**
-     * The SOFT_SERVE_* variables this object was built from (config/packages/codes_sh.yaml),
+     * The SOFT_SERVE_* variables this object was built from (config/packages/gickers_sh.yaml),
      * for processes that do not inherit the environment (sshd sessions).
      *
      * @return array<string, string>

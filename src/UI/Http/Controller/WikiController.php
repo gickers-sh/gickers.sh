@@ -45,7 +45,7 @@ final readonly class WikiController
         private \Twig\Environment $twig,
         private ServerPolicy $serverPolicy,
         #[Autowire('%kernel.secret%')]
-        private string $appSecret = 'codes-sh-secret',
+        private string $appSecret = 'gickers-sh-secret',
     ) {
     }
 
@@ -86,7 +86,7 @@ final readonly class WikiController
         $renderedHtml = null !== $activePage ? $this->readmeRenderer->render($activePage->content()) : null;
 
         return $this->htmlResponse($this->twig->render('wiki/index.html.twig', [
-            'serverName' => $this->settings->name ?: 'codes.sh',
+            'serverName' => $this->settings->name ?: 'gickers.sh',
             'currentUsername' => $user?->username(),
             'isAdmin' => $isAdmin,
             'sshPrefix' => $sshPrefix,
@@ -110,7 +110,7 @@ final readonly class WikiController
         $prefillSlug = trim((string) $request->query->get('slug', ''));
 
         return $this->htmlResponse($this->twig->render('wiki/edit.html.twig', [
-            'serverName' => $this->settings->name ?: 'codes.sh',
+            'serverName' => $this->settings->name ?: 'gickers.sh',
             'currentUsername' => $user->username(),
             'isAdmin' => true,
             'sshPrefix' => $sshPrefix,
@@ -140,7 +140,7 @@ final readonly class WikiController
         }
 
         return $this->htmlResponse($this->twig->render('wiki/edit.html.twig', [
-            'serverName' => $this->settings->name ?: 'codes.sh',
+            'serverName' => $this->settings->name ?: 'gickers.sh',
             'currentUsername' => $user->username(),
             'isAdmin' => true,
             'sshPrefix' => $sshPrefix,
@@ -193,7 +193,7 @@ final readonly class WikiController
 
             return $this->htmlResponse(
                 $this->twig->render('wiki/edit.html.twig', [
-                    'serverName' => $this->settings->name ?: 'codes.sh',
+                    'serverName' => $this->settings->name ?: 'gickers.sh',
                     'currentUsername' => $user->username(),
                     'isAdmin' => true,
                     'sshPrefix' => $this->sshPrefix(),
@@ -262,7 +262,7 @@ final readonly class WikiController
         }
 
         return $this->htmlResponse($this->twig->render('wiki/index.html.twig', [
-            'serverName' => $this->settings->name ?: 'codes.sh',
+            'serverName' => $this->settings->name ?: 'gickers.sh',
             'currentUsername' => $user?->username(),
             'isAdmin' => $isAdmin,
             'sshPrefix' => $sshPrefix,
@@ -290,7 +290,7 @@ final readonly class WikiController
 
     private function csrfToken(User $user, Request $request): string
     {
-        $material = (string) $request->cookies->get('codes_session', (string) $request->headers->get('Authorization', ''));
+        $material = (string) ($request->cookies->get('gickers_session') ?? $request->cookies->get('codes_session', (string) $request->headers->get('Authorization', '')));
 
         return hash_hmac('sha256', 'wiki-admin:'.$user->id().':'.$user->webTokenVersion().':'.$material, $this->appSecret);
     }
@@ -328,7 +328,7 @@ final readonly class WikiController
     {
         $raw = trim($this->settings->sshPublicUrl);
         if ('' === $raw) {
-            return 'ssh codes.sh';
+            return 'ssh gickers.sh';
         }
 
         $url = str_contains($raw, '://') ? $raw : 'ssh://'.$raw;

@@ -242,7 +242,7 @@ final class AccessTokenAuthenticator extends AbstractAuthenticator
      */
     private function authenticateSessionCookie(Request $request): Passport
     {
-        $cookie = $request->cookies->get(WebSessionTokens::COOKIE_NAME);
+        $cookie = $request->cookies->get(WebSessionTokens::COOKIE_NAME) ?? $request->cookies->get('codes_session');
         $session = \is_string($cookie) && '' !== $cookie ? $this->webSessionTokens->verifySession($cookie) : null;
 
         if (null !== $session) {

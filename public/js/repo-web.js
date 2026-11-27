@@ -1,5 +1,5 @@
 /**
-  * codes.sh - Web HTTP Viewer
+  * gickers.sh - Web HTTP Viewer
   * Lightweight vanilla JavaScript: 1-click clipboard copy, SSH CLI palette filtering,
   * expandable command cards (live argument/option editing + ssh:// links), and tab switching.
   * Strict CSP compliant ('self'), zero dependencies.

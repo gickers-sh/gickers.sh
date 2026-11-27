@@ -396,7 +396,7 @@ final class HelpRenderer
             $baseSsh = $prefix . ' ' . $host;
         } else {
             $prefix = 'ssh';
-            $host = 'codes.sh';
+            $host = 'gickers.sh';
             $baseSsh = $sshCommand;
         }
 

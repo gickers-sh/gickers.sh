@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# codes.sh SSH Configuration & Onboarding Wizard (Windows PowerShell)
+# gickers.sh SSH Configuration & Onboarding Wizard (Windows PowerShell)
 # Inspired by Charmbracelet Gum (TokyoNight High Contrast Theme)
 # Generated for @__USERNAME__ on __HOST__
 # ==============================================================================
@@ -252,7 +252,7 @@ if ($alreadyRegistered -eq "0") {
     $defaultUser = if ($username) { $username } else { $env:USERNAME }
     if (-not $username) {
         while ($true) {
-            $username = Gum-Input -PromptLabel "Choisissez votre nom d'utilisateur codes.sh" -DefaultValue $defaultUser
+            $username = Gum-Input -PromptLabel "Choisissez votre nom d'utilisateur gickers.sh" -DefaultValue $defaultUser
             $username = $username.Trim()
             if ($username -notmatch '^[a-zA-Z0-9._-]{2,32}$') {
                 Write-Host "  $escPink✖$escReset $escBold$escPink Nom d'utilisateur invalide (2 à 32 caractères alphanumériques, '-' ou '_'). Réessayez :$escReset"
@@ -263,7 +263,7 @@ if ($alreadyRegistered -eq "0") {
     } else {
         Write-Host "  $escGreen✔$escReset $escBold$escWhite Nom d'utilisateur sélectionné$escReset : $escBadge $escBold$escCyan@$username $escReset"
     }
-    $defaultKey = Join-Path $HOME ".ssh\codes_sh_$username"
+    $defaultKey = Join-Path $HOME ".ssh\gickers_sh_$username"
     $keyPath = $defaultKey
 }
 
@@ -422,7 +422,7 @@ if ($choice -eq 0) {
     $keyPath = ""
 }
 
-# Account registration on codes.sh for new signups
+# Account registration on gickers.sh for new signups
 if ($alreadyRegistered -eq "0") {
     $regSuccess = $false
     while (-not $regSuccess) {
@@ -622,7 +622,7 @@ try {
         } else {
             $exportBlock = @"
 
-# Export terminal dimensions for SSH CLI tools (codes.sh SendEnv)
+# Export terminal dimensions for SSH CLI tools (gickers.sh SendEnv)
 `$env:COLUMNS = `$Host.UI.RawUI.WindowSize.Width
 `$env:LINES = `$Host.UI.RawUI.WindowSize.Height
 "@

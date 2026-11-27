@@ -74,7 +74,7 @@ final class RecoverCommand extends AbstractSshCommand
             }
         }
         if (null === $username || '' === trim($username)) {
-            throw new InvalidInput('Missing username; usage: recover <username> (or connect as <username>@codes.sh recover)');
+            throw new InvalidInput('Missing username; usage: recover <username> (or connect as <username>@gickers.sh recover)');
         }
         $username = trim($username);
         $client = $this->clientIdentifier();

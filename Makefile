@@ -38,10 +38,11 @@ REQUIRED_PHP_EXTS ?= ffi mbstring pcntl posix
 
 all: build
 
-## build: Build bin/codes-ssh and make CLI entry points executable (bin/soft, bin/console)
+## build: Build bin/gickers-ssh and make CLI entry points executable (bin/soft, bin/console)
 build:
 	@chmod +x bin/soft bin/console
-	cd cmd/codes-ssh && $(GO) build -o ../../bin/codes-ssh .
+	cd cmd/gickers-ssh && $(GO) build -o ../../bin/gickers-ssh .
+	@ln -sf gickers-ssh bin/codes-ssh
 
 ## setup: Install / check system tools (php, composer, git, go >= 1.22)
 setup:
@@ -55,7 +56,7 @@ setup:
 		if [ "$${go_major:-0}" -lt 1 ] || { [ "$${go_major:-0}" -eq 1 ] && [ "$${go_minor:-0}" -lt 22 ]; }; then \
 			echo "!! go >= 1.22 requis (trouve: go$$go_ver)"; exit 1; \
 		fi
-	@echo "==> Verification de bore (tunneling public codes.sh)..."
+	@echo "==> Verification de bore (tunneling public gickers.sh)..."
 	@if ! which bore >/dev/null 2>&1; then \
 		if which brew >/dev/null 2>&1; then \
 			echo "Installation de bore via brew..."; \
@@ -73,7 +74,7 @@ install:
 
 ## preflight: Verify required tools, PHP extensions, deps and migrations before running
 preflight: build
-	@echo "==> Preflight codes.sh..."
+	@echo "==> Preflight gickers.sh..."
 	@missing=""; \
 	for bin in $(REQUIRED_BINS); do \
 		command -v $$bin >/dev/null 2>&1 || missing="$$missing $$bin"; \
@@ -83,7 +84,7 @@ preflight: build
 		echo "   installez-les puis relancez."; exit 1; \
 	fi; \
 	echo "   outils requis OK ($(REQUIRED_BINS))"
-	@test -x bin/codes-ssh || { echo "!! bin/codes-ssh introuvable (lancez make build)"; exit 1; }
+	@test -x bin/gickers-ssh || test -x bin/codes-ssh || { echo "!! bin/gickers-ssh introuvable (lancez make build)"; exit 1; }
 	@for bin in $(OPTIONAL_BINS); do \
 		command -v $$bin >/dev/null 2>&1 || echo "   (optionnel) $$bin absent"; \
 	done
@@ -104,7 +105,7 @@ preflight: build
 	@echo "==> Migrations (idempotent, sans effacement des donnees)..."
 	@./bin/soft doctrine:migrations:migrate --allow-no-migration --no-interaction
 
-## run: Run codes.sh (codes-ssh :2223, HTTP :23232, Messenger worker)
+## run: Run gickers.sh (gickers-ssh :2223, HTTP :23232, Messenger worker)
 run: preflight
 	$(SERVE_ENV) ./bin/soft serve
 
@@ -119,7 +120,7 @@ debug: preflight
 e2e: build
 	./tests/e2e/run.sh
 
-## browse: Launch the codes.sh terminal UI repository browser
+## browse: Launch the gickers.sh terminal UI repository browser
 browse: build
 	./bin/soft browse
 
@@ -167,11 +168,12 @@ docker-migrate: docker-env
 docker-rollback: docker-env
 	$(DC) run --rm init admin rollback $(ARGS)
 
-## docker-import-sqlite: Replace Postgres data with a legacy SQLite db (stack must be up; SRC=path, default .data/codes-sh.db)
+## docker-import-sqlite: Replace Postgres data with a legacy SQLite db (stack must be up; SRC=path, default .data/gickers-sh.db)
 docker-import-sqlite:
-	@test -f $(or $(SRC),.data/codes-sh.db) || { echo "!! fichier SQLite introuvable: $(or $(SRC),.data/codes-sh.db)"; exit 1; }
+	@SRC_FILE=$$(test -f "$(SRC)" && echo "$(SRC)" || (test -f .data/gickers-sh.db && echo .data/gickers-sh.db || echo .data/codes-sh.db)); \
+	test -f "$$SRC_FILE" || { echo "!! fichier SQLite introuvable: $$SRC_FILE"; exit 1; }
 	$(DC) run --rm --no-deps \
-		-v "$(abspath $(or $(SRC),.data/codes-sh.db)):/tmp/import.db:ro" \
+		-v "$(abspath $(or $(SRC),.data/gickers-sh.db)):/tmp/import.db:ro" \
 		worker admin db:import-sqlite /tmp/import.db --truncate
 
 ## docker-import-repos: Copy on-disk bare repositories + LFS into the volume and resync hooks (stack must be up)
@@ -181,6 +183,10 @@ docker-import-repos:
 		-v "$(abspath $(DATA_DIR)/repos):/seed/repos:ro" \
 		-v "$(abspath $(DATA_DIR)/lfs):/seed/lfs:ro" \
 		--entrypoint sh worker -c 'cp -a /seed/repos/. /app/.data/repos/ && cp -a /seed/lfs/. /app/.data/lfs/ 2>/dev/null; php bin/soft admin sync-hooks'
+
+## deploy-vps: Run the automated VPS production deployment script (e.g. make deploy-vps ARGS="--domain gits.run")
+deploy-vps:
+	@./scripts/deploy-vps.sh $(ARGS)
 
 ## docker-import: Full migration into the running stack — SQLite data then on-disk repositories
 docker-import: docker-import-sqlite docker-import-repos
@@ -223,7 +229,7 @@ sync-hooks: build
 
 ## test: Run Go and PHPUnit test suites
 test:
-	cd cmd/codes-ssh && $(GO) test ./...
+	cd cmd/gickers-ssh && $(GO) test ./...
 	./vendor/bin/phpunit
 
 ## lint: Run every static check (cs-check, stan, deptrac, container/yaml lint)
@@ -254,7 +260,7 @@ test-render: build
 
 ## clean: Remove build artifacts and temporary cache
 clean:
-	@rm -rf bin/codes-ssh /tmp/bore-publish.log
+	@rm -rf bin/gickers-ssh bin/codes-ssh /tmp/bore-publish.log
 
 ## clean-all: Remove temporary cache AND local database / repositories (.data/)
 clean-all: clean

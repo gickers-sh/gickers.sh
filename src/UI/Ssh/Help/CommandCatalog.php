@@ -31,7 +31,7 @@ final class CommandCatalog
     public function restrictedRootForUnknownKey(bool $canAnonRead = false): CommandSpec
     {
         $rootLong = <<<'DESC'
-Codes.sh is a self-hostable Git server for the command line. Your SSH key is not yet recognized. If self-service registration is enabled on this server, register yourself with the 'signup' command below to start creating and hosting repositories.
+Gickers.sh is a self-hostable Git server for the command line. Your SSH key is not yet recognized. If self-service registration is enabled on this server, register yourself with the 'signup' command below to start creating and hosting repositories.
 DESC;
         $example = <<<'EX'
   # Unified self-service signup & client onboarding (recommended)
@@ -143,7 +143,7 @@ EX;
     private function build(bool $includeAdmin = true): CommandSpec
     {
         $rootLong = <<<'DESC'
-Codes.sh is a self-hostable Git server (inspired by Soft Serve) for the command line. It provides Git repository hosting, fine-grained access control, branch protections, commit signature enforcement, and webhooks driven entirely via SSH, HTTP, and an interactive TUI.
+Gickers.sh is a self-hostable Git server (inspired by Soft Serve) for the command line. It provides Git repository hosting, fine-grained access control, branch protections, commit signature enforcement, and webhooks driven entirely via SSH, HTTP, and an interactive TUI.
 DESC;
         $rootExample = <<<'EX'
   # Clone a repository over SSH
@@ -173,7 +173,7 @@ EX;
         $root->addChild($this->aboutSpec());
 
         $helpLong = <<<'DESC'
-Help provides contextual guidance and usage manuals for any codes.sh command, command group, or nested subcommand.
+Help provides contextual guidance and usage manuals for any gickers.sh command, command group, or nested subcommand.
 
 Scope:
   Public (accessible to all users, including unregistered SSH keys).
@@ -397,7 +397,7 @@ Flags:
 DESC;
             $setExample = <<<'EX'
   # Create or update a wiki page inline
-  {ssh} wiki set getting-started "# Getting Started\n\nWelcome to codes.sh!" --title "Getting Started" --category "Guides"
+  {ssh} wiki set getting-started "# Getting Started\n\nWelcome to gickers.sh!" --title "Getting Started" --category "Guides"
 
   # Pipe a local Markdown file into the wiki
   cat docs/guide.md | {ssh} wiki set guides/deploy --title "Deployment Guide" --category "Operations"
@@ -525,7 +525,7 @@ EX;
     private function signupSpec(): CommandSpec
     {
         $signupLong = <<<'DESC'
-Registers your SSH key as a new user account on codes.sh, or configures your client OpenSSH setup (~/.ssh/config).
+Registers your SSH key as a new user account on gickers.sh, or configures your client OpenSSH setup (~/.ssh/config).
 
 Enables automatic TTY allocation (RequestTTY auto) for proper terminal width, connection multiplexing (5ms execution), and per-user key binding.
 
@@ -575,7 +575,7 @@ EX;
     private function recoverSpec(): CommandSpec
     {
         $recoverLong = <<<'DESC'
-Recovers account access when an SSH key has been lost, using your backup password. Associates the incoming SSH key with your existing user account so you can immediately resume using codes.sh.
+Recovers account access when an SSH key has been lost, using your backup password. Associates the incoming SSH key with your existing user account so you can immediately resume using gickers.sh.
 
 Scope:
   Unregistered or recovery SSH keys. Requires a backup password to have been configured on the account.
@@ -707,7 +707,7 @@ EX;
     private function settings(): CommandSpec
     {
         $settingsLong = <<<'DESC'
-Manage global codes.sh server configuration, anonymous access permissions, keyless cloning, and self-registration policies.
+Manage global gickers.sh server configuration, anonymous access permissions, keyless cloning, and self-registration policies.
 
 Scope:
   Server Admin only (hidden from non-admin users in command listings).
@@ -745,7 +745,7 @@ EX;
         ));
 
         $allowSignupLong = <<<'DESC'
-Gets or sets whether unknown SSH keys connecting to the server are permitted to self-register via 'ssh codes.sh signup USERNAME'.
+Gets or sets whether unknown SSH keys connecting to the server are permitted to self-register via 'ssh gickers.sh signup USERNAME'.
 
 Scope:
   Server Admin.
@@ -1207,7 +1207,7 @@ EX;
     private function repo(): CommandSpec
     {
         $repoLong = <<<'DESC'
-Create, configure, inspect, and administer Git repositories hosted on codes.sh.
+Create, configure, inspect, and administer Git repositories hosted on gickers.sh.
 
 Scope:
   Permissions vary by command (from public read-only to repository admin / server admin).
@@ -1591,7 +1591,7 @@ EX;
         ));
 
         $createLong = <<<'DESC'
-Initializes a new bare Git repository on codes.sh. The authenticated creator automatically becomes the repository owner with full admin permissions.
+Initializes a new bare Git repository on gickers.sh. The authenticated creator automatically becomes the repository owner with full admin permissions.
 
 Scope:
   Authenticated user.
@@ -1827,7 +1827,7 @@ Scope:
   Authenticated user.
 
 Arguments:
-  REPOSITORY    Target repository name on codes.sh.
+  REPOSITORY    Target repository name on gickers.sh.
   REMOTE        Remote Git repository URL (https://... or git://...).
 
 Flags:
@@ -2251,7 +2251,7 @@ EX;
         $webhook = $this->group('webhook', 'Manage repository webhooks', ['webhooks'], $webhookLong, $webhookExample);
 
         $createLong = <<<'DESC'
-Registers a new webhook endpoint. When subscribed Git events occur, codes.sh sends an HTTP POST request with a signed payload to the target URL.
+Registers a new webhook endpoint. When subscribed Git events occur, gickers.sh sends an HTTP POST request with a signed payload to the target URL.
 
 Scope:
   Repository Admin or Server Admin.

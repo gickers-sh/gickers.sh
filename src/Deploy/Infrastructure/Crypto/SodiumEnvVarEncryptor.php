@@ -17,7 +17,7 @@ final readonly class SodiumEnvVarEncryptor implements EnvVarEncryptor
         #[Autowire('%kernel.secret%')]
         string $appSecret,
     ) {
-        $this->key = hash('sha256', 'codes.sh:deploy:env:'.$appSecret, true);
+        $this->key = hash('sha256', 'gickers.sh:deploy:env:'.$appSecret, true);
     }
 
     public function encrypt(string $plaintext): string

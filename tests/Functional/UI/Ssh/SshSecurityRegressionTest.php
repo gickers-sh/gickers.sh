@@ -239,7 +239,7 @@ final class SshSecurityRegressionTest extends KernelTestCase
         self::assertFalse($attacker->isAdmin());
 
         $settings = new ServerSettings(
-            name: 'Codes.sh',
+            name: 'Gickers.sh',
             dataPath: sys_get_temp_dir().'/codes-boot-'.bin2hex(random_bytes(3)),
             sshListenAddr: '127.0.0.1:2223',
             sshPublicUrl: 'ssh://localhost:2223',
@@ -303,7 +303,7 @@ final class SshSecurityRegressionTest extends KernelTestCase
         $legitRes = $this->dispatch('info', $this->adminFp, $this->admin->username(), sshClientIp: $legitIp);
         self::assertSame(0, $legitRes->getStatusCode(), self::out($legitRes));
 
-        // 2. ssh alice@codes.sh recover MUST work with a brand new key even when allow-signup=false!
+        // 2. ssh alice@gickers.sh recover MUST work with a brand new key even when allow-signup=false!
         self::assertSame(0, $this->dispatch('user password --password=recovery-pass-123', $this->aliceFp)->getStatusCode());
         $this->serverPolicy->setAllowSignup(false);
 

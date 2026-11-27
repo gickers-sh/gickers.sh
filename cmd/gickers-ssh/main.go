@@ -913,7 +913,7 @@ func isAllowedBaseEnvVar(name string) bool {
 		return true
 	}
 	// Never inherit session/auth/client spoofing variables from the server process env.
-	if name == "CODES_TOKEN" || strings.HasPrefix(name, "SSH_") {
+	if name == "CODES_TOKEN" || name == "GICKERS_TOKEN" || strings.HasPrefix(name, "SSH_") {
 		return false
 	}
 	switch name {

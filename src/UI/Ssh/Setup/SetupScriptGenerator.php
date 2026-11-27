@@ -33,7 +33,7 @@ final class SetupScriptGenerator
     public function resolveHostAndPort(): array
     {
         $parsed = parse_url($this->serverSettings->sshPublicUrl);
-        $host = 'codes.sh';
+        $host = 'gickers.sh';
         $port = 22;
 
         if (false !== $parsed) {
@@ -54,8 +54,8 @@ final class SetupScriptGenerator
         $multiplexText = $this->isProd() ? 'Multiplexing 5ms &bull; ' : '';
         $userBadge = '' !== $safeUsername ? " (@{$safeUsername})" : '';
         $title = $isSignup
-            ? "🚀 codes.sh &mdash; Inscription & Configuration{$userBadge}"
-            : "🚀 codes.sh &mdash; Configuration & Onboarding{$userBadge}";
+            ? "🚀 gickers.sh &mdash; Inscription & Configuration{$userBadge}"
+            : "🚀 gickers.sh &mdash; Configuration & Onboarding{$userBadge}";
         $html = <<<HTML
 <div class="border rounded p-1 mb-1" style="background-color: #1f2335;">
   <div class="text-cyan font-bold">{$title}</div>
@@ -77,7 +77,7 @@ HTML;
         $html = <<<HTML
 <div class="border rounded p-1" style="background-color: #1f2335;">
   <div class="text-success font-bold">&check; Inscription et configuration termin&eacute;es avec succ&egrave;s !</div>
-  <div class="text-muted">Votre machine est pr&ecirc;te &agrave; interagir avec codes.sh :</div>
+  <div class="text-muted">Votre machine est pr&ecirc;te &agrave; interagir avec gickers.sh :</div>
   <ul class="mb-0">
     <li><code>git clone ssh://{$userParam}@{$safeHost}/mon-repo.git</code></li>
     <li><code>ssh {$userParam}@{$safeHost} wiki show home</code></li>
@@ -99,7 +99,7 @@ HTML;
         $keyPath = self::validateKeyPath($keyPath);
 
         $portLine = 22 !== $port ? sprintf("    Port %d\n", $port) : '';
-        $resolvedKeyPath = $keyPath ?? sprintf('~/.ssh/codes_sh_%s', $username);
+        $resolvedKeyPath = $keyPath ?? sprintf('~/.ssh/gickers_sh_%s', $username);
 
         $controlMasterSection = '';
         if ($this->isProd()) {
@@ -112,7 +112,7 @@ CONF;
         }
 
         return <<<CONF
-# Base codes.sh configuration
+# Base gickers.sh configuration
 Host {$host}
     HostName {$host}
 {$portLine}    IdentitiesOnly yes
@@ -147,7 +147,7 @@ CONF;
 
         $portOpt = 22 !== $port ? sprintf(' -p %d', $port) : '';
         $portLine = 22 !== $port ? sprintf("    Port %d\n", $port) : '';
-        $defaultKeyPath = $keyPath ?? ('' !== $username ? sprintf('$HOME/.ssh/codes_sh_%s', $username) : '$HOME/.ssh/codes_sh_${USERNAME}');
+        $defaultKeyPath = $keyPath ?? ('' !== $username ? sprintf('$HOME/.ssh/gickers_sh_%s', $username) : '$HOME/.ssh/gickers_sh_${USERNAME}');
         $testCmd = '' !== $username ? sprintf('ssh%s %s@%s info', $portOpt, $username, $host) : sprintf('ssh%s ${USERNAME}@%s info', $portOpt, $host);
         $headerCard = $this->renderHeaderCard($username, $host, $isSignup);
         $successCard = $this->renderSuccessCard($username, $host);
@@ -191,7 +191,7 @@ CONF;
 
         $portOpt = 22 !== $port ? sprintf(' -p %d', $port) : '';
         $portLine = 22 !== $port ? sprintf("    Port %d\n", $port) : '';
-        $defaultKeyPath = $keyPath ?? ('' !== $username ? sprintf('$HOME\\.ssh\\codes_sh_%s', $username) : '$HOME\\.ssh\\codes_sh_$username');
+        $defaultKeyPath = $keyPath ?? ('' !== $username ? sprintf('$HOME\\.ssh\\gickers_sh_%s', $username) : '$HOME\\.ssh\\gickers_sh_$username');
         $testCmd = '' !== $username ? sprintf('ssh%s %s@%s info', $portOpt, $username, $host) : sprintf('ssh%s $username@%s info', $portOpt, $host);
         $headerCard = $this->renderHeaderCard($username, $host, $isSignup);
         $successCard = $this->renderSuccessCard($username, $host);

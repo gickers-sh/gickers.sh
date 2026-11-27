@@ -12,7 +12,7 @@ use Symfony\Component\Dotenv\Dotenv;
 use Symfony\Component\Process\Process;
 
 $port = 28383;
-$tmpDir = sys_get_temp_dir().'/codes_sh_smoke_'.bin2hex(random_bytes(6));
+$tmpDir = sys_get_temp_dir().'/gickers_sh_smoke_'.bin2hex(random_bytes(6));
 mkdir($tmpDir.'/repos', 0755, true);
 mkdir($tmpDir.'/lfs', 0755, true);
 

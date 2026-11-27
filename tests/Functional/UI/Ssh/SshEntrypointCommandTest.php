@@ -18,10 +18,10 @@ use Symfony\Component\Console\Tester\CommandTester;
 
 final class SshEntrypointCommandTest extends KernelTestCase
 {
-    private const KEY_ED25519_A = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPqZ18s+8t/W3i3k1q629g9Yh7A5s9X55mDqj17e7q81 alice@codes.sh';
+    private const KEY_ED25519_A = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPqZ18s+8t/W3i3k1q629g9Yh7A5s9X55mDqj17e7q81 alice@gickers.sh';
     private const KEY_ED25519_A_WITH_OPTS = 'no-port-forwarding,no-X11-forwarding,command="/usr/bin/false" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPqZ18s+8t/W3i3k1q629g9Yh7A5s9X55mDqj17e7q81 alice-laptop';
-    private const KEY_ED25519_B = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG1r2S3vU0oXF6t3YfE5b2wP7l8L1mN9oP2r4T6v8X1z bob@codes.sh';
-    private const KEY_RSA = 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC3r8+6/gT8q9Qv7vv3r4u/11AA22BB33CC44DD55EE66FF77AA88BB99CC00DD11EE22FF33AA44BB55CC66DD77EE88FF99AA00BB11CC22DD33EE44FF55AA66BB77CC88DD99EE00FF11AA22BB33CC44DD55EE66FF77AA88BB99CC00DD11EE22FF33AA44BB55CC66DD77EE88FF99AA00BB11CC22DD33EE44FF admin@codes.sh';
+    private const KEY_ED25519_B = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG1r2S3vU0oXF6t3YfE5b2wP7l8L1mN9oP2r4T6v8X1z bob@gickers.sh';
+    private const KEY_RSA = 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC3r8+6/gT8q9Qv7vv3r4u/11AA22BB33CC44DD55EE66FF77AA88BB99CC00DD11EE22FF33AA44BB55CC66DD77EE88FF99AA00BB11CC22DD33EE44FF55AA66BB77CC88DD99EE00FF11AA22BB33CC44DD55EE66FF77AA88BB99CC00DD11EE22FF33AA44BB55CC66DD77EE88FF99AA00BB11CC22DD33EE44FF admin@gickers.sh';
 
     private string $adminFp;
     private string $aliceFp;
@@ -126,14 +126,14 @@ final class SshEntrypointCommandTest extends KernelTestCase
     {
         $parsed = SshKey::parse(self::KEY_ED25519_A);
         $this->assertSame('ssh-ed25519', $parsed->algorithm);
-        $this->assertSame('alice@codes.sh', $parsed->comment);
+        $this->assertSame('alice@gickers.sh', $parsed->comment);
     }
 
     public function testParseRsaKey(): void
     {
         $parsed = SshKey::parse(self::KEY_RSA);
         $this->assertSame('ssh-rsa', $parsed->algorithm);
-        $this->assertSame('admin@codes.sh', $parsed->comment);
+        $this->assertSame('admin@gickers.sh', $parsed->comment);
     }
 
     public function testParseKeyWithOptions(): void

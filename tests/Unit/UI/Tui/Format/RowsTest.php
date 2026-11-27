@@ -58,8 +58,8 @@ final class RowsTest extends TestCase
             true,
             '04a54be',
             [
-                'Domains: https://prod.codes.sh -> web:8080',
-                'Uptime: 2h 15m · Quota: 1 CPU, 512MB RAM, 128 PIDs, max 4 services · Env vars: 1 · Network: codes_env_1',
+                'Domains: https://prod.gickers.sh -> web:8080',
+                'Uptime: 2h 15m · Quota: 1 CPU, 512MB RAM, 128 PIDs, max 4 services · Env vars: 1 · Network: gickers_env_1',
                 'Latest release: #2 [succeeded] by @alice · 2h ago (build 12s) · 2 recent runs',
             ],
             true,
@@ -77,7 +77,7 @@ final class RowsTest extends TestCase
         self::assertStringContainsString('[running]', $plain0);
         self::assertStringContainsString('up 2h 15m', $plain0);
         self::assertStringContainsString('04a54be', $plain0);
-        self::assertStringContainsString('https://prod.codes.sh -> web:8080', $plain1);
+        self::assertStringContainsString('https://prod.gickers.sh -> web:8080', $plain1);
         self::assertStringContainsString('Uptime: 2h 15m · Quota: 1 CPU, 512MB RAM, 128 PIDs', $plain2);
         self::assertStringContainsString('Latest release: #2 [succeeded] by @alice', $plain3);
     }
@@ -120,12 +120,12 @@ final class RowsTest extends TestCase
         $headerLines = Chrome::repoHeader(
             'os.directory/os.directory',
             'A long description that wraps onto a second line cleanly when the terminal is narrow.',
-            'git clone ssh://codes.sh/os.directory/os.directory.git',
+            'git clone ssh://gickers.sh/os.directory/os.directory.git',
             68,
         );
         $plainHeader = implode("\n", array_map(static fn (string $r): string => (string) preg_replace('/\e\[[0-9;]*m/', '', $r), $headerLines));
         self::assertStringContainsString('os.directory/os.directory', $plainHeader);
-        self::assertStringContainsString('git clone ssh://codes.sh/os.directory/os.directory.git', $plainHeader);
+        self::assertStringContainsString('git clone ssh://gickers.sh/os.directory/os.directory.git', $plainHeader);
         self::assertStringContainsString('second line cleanly', $plainHeader);
 
         $deployRows = Rows::deployment(
@@ -135,8 +135,8 @@ final class RowsTest extends TestCase
             true,
             '306291f',
             [
-                'Domains: https://mail.os.codes.sh -> mailer:1080, https://os.codes.sh -> nginx:80',
-                'Uptime: 3m 9s · Quota: 1 CPU, 512MB RAM, 128 PIDs, max 4 services · Env vars: 2 · Network: codes_env_1',
+                'Domains: https://mail.os.gickers.sh -> mailer:1080, https://os.gickers.sh -> nginx:80',
+                'Uptime: 3m 9s · Quota: 1 CPU, 512MB RAM, 128 PIDs, max 4 services · Env vars: 2 · Network: gickers_env_1',
                 'Latest release: #17 [succeeded] by git push · 3m ago (build 16s) · 5 recent runs',
             ],
             true,
@@ -145,8 +145,8 @@ final class RowsTest extends TestCase
         );
         $plainDeploy = implode("\n", array_map(static fn (string $r): string => (string) preg_replace('/\e\[[0-9;]*m/', '', $r), $deployRows));
         self::assertGreaterThan(4, \count($deployRows));
-        self::assertStringContainsString('https://os.codes.sh -> nginx:80', $plainDeploy);
-        self::assertStringContainsString('Network: codes_env_1', $plainDeploy);
+        self::assertStringContainsString('https://os.gickers.sh -> nginx:80', $plainDeploy);
+        self::assertStringContainsString('Network: gickers_env_1', $plainDeploy);
         self::assertStringContainsString('5 recent runs', $plainDeploy);
     }
 }

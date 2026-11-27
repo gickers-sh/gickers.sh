@@ -51,7 +51,7 @@ final class HomeAndProfilePageTest extends KernelTestCase
         $this->assertStringContainsString('Quick Start &middot; Onboarding', $html);
         $this->assertStringContainsString('signup', $html);
         $this->assertStringContainsString('Tip:', $html);
-        $this->assertStringContainsString('data-copy="ssh -p 2223 localhost signup"', $html);
+        $this->assertStringContainsString('data-copy="ssh -p 2223 localhost signup | bash"', $html);
         $this->assertStringContainsString('data-copy="ssh -p 2223 localhost"', $html);
         $this->assertStringNotContainsString('data-copy="ssh -p 2223 &lt;username&gt;', $html);
         $this->assertStringContainsString('&lt;username&gt;', $html);

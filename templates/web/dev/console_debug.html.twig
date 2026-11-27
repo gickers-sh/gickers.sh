@@ -745,7 +745,7 @@
                         <div class="dot dot-yellow"></div>
                         <div class="dot dot-green"></div>
                     </div>
-                    <div class="terminal-title" id="terminal-title">admin@codes.sh — (80×24)</div>
+                    <div class="terminal-title" id="terminal-title">admin@gickers.sh — (80×24)</div>
                     <div class="terminal-header-tools">
                         <button class="btn-tool" id="btn-inspect-toggle" onclick="toggleInspectMode()" title="Click on any cell in the terminal to inspect the underlying TUI widget">
                             <span>🔍</span> <span id="inspect-btn-text">Inspect</span>
@@ -764,7 +764,7 @@
             <!-- CLI Command Bar (Visible in CLI Mode) -->
             <div class="cli-prompt-container" id="cli-bar">
                 <div class="cli-input-row">
-                    <span class="cli-prompt-label" id="cli-prompt-user">{{ current_user ? current_user.username : 'admin' }}@codes.sh:~$</span>
+                    <span class="cli-prompt-label" id="cli-prompt-user">{{ current_user ? current_user.username : 'admin' }}@gickers.sh:~$</span>
                     <input type="text" class="cli-input" id="cli-input" placeholder="Enter SSH CLI command (e.g. repo list, help, info, wiki list, tui...)" autocomplete="off" spellcheck="false">
                     <button class="btn-run" onclick="submitCliCommand()">Execute ↵</button>
                 </div>
@@ -1161,7 +1161,7 @@
 
         function printCliWelcome() {
             const user = getSelectedUser();
-            term.write('\x1b[1;34m⚡ Codes.sh Developer Console\x1b[0m — Authenticated as \x1b[1;32m@' + user + '\x1b[0m\r\n');
+            term.write('\x1b[1;34m⚡ Gickers.sh Developer Console\x1b[0m — Authenticated as \x1b[1;32m@' + user + '\x1b[0m\r\n');
             term.write('\x1b[90mConnected to authentic SSH CLI dispatcher with live profiler.\r\n');
             term.write('Try: \x1b[36mhelp\x1b[90m, \x1b[36mrepo list\x1b[90m, \x1b[36minfo\x1b[90m, or \x1b[35mtui\x1b[90m to launch the full-screen TUI.\x1b[0m\r\n\r\n');
             focusCliInput();
@@ -1174,7 +1174,7 @@
 
         function onUserChanged() {
             const user = getSelectedUser();
-            document.getElementById('cli-prompt-user').textContent = `${user}@codes.sh:~$`;
+            document.getElementById('cli-prompt-user').textContent = `${user}@gickers.sh:~$`;
             if (currentMode === 'tui') {
                 restartSession();
             } else {
@@ -1205,7 +1205,7 @@
                 connMode.textContent = 'SSH CLI';
                 document.getElementById('conn-status').textContent = 'Ready';
                 document.getElementById('conn-status').style.color = 'var(--green)';
-                document.getElementById('terminal-title').textContent = `${user}@codes.sh — (${currentCols}×${currentRows})`;
+                document.getElementById('terminal-title').textContent = `${user}@gickers.sh — (${currentCols}×${currentRows})`;
                 term.clear();
                 term.reset();
                 printCliWelcome();
@@ -1214,7 +1214,7 @@
                 timelineBar.style.display = 'flex';
                 modeInd.textContent = 'Live TUI';
                 connMode.textContent = 'Interactive TUI';
-                document.getElementById('terminal-title').textContent = `ssh codes.sh — (${currentCols}×${currentRows}) [TUI]`;
+                document.getElementById('terminal-title').textContent = `ssh gickers.sh — (${currentCols}×${currentRows}) [TUI]`;
                 term.clear();
                 term.reset();
                 connectStream();
@@ -1243,7 +1243,7 @@
             const termEnv = document.getElementById('sim-term-select').value;
             const noColor = document.getElementById('sim-nocolor-toggle').checked;
 
-            term.write(`\r\n\x1b[1;32m${user}@codes.sh:~$\x1b[0m ${cmd}\r\n`);
+            term.write(`\r\n\x1b[1;32m${user}@gickers.sh:~$\x1b[0m ${cmd}\r\n`);
 
             if (cmd === 'clear' || cmd === 'cls') {
                 term.clear();
@@ -1502,8 +1502,8 @@
             document.getElementById('terminal-size').textContent = `${cols} × ${rows}`;
             const user = getSelectedUser();
             document.getElementById('terminal-title').textContent = currentMode === 'cli'
-                ? `${user}@codes.sh — (${cols}×${rows})`
-                : `ssh codes.sh — (${cols}×${rows}) [TUI]`;
+                ? `${user}@gickers.sh — (${cols}×${rows})`
+                : `ssh gickers.sh — (${cols}×${rows}) [TUI]`;
 
             term.resize(cols, rows);
 
@@ -1659,7 +1659,7 @@
             selectedWidgetId = comp.id;
             highlightWidgetRect(comp.rect, comp.short_name);
 
-            const fileRelative = comp.file ? comp.file.split('/codes.sh/')[1] || comp.file : 'unknown';
+            const fileRelative = comp.file ? comp.file.split('/gickers.sh/')[1] || comp.file : 'unknown';
             const html = `
                 <div><strong>Class:</strong> <span style="color: var(--blue);">${comp.short_name}</span></div>
                 <div><strong>FQCN:</strong> <span style="color: var(--muted); font-size: 11px;">${comp.fqcn}</span></div>
@@ -1680,7 +1680,7 @@
                     const isCurrent = idx === comp.hierarchy.length - 1;
                     const color = isCurrent ? 'var(--blue)' : 'var(--fg-dim)';
                     const weight = isCurrent ? 'bold' : 'normal';
-                    const fileRel = h.file ? (h.file.split('/codes.sh/')[1] || h.file) : '';
+                    const fileRel = h.file ? (h.file.split('/gickers.sh/')[1] || h.file) : '';
                     stackHtml += `
                         <div style="font-family: monospace; font-size: 11px;">
                             <span style="color: var(--muted);">${indent}${arrow}</span>

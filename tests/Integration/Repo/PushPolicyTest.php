@@ -59,7 +59,7 @@ final class PushPolicyTest extends RepoUseCaseTestCase
         $owner = $this->user('owner');
         $row = $this->repoRow('proj', $owner);
         $repo = $this->initRepoOnDisk('proj');
-        $feature = GitTestHelper::writeFile($repo, 'feature', 'a.txt', "a\n", 'change', 'Owner', 'owner@codes.sh');
+        $feature = GitTestHelper::writeFile($repo, 'feature', 'a.txt', "a\n", 'change', 'Owner', 'owner@gickers.sh');
 
         $row->protectBranch('feature', noForce: false, noDelete: true, adminsOnly: false, now: $this->clock->now());
         $this->repoStore->save($row);
@@ -76,8 +76,8 @@ final class PushPolicyTest extends RepoUseCaseTestCase
         $row = $this->repoRow('proj', $owner);
         $repo = $this->initRepoOnDisk('proj');
         $base = $this->headSha($repo);
-        $forward = GitTestHelper::writeFile($repo, 'main', 'b.txt', "b\n", 'change', 'Owner', 'owner@codes.sh'); // child of base
-        $divergent = GitTestHelper::writeFile($repo, 'orphan', 'c.txt', "c\n", 'change', 'Owner', 'owner@codes.sh'); // no ancestry to base
+        $forward = GitTestHelper::writeFile($repo, 'main', 'b.txt', "b\n", 'change', 'Owner', 'owner@gickers.sh'); // child of base
+        $divergent = GitTestHelper::writeFile($repo, 'orphan', 'c.txt', "c\n", 'change', 'Owner', 'owner@gickers.sh'); // no ancestry to base
 
         $row->protectBranch('main', noForce: true, noDelete: false, adminsOnly: false, now: $this->clock->now());
         $this->repoStore->save($row);
@@ -98,7 +98,7 @@ final class PushPolicyTest extends RepoUseCaseTestCase
         $row = $this->repoRow('proj', $owner);
         $repo = $this->initRepoOnDisk('proj');
         $base = $this->headSha($repo, 'refs/heads/main');
-        $next = GitTestHelper::writeFile($repo, 'main', 'd.txt', "d\n", 'change', 'Owner', 'owner@codes.sh');
+        $next = GitTestHelper::writeFile($repo, 'main', 'd.txt', "d\n", 'change', 'Owner', 'owner@gickers.sh');
 
         $row->protectBranch('main', noForce: false, noDelete: false, adminsOnly: true, now: $this->clock->now());
         $this->repoStore->save($row);
@@ -122,7 +122,7 @@ final class PushPolicyTest extends RepoUseCaseTestCase
         $keyDir = $this->dataPath.'/signer';
         mkdir($keyDir, 0700, true);
         $keyPath = $keyDir.'/id';
-        (new Process(['ssh-keygen', '-t', 'ed25519', '-f', $keyPath, '-N', '', '-C', 'owner@codes.sh', '-q']))->mustRun();
+        (new Process(['ssh-keygen', '-t', 'ed25519', '-f', $keyPath, '-N', '', '-C', 'owner@gickers.sh', '-q']))->mustRun();
         $pub = trim((string) file_get_contents($keyPath.'.pub'));
         $owner->addPublicKey(SshKey::parse($pub), $this->clock->now());
         $this->userStore->save($owner);
@@ -150,9 +150,9 @@ final class PushPolicyTest extends RepoUseCaseTestCase
     {
         $env = [
             'GIT_AUTHOR_NAME' => 'Owner',
-            'GIT_AUTHOR_EMAIL' => 'owner@codes.sh',
+            'GIT_AUTHOR_EMAIL' => 'owner@gickers.sh',
             'GIT_COMMITTER_NAME' => 'Owner',
-            'GIT_COMMITTER_EMAIL' => 'owner@codes.sh',
+            'GIT_COMMITTER_EMAIL' => 'owner@gickers.sh',
         ];
 
         $blob = new Process(['git', 'hash-object', '-w', '--stdin'], $repo->path, input: $content);

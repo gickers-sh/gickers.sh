@@ -84,7 +84,7 @@ final class WikiFeatureTest extends KernelTestCase
 
         // Admin creates a wiki page via SSH CLI
         $create = $this->dispatchSsh(
-            'wiki set getting-started "# Getting Started\n\nInstall and connect to codes.sh over SSH." -t "Getting Started" -c "Guides" -p 1',
+            'wiki set getting-started "# Getting Started\n\nInstall and connect to gickers.sh over SSH." -t "Getting Started" -c "Guides" -p 1',
             $this->admin,
         );
         self::assertSame(Command::SUCCESS, $create->getStatusCode());
@@ -104,7 +104,7 @@ final class WikiFeatureTest extends KernelTestCase
         self::assertStringContainsString('Getting Started', $showShortcut->getDisplay());
 
         // Search finds the page
-        $search = $this->dispatchSsh('wiki search "connect to codes.sh"', $this->user);
+        $search = $this->dispatchSsh('wiki search "connect to gickers.sh"', $this->user);
         self::assertSame(Command::SUCCESS, $search->getStatusCode());
         self::assertStringContainsString("getting-started\tGuides\tGetting Started", $search->getDisplay());
 
@@ -124,7 +124,7 @@ final class WikiFeatureTest extends KernelTestCase
             $this->admin,
             'home',
             'Welcome to the Wiki',
-            "# Server Wiki\n\nDocumentation for **codes.sh**.",
+            "# Server Wiki\n\nDocumentation for **gickers.sh**.",
             'Overview',
             0,
         );
@@ -134,7 +134,7 @@ final class WikiFeatureTest extends KernelTestCase
         self::assertSame(200, $anonRes->getStatusCode());
         $anonHtml = (string) $anonRes->getContent();
         self::assertStringContainsString('Welcome to the Wiki', $anonHtml);
-        self::assertStringContainsString('Documentation for <strong>codes.sh</strong>.', $anonHtml);
+        self::assertStringContainsString('Documentation for <strong>gickers.sh</strong>.', $anonHtml);
         self::assertStringNotContainsString('+ New Page', $anonHtml);
         self::assertStringNotContainsString('Edit Page', $anonHtml);
 
@@ -265,8 +265,8 @@ final class WikiFeatureTest extends KernelTestCase
         self::assertNotNull($page);
         self::assertSame('Self-Service SSH Signup & Account Registration', $page->title());
         self::assertSame('Signup', $page->category());
-        self::assertStringContainsString('ssh codes.sh signup alice', $page->content());
-        self::assertStringContainsString('ssh alice@codes.sh signup', $page->content());
+        self::assertStringContainsString('ssh gickers.sh signup alice', $page->content());
+        self::assertStringContainsString('ssh alice@gickers.sh signup', $page->content());
         self::assertStringContainsString('settings allow-signup', $page->content());
 
         $show = $this->dispatchSsh('wiki show signup --raw', $this->user);
@@ -292,7 +292,7 @@ final class WikiFeatureTest extends KernelTestCase
 
         $homePage = $this->wikiQuery->find('home');
         self::assertNotNull($homePage);
-        self::assertSame('codes.sh Server Documentation & Knowledge Base', $homePage->title());
+        self::assertSame('gickers.sh Server Documentation & Knowledge Base', $homePage->title());
         self::assertSame('Overview', $homePage->category());
 
         $deployPage = $this->wikiQuery->find('deploy-guide');

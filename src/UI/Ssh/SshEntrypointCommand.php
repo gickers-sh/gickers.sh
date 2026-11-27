@@ -402,7 +402,7 @@ final class SshEntrypointCommand extends Command
             return true;
         }
 
-        // COLORTERM sent via SendEnv / AcceptEnv (e.g. from `codes.sh setup` ~/.ssh/config)
+        // COLORTERM sent via SendEnv / AcceptEnv (e.g. from `gickers.sh setup` ~/.ssh/config)
         $clientColorTerm = $_SERVER['SSH_CLIENT_COLORTERM'] ?? $_ENV['SSH_CLIENT_COLORTERM'] ?? getenv('SSH_CLIENT_COLORTERM');
         if (false !== $clientColorTerm && '' !== $clientColorTerm) {
             return true;
@@ -543,7 +543,7 @@ final class SshEntrypointCommand extends Command
             $sshCommand = Help\HelpRenderer::sshCommandFromPublicUrl($this->serverSettings->sshPublicUrl, $targetUsername);
             if (null === $user) {
                 if ($decorated) {
-                    $banner = \App\UI\Tui\Render\Theme::style('⚡ codes.sh — Inscription & Onboarding', \App\UI\Tui\Render\Theme::CYAN, bold: true);
+                    $banner = \App\UI\Tui\Render\Theme::style('⚡ gickers.sh — Inscription & Onboarding', \App\UI\Tui\Render\Theme::CYAN, bold: true);
                     $sub = sprintf('Account @%s does not exist. Claim this username with:', \App\UI\Tui\Render\Theme::style($targetUsername, \App\UI\Tui\Render\Theme::FG, bold: true));
                     $cmdLinux = \App\UI\Ssh\Help\CliHighlighter::highlightLine(sprintf('%s signup | bash', $sshCommand));
                     $cmdWin = \App\UI\Ssh\Help\CliHighlighter::highlightLine(sprintf('%s signup | iex', $sshCommand));
@@ -569,7 +569,7 @@ final class SshEntrypointCommand extends Command
             }
 
             if ($decorated) {
-                $banner = \App\UI\Tui\Render\Theme::style('⚡ codes.sh — Clé non autorisée', \App\UI\Tui\Render\Theme::SELECTOR, bold: true);
+                $banner = \App\UI\Tui\Render\Theme::style('⚡ gickers.sh — Clé non autorisée', \App\UI\Tui\Render\Theme::SELECTOR, bold: true);
                 $sub = sprintf('Your SSH key is not registered for @%s. If this is your account, recover access with:', \App\UI\Tui\Render\Theme::style($targetUsername, \App\UI\Tui\Render\Theme::FG, bold: true));
                 $recCmd = \App\UI\Ssh\Help\CliHighlighter::highlightLine(sprintf('%s recover', $sshCommand));
 
@@ -588,7 +588,7 @@ final class SshEntrypointCommand extends Command
 
         $sshCommand = Help\HelpRenderer::sshCommandFromPublicUrl($this->serverSettings->sshPublicUrl);
         if ($decorated) {
-            $banner = \App\UI\Tui\Render\Theme::style('⚡ codes.sh — Inscription & Onboarding', \App\UI\Tui\Render\Theme::CYAN, bold: true);
+            $banner = \App\UI\Tui\Render\Theme::style('⚡ gickers.sh — Inscription & Onboarding', \App\UI\Tui\Render\Theme::CYAN, bold: true);
             $sub = 'Your SSH key is not registered. Claim a username with:';
             $cmdLinux = \App\UI\Ssh\Help\CliHighlighter::highlightLine(sprintf('%s signup | bash', $sshCommand));
             $cmdWin = \App\UI\Ssh\Help\CliHighlighter::highlightLine(sprintf('%s signup | iex', $sshCommand));
@@ -661,7 +661,7 @@ final class SshEntrypointCommand extends Command
             return [$commandLine, trim($tokenOpt)];
         }
 
-        $envToken = getenv('CODES_TOKEN') ?: ($_SERVER['CODES_TOKEN'] ?? (getenv('SSH_TOKEN') ?: ($_SERVER['SSH_TOKEN'] ?? '')));
+        $envToken = getenv('GICKERS_TOKEN') ?: ($_SERVER['GICKERS_TOKEN'] ?? (getenv('CODES_TOKEN') ?: ($_SERVER['CODES_TOKEN'] ?? (getenv('SSH_TOKEN') ?: ($_SERVER['SSH_TOKEN'] ?? '')))));
         if (is_string($envToken) && '' !== trim($envToken)) {
             return [$commandLine, trim($envToken)];
         }
@@ -700,14 +700,14 @@ final class SshEntrypointCommand extends Command
         $userOpt = $input->getOption('user');
         if (is_string($userOpt) && '' !== trim($userOpt)) {
             $u = trim($userOpt);
-            if (!in_array($u, ['git', 'codes'], true)) {
+            if (!in_array($u, ['git', 'gickers', 'codes'], true)) {
                 return $u;
             }
         }
         $envUser = getenv('SSH_USER') ?: ($_SERVER['SSH_USER'] ?? '');
         if (is_string($envUser) && '' !== trim($envUser)) {
             $u = trim($envUser);
-            if (!in_array($u, ['git', 'codes'], true)) {
+            if (!in_array($u, ['git', 'gickers', 'codes'], true)) {
                 return $u;
             }
         }

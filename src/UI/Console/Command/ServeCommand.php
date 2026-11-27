@@ -53,6 +53,8 @@ final class ServeCommand extends Command
         private readonly string $messengerDsn,
         #[Autowire(env: 'SOFT_SERVE_WEBHOOK_ALLOW_LIST')]
         private readonly string $webhookAllowList,
+        #[Autowire(env: 'default::GICKERS_SSH_BIN')]
+        private readonly ?string $customGickersSshBin = null,
         #[Autowire(env: 'default::CODES_SSH_BIN')]
         private readonly ?string $customCodesSshBin = null,
         #[Autowire(env: 'default::DEPLOY_AUTO_RECONCILE_ON_BOOT')]
@@ -180,21 +182,28 @@ final class ServeCommand extends Command
     {
         $finder = new ExecutableFinder();
         $console = $this->projectDir.'/bin/console';
-        $codesSshBin = null !== $this->customCodesSshBin && '' !== $this->customCodesSshBin
-            ? $this->customCodesSshBin
-            : (is_executable('/usr/local/bin/codes-ssh') ? '/usr/local/bin/codes-ssh' : $this->projectDir.'/bin/codes-ssh');
+        $customBin = $this->customGickersSshBin ?? $this->customCodesSshBin;
+        $gickersSshBin = null !== $customBin && '' !== $customBin
+            ? $customBin
+            : (is_executable('/usr/local/bin/gickers-ssh')
+                ? '/usr/local/bin/gickers-ssh'
+                : (is_executable('/usr/local/bin/codes-ssh')
+                    ? '/usr/local/bin/codes-ssh'
+                    : (is_executable($this->projectDir.'/bin/gickers-ssh')
+                        ? $this->projectDir.'/bin/gickers-ssh'
+                        : $this->projectDir.'/bin/codes-ssh')));
 
-        if (!is_executable($codesSshBin)) {
+        if (!is_executable($gickersSshBin)) {
             if (!$dryRun) {
-                $errOutput->writeln(sprintf('<error>codes-ssh not found at %s (run make build)</error>', $codesSshBin));
+                $errOutput->writeln(sprintf('<error>gickers-ssh not found at %s (run make build)</error>', $gickersSshBin));
 
                 return null;
             }
-            $errOutput->writeln(sprintf('<comment>codes-ssh not found at %s (run make build before starting)</comment>', $codesSshBin));
+            $errOutput->writeln(sprintf('<comment>gickers-ssh not found at %s (run make build before starting)</comment>', $gickersSshBin));
         }
 
         $ssh = new Process([
-            $codesSshBin,
+            $gickersSshBin,
             '--listen='.(string) $sshListen,
             '--host-key='.$this->settings->sshPath().'/soft_serve_host_ed25519',
             '--php='.\PHP_BINARY,

@@ -534,7 +534,7 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
         // Case 1: Image-only service with relative bind-mounts (e.g. nginx mounting ./:/var/www/html)
         if (null === $service->build && null !== $service->image) {
             self::assertSafeDockerfileToken($service->image, 'service image');
-            $synthDockerfile = sprintf('.Dockerfile.codes.%s', $service->name);
+            $synthDockerfile = sprintf('.Dockerfile.gickers.%s', $service->name);
             $synthPath = $workDir.'/'.$synthDockerfile;
             if (is_link($synthPath)) {
                 throw new InvalidInput(sprintf('service "%s": symlink at "%s" is forbidden', $service->name, $synthDockerfile));
@@ -575,7 +575,7 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
             if (is_file($dockerfilePath)) {
                 $this->assertPathInsideWorkDir($realWorkDir, $dockerfilePath);
                 $existingContent = (string) file_get_contents($dockerfilePath);
-                $appendLines = ['', '# Auto-injected by codes.sh Deploy Engine from relative compose volume mounts'];
+                $appendLines = ['', '# Auto-injected by gickers.sh Deploy Engine from relative compose volume mounts'];
                 foreach ($relativeMounts as $mount) {
                     $src = '.' === $mount->source ? '.' : './'.$mount->source;
                     $appendLines[] = sprintf('COPY %s %s', $src, $mount->target);

@@ -12,10 +12,10 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Asserts the cobra-style SSH help output matches the upstream Soft Serve
- * server byte-for-byte. The fixture is captured from `ssh codes.sh help …`
+ * server byte-for-byte. The fixture is captured from `ssh gickers.sh help …`
  * with the SSH prefix rewritten to this server's `ssh -p 2223 localhost`.
  *
- * Commands that only exist in codes.sh (`repo signatures`,
+ * Commands that only exist in gickers.sh (`repo signatures`,
  * `repo branch protect|unprotect`, `repo diff`,
  * `repo grep`, `repo readme`) have no upstream capture: their blocks, and their
  * lines in the parent command listings, follow the same format.
@@ -72,9 +72,9 @@ final class HelpRendererTest extends TestCase
     public function testSshCommandFromPublicUrl(): void
     {
         self::assertSame('ssh -p 2223 localhost', HelpRenderer::sshCommandFromPublicUrl('ssh://localhost:2223'));
-        self::assertSame('ssh -p 2222 codes.sh', HelpRenderer::sshCommandFromPublicUrl('ssh://codes.sh:2222'));
+        self::assertSame('ssh -p 2222 gickers.sh', HelpRenderer::sshCommandFromPublicUrl('ssh://gickers.sh:2222'));
         self::assertSame('ssh git.example.com', HelpRenderer::sshCommandFromPublicUrl('ssh://git.example.com:22'));
-        self::assertSame('ssh -p 2222 alice@codes.sh', HelpRenderer::sshCommandFromPublicUrl('ssh://codes.sh:2222', 'alice'));
+        self::assertSame('ssh -p 2222 alice@gickers.sh', HelpRenderer::sshCommandFromPublicUrl('ssh://gickers.sh:2222', 'alice'));
         self::assertSame('ssh alice@git.example.com', HelpRenderer::sshCommandFromPublicUrl('ssh://git.example.com:22', 'alice'));
     }
 
@@ -83,23 +83,23 @@ final class HelpRendererTest extends TestCase
         $template = "{ssh} signup | bash\n{ssh:<username>} signup | bash\n{ssh-base} info";
 
         // Without user in session
-        $res1 = HelpRenderer::interpolateSsh($template, 'ssh codes.sh');
+        $res1 = HelpRenderer::interpolateSsh($template, 'ssh gickers.sh');
         self::assertSame(
-            "ssh codes.sh signup | bash\nssh <username>@codes.sh signup | bash\nssh codes.sh info",
+            "ssh gickers.sh signup | bash\nssh <username>@gickers.sh signup | bash\nssh gickers.sh info",
             $res1
         );
 
         // With user in session
-        $res2 = HelpRenderer::interpolateSsh($template, 'ssh klmklm@codes.sh');
+        $res2 = HelpRenderer::interpolateSsh($template, 'ssh klmklm@gickers.sh');
         self::assertSame(
-            "ssh klmklm@codes.sh signup | bash\nssh <username>@codes.sh signup | bash\nssh codes.sh info",
+            "ssh klmklm@gickers.sh signup | bash\nssh <username>@gickers.sh signup | bash\nssh gickers.sh info",
             $res2
         );
 
         // With port and user in session
-        $res3 = HelpRenderer::interpolateSsh($template, 'ssh -p 2222 klmklm@codes.sh');
+        $res3 = HelpRenderer::interpolateSsh($template, 'ssh -p 2222 klmklm@gickers.sh');
         self::assertSame(
-            "ssh -p 2222 klmklm@codes.sh signup | bash\nssh -p 2222 <username>@codes.sh signup | bash\nssh -p 2222 codes.sh info",
+            "ssh -p 2222 klmklm@gickers.sh signup | bash\nssh -p 2222 <username>@gickers.sh signup | bash\nssh -p 2222 gickers.sh info",
             $res3
         );
     }
@@ -110,10 +110,10 @@ final class HelpRendererTest extends TestCase
         $renderer = new HelpRenderer();
         $root = $catalog->restrictedRootForUnknownKey();
 
-        $rendered = $renderer->render($root, 'ssh klmklm@codes.sh');
-        self::assertStringContainsString('ssh klmklm@codes.sh signup | bash', $rendered);
-        self::assertStringContainsString('ssh <username>@codes.sh signup | bash', $rendered);
-        self::assertStringNotContainsString('ssh klmklm@codes.sh signup <username> | bash', $rendered);
+        $rendered = $renderer->render($root, 'ssh klmklm@gickers.sh');
+        self::assertStringContainsString('ssh klmklm@gickers.sh signup | bash', $rendered);
+        self::assertStringContainsString('ssh <username>@gickers.sh signup | bash', $rendered);
+        self::assertStringNotContainsString('ssh klmklm@gickers.sh signup <username> | bash', $rendered);
     }
 
     public function testNonAdminCatalogHidesAdminCommands(): void

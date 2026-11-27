@@ -62,7 +62,7 @@ final class GitRepositoryWriterTest extends TestCase
             "base\n",
             'base commit',
             'Tester',
-            'test@codes.sh'
+            'test@gickers.sh'
         );
 
         $this->writer->createBranch($repo, 'feature-1', 'main');
@@ -89,7 +89,7 @@ final class GitRepositoryWriterTest extends TestCase
             "base\n",
             'base commit',
             'Tester',
-            'test@codes.sh'
+            'test@gickers.sh'
         );
 
         $this->writer->createBranch($repo, 'dup-branch', 'main');
@@ -110,7 +110,7 @@ final class GitRepositoryWriterTest extends TestCase
             "v1.0.0\n",
             'v1.0 release',
             'Tester',
-            'test@codes.sh'
+            'test@gickers.sh'
         );
 
         $this->writer->createTag($repo, 'v1.0.0', 'main', 'Release 1.0.0');

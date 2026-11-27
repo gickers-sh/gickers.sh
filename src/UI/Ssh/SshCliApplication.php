@@ -25,7 +25,7 @@ class SshCliApplication extends Application
         private readonly ?SshSession $sshSession = null,
         private readonly ?SshTokenAuthorizer $tokenAuthorizer = null,
     ) {
-        parent::__construct('codes.sh', '1.0.0');
+        parent::__construct('gickers.sh', '1.0.0');
         $this->setAutoExit(false);
         $this->setCatchExceptions(false);
 

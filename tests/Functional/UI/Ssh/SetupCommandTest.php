@@ -29,7 +29,7 @@ final class SetupCommandTest extends KernelTestCase
         $dir = sys_get_temp_dir().'/codes-setup-'.bin2hex(random_bytes(6));
         $path = $dir.'/id_ed25519';
         mkdir($dir, 0700, true);
-        exec(sprintf('ssh-keygen -q -t ed25519 -N %s -C %s -f %s', escapeshellarg(''), escapeshellarg('test@codes.sh'), escapeshellarg($path)), $out, $code);
+        exec(sprintf('ssh-keygen -q -t ed25519 -N %s -C %s -f %s', escapeshellarg(''), escapeshellarg('test@gickers.sh'), escapeshellarg($path)), $out, $code);
         self::assertSame(0, $code, 'ssh-keygen failed');
         $line = trim((string) file_get_contents($path.'.pub'));
         @unlink($path);
@@ -53,7 +53,7 @@ final class SetupCommandTest extends KernelTestCase
         $this->serverPolicy->setAllowKeyless(false);
 
         $parsed = parse_url($this->serverSettings->sshPublicUrl);
-        $this->expectedHost = $parsed['host'] ?? 'codes.sh';
+        $this->expectedHost = $parsed['host'] ?? 'gickers.sh';
 
         $this->rawKey = self::generateKey();
         $key = SshKey::parse($this->rawKey);
@@ -121,7 +121,7 @@ final class SetupCommandTest extends KernelTestCase
         self::assertStringContainsString('/dev/tty', $out);
         self::assertStringContainsString('select_menu', $out);
         self::assertStringContainsString('spin', $out);
-        self::assertStringContainsString('codes.sh', $out);
+        self::assertStringContainsString('gickers.sh', $out);
         self::assertStringContainsString('RequestTTY auto', $out);
         self::assertStringContainsString('SendEnv COLUMNS LINES TERM COLORTERM', $out);
         self::assertStringContainsString('export COLUMNS LINES', $out);
@@ -145,7 +145,7 @@ final class SetupCommandTest extends KernelTestCase
         self::assertStringContainsString('$ErrorActionPreference = "Stop"', $out);
         self::assertStringContainsString('icacls.exe', $out);
         self::assertStringContainsString('Select-Menu', $out);
-        self::assertStringContainsString('codes.sh', $out);
+        self::assertStringContainsString('gickers.sh', $out);
         self::assertStringContainsString('RequestTTY auto', $out);
         self::assertStringContainsString('SendEnv COLUMNS LINES TERM COLORTERM', $out);
         self::assertStringContainsString('$env:COLUMNS', $out);

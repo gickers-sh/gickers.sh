@@ -141,13 +141,13 @@ final readonly class RepoWebController
     }
 
     /**
-     * Resolves the base SSH CLI command prefix (e.g. `ssh codes.sh` or `ssh -p 2223 localhost`).
+     * Resolves the base SSH CLI command prefix (e.g. `ssh gickers.sh` or `ssh -p 2223 localhost`).
      */
     private function sshPrefix(): string
     {
         $raw = trim($this->settings->sshPublicUrl);
         if ('' === $raw) {
-            return 'ssh codes.sh';
+            return 'ssh gickers.sh';
         }
 
         $url = str_contains($raw, '://') ? $raw : 'ssh://' . $raw;

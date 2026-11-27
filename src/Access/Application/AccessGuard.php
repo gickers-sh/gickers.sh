@@ -22,7 +22,7 @@ final readonly class AccessGuard
 
     /**
      * Asserts that $actor has at least $need access level on $name.
-     * Implements Go denyRead semantics (`codes.sh.src/pkg/ssh/cmd/cmd.go:116-160`):
+     * Implements Go denyRead semantics (`gickers.sh.src/pkg/ssh/cmd/cmd.go:116-160`):
      * If the caller cannot read the repo (or if the repo is missing when need >= ReadOnly),
      * an unauthenticated caller receives 401 Unauthorized (`AccessDenied`), while an authenticated
      * caller receives 404 Not Found (`NotFound`) to prevent probing private repo existence.

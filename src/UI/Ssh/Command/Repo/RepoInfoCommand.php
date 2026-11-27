@@ -60,7 +60,7 @@ final class RepoInfoCommand extends AbstractSshCommand
             }
         }
 
-        // Mirror Go soft serve formatting exactly (codes.sh.src/pkg/ssh/cmd/repo.go:81-106)
+        // Mirror Go soft serve formatting exactly (gickers.sh.src/pkg/ssh/cmd/repo.go:81-106)
         $this->line($output, trim($this->formatKeyValue($output, 'Project Name', $repo->projectName(), \App\UI\Tui\Render\Theme::FG, true)));
         $this->line($output, $this->formatKeyValue($output, 'Repository', $repo->nameString(), \App\UI\Tui\Render\Theme::CYAN, true));
         $this->line($output, trim($this->formatKeyValue($output, 'Description', $repo->description(), \App\UI\Tui\Render\Theme::FG_DIM)));

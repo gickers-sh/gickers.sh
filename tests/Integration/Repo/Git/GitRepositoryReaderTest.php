@@ -23,8 +23,8 @@ final class GitRepositoryReaderTest extends TestCase
     {
         $this->reader = new GitRepositoryReader();
 
-        // Target codes.sh.src as existing populated git repo, or create a fixture repo
-        $srcPath = dirname(__DIR__, 5).'/codes.sh.src';
+        // Target gickers.sh.src as existing populated git repo, or create a fixture repo
+        $srcPath = dirname(__DIR__, 5).'/gickers.sh.src';
         if (is_dir($srcPath.'/.git')) {
             $this->testRepoPath = $srcPath;
         } else {
@@ -147,7 +147,7 @@ final class GitRepositoryReaderTest extends TestCase
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
 
-        GitTestHelper::writeFile($repo, 'main', 'README.md', "# My Project\nDocumentation here.\n", 'add readme', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'README.md', "# My Project\nDocumentation here.\n", 'add readme', 'Tester', 'test@gickers.sh');
 
         $readme = $this->reader->readme($repo, 'main');
         $this->assertNotNull($readme);
@@ -162,7 +162,7 @@ final class GitRepositoryReaderTest extends TestCase
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
 
-        GitTestHelper::writeFile($repo, 'main', 'readme.txt', "Plain text readme\n", 'add txt readme', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'readme.txt', "Plain text readme\n", 'add txt readme', 'Tester', 'test@gickers.sh');
 
         $readme = $this->reader->readme($repo, 'main');
         $this->assertNotNull($readme);
@@ -177,8 +177,8 @@ final class GitRepositoryReaderTest extends TestCase
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
 
-        GitTestHelper::writeFile($repo, 'main', 'README.txt', "txt version\n", 'add txt', 'Tester', 'test@codes.sh');
-        GitTestHelper::writeFile($repo, 'main', 'README.md', "markdown version\n", 'add md', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'README.txt', "txt version\n", 'add txt', 'Tester', 'test@gickers.sh');
+        GitTestHelper::writeFile($repo, 'main', 'README.md', "markdown version\n", 'add md', 'Tester', 'test@gickers.sh');
 
         $readme = $this->reader->readme($repo, 'main');
         $this->assertNotNull($readme);
@@ -193,7 +193,7 @@ final class GitRepositoryReaderTest extends TestCase
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
 
-        GitTestHelper::writeFile($repo, 'main', 'src/Main.php', "<?php\n", 'add code', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'src/Main.php', "<?php\n", 'add code', 'Tester', 'test@gickers.sh');
 
         $readme = $this->reader->readme($repo, 'main');
         $this->assertNull($readme);
@@ -220,7 +220,7 @@ final class GitRepositoryReaderTest extends TestCase
         $dir = $this->createTempDir('reader_inject_');
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
-        GitTestHelper::writeFile($repo, 'main', 'a.txt', "a\n", 'add', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'a.txt', "a\n", 'add', 'Tester', 'test@gickers.sh');
         $target = $this->createTempDir('reader_inject_out_').'/written';
 
         try {
@@ -237,7 +237,7 @@ final class GitRepositoryReaderTest extends TestCase
         $dir = $this->createTempDir('reader_show_');
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
-        GitTestHelper::writeFile($repo, 'main', '-dash.txt', "dash line\n", 'add dash file', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', '-dash.txt', "dash line\n", 'add dash file', 'Tester', 'test@gickers.sh');
 
         $this->assertStringContainsString('add dash file', (string) $this->reader->show($repo, 'main'));
         $this->assertStringNotContainsString('add dash file', (string) $this->reader->show($repo, 'main~0', patchOnly: true));
@@ -253,9 +253,9 @@ final class GitRepositoryReaderTest extends TestCase
         $dir = $this->createTempDir('reader_recursive_tree_');
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
-        GitTestHelper::writeFile($repo, 'main', 'README.md', "# Root\n", 'add readme', 'Tester', 'test@codes.sh');
-        GitTestHelper::writeFile($repo, 'main', 'src/Service/Calculator.php', "<?php\n", 'add calc', 'Tester', 'test@codes.sh');
-        GitTestHelper::writeFile($repo, 'main', 'tests/Unit/CalculatorTest.php', "<?php\n", 'add test', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'README.md', "# Root\n", 'add readme', 'Tester', 'test@gickers.sh');
+        GitTestHelper::writeFile($repo, 'main', 'src/Service/Calculator.php', "<?php\n", 'add calc', 'Tester', 'test@gickers.sh');
+        GitTestHelper::writeFile($repo, 'main', 'tests/Unit/CalculatorTest.php', "<?php\n", 'add test', 'Tester', 'test@gickers.sh');
 
         $entries = $this->reader->getRecursiveTree($repo, 'main');
         $paths = array_map(static fn ($e): string => $e->path, $entries);
@@ -272,7 +272,7 @@ final class GitRepositoryReaderTest extends TestCase
         $dir = $this->createTempDir('reader_catblob_');
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
-        GitTestHelper::writeFile($repo, 'main', 'docs/guide.md', "# Guide\nbody\n", 'add guide', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'docs/guide.md', "# Guide\nbody\n", 'add guide', 'Tester', 'test@gickers.sh');
 
         self::assertSame("# Guide\nbody\n", $this->reader->catBlob($repo, 'main', 'docs/guide.md'));
         self::assertSame('blob', $this->reader->objectType($repo, 'main:docs/guide.md'));
@@ -287,7 +287,7 @@ final class GitRepositoryReaderTest extends TestCase
         $dir = $this->createTempDir('reader_grep_');
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
-        GitTestHelper::writeFile($repo, 'main', 'app.txt', "alpha\nbeta gamma\n", 'add app', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'app.txt', "alpha\nbeta gamma\n", 'add app', 'Tester', 'test@gickers.sh');
 
         $hits = $this->reader->grep($repo, 'beta', 'main');
         self::assertNotNull($hits);
@@ -304,7 +304,7 @@ final class GitRepositoryReaderTest extends TestCase
         $dir = $this->createTempDir('reader_disk_');
         (new Process(['git', 'init', '--bare', '-b', 'main', $dir]))->mustRun();
         $repo = $this->reader->openRepository($dir);
-        GitTestHelper::writeFile($repo, 'main', 'README.md', str_repeat("line\n", 200), 'add readme', 'Tester', 'test@codes.sh');
+        GitTestHelper::writeFile($repo, 'main', 'README.md', str_repeat("line\n", 200), 'add readme', 'Tester', 'test@gickers.sh');
 
         $bytes = $this->reader->diskUsageBytes($repo);
         self::assertNotNull($bytes);

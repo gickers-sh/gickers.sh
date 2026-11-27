@@ -78,7 +78,7 @@ final class CommitSignatureVerifier
         }
 
         if ([] !== $lines) {
-            $file = tempnam(sys_get_temp_dir(), 'codes_signers_');
+            $file = tempnam(sys_get_temp_dir(), 'gickers_signers_');
             if (false !== $file) {
                 file_put_contents($file, implode("\n", $lines)."\n");
                 $this->allowedSignersFile = $file;
@@ -87,7 +87,7 @@ final class CommitSignatureVerifier
 
         $gpgKeys = $this->trustSource->gpgTrustedKeys();
         if ([] !== $gpgKeys) {
-            $home = sys_get_temp_dir().'/codes_gpg_'.bin2hex(random_bytes(6));
+            $home = sys_get_temp_dir().'/gickers_gpg_'.bin2hex(random_bytes(6));
             if (mkdir($home, 0700, true)) {
                 $this->gpgHome = $home;
                 foreach ($gpgKeys as $armored) {

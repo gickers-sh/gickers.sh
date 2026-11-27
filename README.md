@@ -354,7 +354,7 @@ Use the `lfs` config section to customize your Git LFS server.
 Soft Serve at its core manages your server authentication and authorization. Authentication verifies the identity of a user, while authorization determines their access rights to a repository.
 
 To manage the server users, access, and repos, you can use the SSH command line
-interface. `codes-ssh` authenticates solely by SSH public key: no local Unix
+interface. `gickers-ssh` authenticates solely by SSH public key: no local Unix
 account is needed and any SSH username works (`ssh <host>` or
 `ssh anyuser@<host>`).
 
@@ -476,7 +476,7 @@ Soft Serve doesn't allow duplicate SSH public keys for users. A public key can b
 
 #### HTTP & Unified Tokens
 
-codes.sh provides a unified **Token** system for all operations (Git clone/push, Git Large File Storage (LFS), automated CI/CD pipelines, and web authentication).
+gickers.sh provides a unified **Token** system for all operations (Git clone/push, Git Large File Storage (LFS), automated CI/CD pipelines, and web authentication).
 
 You can generate tokens with granular control over expiration, permissions (scopes), repository restrictions, and single-use constraints:
 
@@ -523,7 +523,7 @@ To log into the web interface, generate a temporary magic link from SSH:
 ```sh
 ssh -p 23231 localhost web login
 ```
-Opening this link sets a secure `codes_session` cookie in your browser. For maximum security, the magic link token is **strictly single-use**: it is permanently consumed and invalidated upon first click. Run `web logout` anytime to invalidate all active web sessions.
+Opening this link sets a secure `gickers_session` cookie in your browser. For maximum security, the magic link token is **strictly single-use**: it is permanently consumed and invalidated upon first click. Run `web logout` anytime to invalidate all active web sessions.
 
 ### Authorization
 
@@ -545,13 +545,13 @@ A brand-new user does not need an admin to get started. Everything is unified in
 ```sh
 # Unified signup & client onboarding in one command:
 # Linux / macOS:
-ssh codes.sh signup | bash
+ssh gickers.sh signup | bash
 
 # Windows (PowerShell):
-ssh codes.sh signup | iex
+ssh gickers.sh signup | iex
 
 # You can also pass your desired username directly:
-ssh codes.sh signup beatrice | bash
+ssh gickers.sh signup beatrice | bash
 
 # Or direct non-interactive CLI registration:
 ssh -p 23231 localhost signup beatrice
@@ -816,7 +816,7 @@ reports the offending ref and reason and leaves the repository unchanged.
 
 ### HTML Repository Browser
 
-Open `http://localhost:23232/icecream` (using your HTTP URL and repository name) to browse a repository in a web browser. The Twig-rendered page uses a Tokyo Night terminal-inspired layout and shows the clone command with 1-click copy, an interactive SSH CLI command palette (`ssh codes.sh <cmd>`), repository description, and README. Code blocks throughout the interface and README support 1-click clipboard copying. README content is rendered as GitHub-flavored Markdown; raw HTML is stripped and unsafe links are disabled. Private repositories use the same HTTP read authorization. The page uses lightweight local assets, no external dependencies or trackers, and enforces a strict Content Security Policy. The HTTP root `/` does not list repositories.
+Open `http://localhost:23232/icecream` (using your HTTP URL and repository name) to browse a repository in a web browser. The Twig-rendered page uses a Tokyo Night terminal-inspired layout and shows the clone command with 1-click copy, an interactive SSH CLI command palette (`ssh gickers.sh <cmd>`), repository description, and README. Code blocks throughout the interface and README support 1-click clipboard copying. README content is rendered as GitHub-flavored Markdown; raw HTML is stripped and unsafe links are disabled. Private repositories use the same HTTP read authorization. The page uses lightweight local assets, no external dependencies or trackers, and enforces a strict Content Security Policy. The HTTP root `/` does not list repositories.
 
 ### Repository Tree
 
@@ -913,7 +913,7 @@ You can copy text to your clipboard over SSH. For instance, you can press
 
 ## Hooks
 
-codes.sh uses Git's native server-side hooks `pre-receive`, `update`,
+gickers.sh uses Git's native server-side hooks `pre-receive`, `update`,
 `post-update`, and `post-receive` for pushes. It installs dispatchers in each
 bare repository; executable per-repository hook scripts can be placed in that
 hook's `.d` directory (for example, `hooks/update.d/`).

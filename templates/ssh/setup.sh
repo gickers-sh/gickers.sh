@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# codes.sh SSH Configuration & Onboarding Wizard
+# gickers.sh SSH Configuration & Onboarding Wizard
 # Inspired by Charmbracelet Gum (TokyoNight High Contrast Theme)
 # Generated for @__USERNAME__ on __HOST__
 # ==============================================================================
@@ -407,7 +407,7 @@ if [ "$ALREADY_REGISTERED" = "0" ]; then
     DEFAULT_USER="${USERNAME:-$(whoami 2>/dev/null || echo "user")}"
     if [ -z "$USERNAME" ]; then
         while true; do
-            gum_input "Choisissez votre nom d'utilisateur codes.sh" USERNAME "$DEFAULT_USER"
+            gum_input "Choisissez votre nom d'utilisateur gickers.sh" USERNAME "$DEFAULT_USER"
             USERNAME=$(echo "$USERNAME" | tr -d '[:space:]')
             if [[ ! "$USERNAME" =~ ^[a-zA-Z0-9._-]{2,32}$ ]]; then
                 printf "  %s✖%s %sNom d'utilisateur invalide (2 à 32 caractères alphanumériques, '-' ou '_'). Réessayez :%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
@@ -418,7 +418,7 @@ if [ "$ALREADY_REGISTERED" = "0" ]; then
     else
         printf "  %s✔%s %sNom d'utilisateur sélectionné%s : ${BG_BADGE} ${C_BOLD}${C_CYAN}@%s ${C_RESET}\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET" "$USERNAME"
     fi
-    DEFAULT_KEY="$HOME/.ssh/codes_sh_${USERNAME}"
+    DEFAULT_KEY="$HOME/.ssh/gickers_sh_${USERNAME}"
     KEY_PATH="$DEFAULT_KEY"
 fi
 
@@ -495,7 +495,7 @@ case "$CHOICE_IDX" in
                 fi
             fi
 
-            # Register public key on codes.sh if already registered
+            # Register public key on gickers.sh if already registered
             if [ -f "${KEY_PATH}.pub" ]; then
                 PUB_CONTENT=$(tr -d '\r\n' < "${KEY_PATH}.pub")
                 if [ "$ALREADY_REGISTERED" = "1" ]; then
@@ -540,7 +540,7 @@ case "$CHOICE_IDX" in
             printf "  %sℹ%s %sAuthentification configurée via votre agent SSH global%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_RESET"
         fi
 
-        # Authorize the pasted public key on codes.sh if already registered
+        # Authorize the pasted public key on gickers.sh if already registered
         if [ "$ALREADY_REGISTERED" = "1" ]; then
             if [ -n "$DETECTED_KEY_FILE" ]; then
                 ( ssh${PORT_OPT} -i "$DETECTED_KEY_FILE" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "${USERNAME}@${HOST}" pubkey add "$PASTED_KEY" >/dev/null 2>&1 ) &
@@ -555,7 +555,7 @@ case "$CHOICE_IDX" in
         ;;
 esac
 
-# Account registration on codes.sh for new signups
+# Account registration on gickers.sh for new signups
 if [ "$ALREADY_REGISTERED" = "0" ]; then
     REG_SUCCESS=0
     REG_KEY_ARGS=()
@@ -567,7 +567,7 @@ if [ "$ALREADY_REGISTERED" = "0" ]; then
     fi
 
     while [ "$REG_SUCCESS" -eq 0 ]; do
-        TMP_ERR=$(mktemp 2>/dev/null || echo "/tmp/codes_reg_err_$$")
+        TMP_ERR=$(mktemp 2>/dev/null || echo "/tmp/gickers_reg_err_$$")
         REG_ARGS=("${SSH_PORT_ARGS[@]}")
         if [ "${#REG_KEY_ARGS[@]}" -gt 0 ]; then
             REG_ARGS+=(-o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new "$HOST" signup "$USERNAME" --register "${REG_KEY_ARGS[@]}")
@@ -857,7 +857,7 @@ if [ -n "$SHELL_RC" ]; then
     if grep -Eq '^[[:space:]]*export[[:space:]]+.*COLUMNS' "$SHELL_RC" 2>/dev/null; then
         printf "  %s✔%s %sVariables COLUMNS/LINES déjà exportées dans %s%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$SHELL_RC" "$C_RESET"
     else
-        printf "\n# Export terminal dimensions for SSH CLI tools (codes.sh SendEnv)\nexport COLUMNS LINES\n" >> "$SHELL_RC"
+        printf "\n# Export terminal dimensions for SSH CLI tools (gickers.sh SendEnv)\nexport COLUMNS LINES\n" >> "$SHELL_RC"
         printf "  %s✔%s %sExport automatique COLUMNS/LINES configuré dans %s%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$SHELL_RC" "$C_RESET"
     fi
 fi

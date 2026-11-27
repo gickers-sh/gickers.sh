@@ -15,7 +15,7 @@
         <server name="SSH_CLIENT_COLORTERM" value="" force="true"/>
     </php>
     <testsuites>
-        <testsuite name="codes.sh">
+        <testsuite name="gickers.sh">
             <directory>tests</directory>
         </testsuite>
     </testsuites>

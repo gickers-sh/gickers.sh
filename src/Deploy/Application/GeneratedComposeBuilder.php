@@ -15,7 +15,7 @@ use Symfony\Component\Yaml\Yaml;
  */
 final readonly class GeneratedComposeBuilder
 {
-    public const PROXY_NETWORK = 'codes-proxy';
+    public const PROXY_NETWORK = 'gickers-proxy';
 
     /**
      * Minimal safe Linux capabilities required by standard images (nginx, postgres, frankenphp, etc.)

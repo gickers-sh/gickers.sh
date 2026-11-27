@@ -57,7 +57,7 @@ final class ConsoleDebugController extends AbstractController
             'users' => $allUsers,
             'repos' => $allRepos,
             'current_user' => $currentUser,
-            'server_name' => '' !== $this->serverSettings->name ? $this->serverSettings->name : 'codes.sh',
+            'server_name' => '' !== $this->serverSettings->name ? $this->serverSettings->name : 'gickers.sh',
         ]);
     }
 
@@ -91,14 +91,14 @@ final class ConsoleDebugController extends AbstractController
 
         $rawCmd = isset($payload['command']) && is_string($payload['command']) ? trim($payload['command']) : '';
 
-        // Check if command is piped, e.g. `signup | bash`, `ssh duck@codes.sh setup | bash`
+        // Check if command is piped, e.g. `signup | bash`, `ssh duck@gickers.sh setup | bash`
         $isPiped = false;
         if (preg_match('/^(.*?)\s*\|\s*(?:bash|sh|zsh|iex|powershell|cat)(?:\s+.*)?$/i', $rawCmd, $pipeMatch)) {
             $isPiped = true;
             $rawCmd = trim($pipeMatch[1]);
         }
 
-        // Extract SSH wrapper if present: e.g. `ssh console@codes.sh signup` or `ssh duck@codes.sh:2223 repo list`
+        // Extract SSH wrapper if present: e.g. `ssh console@gickers.sh signup` or `ssh duck@gickers.sh:2223 repo list`
         $cmdTargetUser = null;
         if (preg_match('/^ssh(?:\s+-[a-zA-Z0-9]+(?:\s+[^\s]+)?)*\s+(?:([a-zA-Z0-9_.-]+)@)?[a-zA-Z0-9_.-]+(?::\d+)?(?:\s+(.*))?$/s', $rawCmd, $m)) {
             if (!empty($m[1])) {
@@ -210,7 +210,7 @@ final class ConsoleDebugController extends AbstractController
                 // User exists in DB but has no public key yet: auto-register one so SSH commands succeed
                 $rawBytes = hash('sha256', $actor->username(), true);
                 $wire = pack('Na11Na32', 11, 'ssh-ed25519', 32, $rawBytes);
-                $keyLine = 'ssh-ed25519 ' . base64_encode($wire) . ' ' . $actor->username() . '@codes.sh';
+                $keyLine = 'ssh-ed25519 ' . base64_encode($wire) . ' ' . $actor->username() . '@gickers.sh';
                 $sshKey = \App\Identity\Domain\Model\SshKey::parse($keyLine);
                 $actor->addPublicKey($sshKey, new \DateTimeImmutable());
                 $this->userStore->save($actor);
@@ -219,7 +219,7 @@ final class ConsoleDebugController extends AbstractController
                 // Generate deterministic ephemeral key for unknown caller (e.g. self-registration)
                 $rawBytes = hash('sha256', $actorUsername, true);
                 $wire = pack('Na11Na32', 11, 'ssh-ed25519', 32, $rawBytes);
-                $params['--key'] = 'ssh-ed25519 ' . base64_encode($wire) . ' ' . $actorUsername . '@codes.sh';
+                $params['--key'] = 'ssh-ed25519 ' . base64_encode($wire) . ' ' . $actorUsername . '@gickers.sh';
             }
 
             $tester = new CommandTester($command);
@@ -286,7 +286,7 @@ final class ConsoleDebugController extends AbstractController
         $this->assertAdminAccess();
 
         return $this->render('dev/tui_components.html.twig', [
-            'server_name' => '' !== $this->serverSettings->name ? $this->serverSettings->name : 'codes.sh',
+            'server_name' => '' !== $this->serverSettings->name ? $this->serverSettings->name : 'gickers.sh',
         ]);
     }
 

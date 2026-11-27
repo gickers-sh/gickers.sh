@@ -18,7 +18,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 
 final class WebLoginCommandTest extends KernelTestCase
 {
-    private const USER_KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG5Wc48m9aH6z9ZJd51QZ6F7t7Vw8oW1/wQ3zB9yK4b2 test@codes.sh';
+    private const USER_KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG5Wc48m9aH6z9ZJd51QZ6F7t7Vw8oW1/wQ3zB9yK4b2 test@gickers.sh';
 
     private User $user;
     private SshSession $session;

@@ -16,7 +16,7 @@ final class GitTestHelper
         string $content,
         string $message = 'commit',
         string $authorName = 'Tester',
-        string $authorEmail = 'test@codes.sh',
+        string $authorEmail = 'test@gickers.sh',
     ): string {
         $hashProc = new Process(['git', 'hash-object', '-w', '--stdin'], $repo->path, input: $content);
         $hashProc->mustRun();

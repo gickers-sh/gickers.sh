@@ -40,7 +40,7 @@ final readonly class RepositoryListController
         $sshPrefix = $this->sshPrefix();
 
         $html = $this->twig->render('repositories.html.twig', [
-            'serverName' => $this->settings->name ?: 'codes.sh',
+            'serverName' => $this->settings->name ?: 'gickers.sh',
             'currentUsername' => $user?->username(),
             'sshPrefix' => $sshPrefix,
             'repositories' => $this->publicRepositories(),
@@ -89,13 +89,13 @@ final readonly class RepositoryListController
     }
 
     /**
-     * Base SSH invocation advertised for this server (e.g. `ssh codes.sh`).
+     * Base SSH invocation advertised for this server (e.g. `ssh gickers.sh`).
      */
     private function sshPrefix(): string
     {
         $raw = trim($this->settings->sshPublicUrl);
         if ('' === $raw) {
-            return 'ssh codes.sh';
+            return 'ssh gickers.sh';
         }
 
         $url = str_contains($raw, '://') ? $raw : 'ssh://' . $raw;

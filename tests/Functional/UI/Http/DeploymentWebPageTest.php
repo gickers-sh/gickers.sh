@@ -107,7 +107,7 @@ final class DeploymentWebPageTest extends KernelTestCase
         $env->markDeployed('04a54bef59c494670dac37af76384308cf2552b3', $now);
         $this->deployStore->saveEnvironment($env);
 
-        $domain = new DeployDomain($env, 'hello.codes.sh', 'app', 80, $now);
+        $domain = new DeployDomain($env, 'hello.gickers.sh', 'app', 80, $now);
         $this->deployStore->saveDomain($domain);
 
         $envVar = new DeployEnvVar($env, 'APP_ENV', 'encrypted_secret', $now);
@@ -142,7 +142,7 @@ final class DeploymentWebPageTest extends KernelTestCase
         $this->assertStringContainsString('my-app', $html);
         $this->assertStringContainsString('main', $html);
         $this->assertStringContainsString('running', $html);
-        $this->assertStringContainsString('hello.codes.sh', $html);
+        $this->assertStringContainsString('hello.gickers.sh', $html);
         $this->assertStringContainsString('APP_ENV', $html);
         $this->assertStringNotContainsString('encrypted_secret', $html); // secrets must stay hidden
 

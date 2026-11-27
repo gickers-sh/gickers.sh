@@ -29,13 +29,13 @@ final class RenderSmokeCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $markdown = <<<'MD'
-            # codes.sh
+            # gickers.sh
 
             Rendered by **Termstrap** through *ext-ffi*.
 
             - [x] GitHub Flavored Markdown
             - [x] TokyoNight colours
-            - [x] Links: [codes.sh](https://codes.sh)
+            - [x] Links: [gickers.sh](https://gickers.sh)
             MD;
 
         $output->writeln($this->renderer->renderDocument('README.md', $markdown, 70));

@@ -14,7 +14,7 @@ use Symfony\Bundle\FrameworkBundle\Console\Application;
 $args = array_slice($_SERVER['argv'], 1);
 
 if ($args === ['-v'] || in_array('--version', $args, true)) {
-    echo "soft version 1.0.0 (codes.sh)\n";
+    echo "soft version 1.0.0 (gickers.sh)\n";
     exit(0);
 }
 

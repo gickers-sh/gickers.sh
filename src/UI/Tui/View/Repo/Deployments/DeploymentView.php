@@ -418,7 +418,7 @@ final class DeploymentView extends RepoScreen
     {
         $raw = trim($this->repo->views->settings->sshPublicUrl);
         if ('' === $raw) {
-            return 'ssh codes.sh';
+            return 'ssh gickers.sh';
         }
 
         $url = str_contains($raw, '://') ? $raw : 'ssh://'.$raw;

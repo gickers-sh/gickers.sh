@@ -33,8 +33,8 @@ final readonly class ManageDomains
     /**
      * Executes the 5-step domain attachment & verification pipeline:
      * 1. Syntactic lint (valid FQDN, no IP literal, no local/reserved suffix)
-     * 2. Collision check (free in DB, not the system host of codes.sh)
-     * 3. Public DNS check (points to the IP/host of codes.sh)
+     * 2. Collision check (free in DB, not the system host of gickers.sh)
+     * 3. Public DNS check (points to the IP/host of gickers.sh)
      * 4. Docker network attachment + Reverse Proxy configuration
      * 5. HTTP Smoke test (2xx/3xx check, no 502)
      */
@@ -60,7 +60,7 @@ final readonly class ManageDomains
         // Step 2: Collision check (system domain & DB uniqueness)
         $systemHost = $this->extractSystemHost();
         if (null !== $systemHost && $normalizedDomain === $systemHost) {
-            throw new InvalidInput(sprintf('domain "%s" is reserved as the codes.sh system domain', $normalizedDomain));
+            throw new InvalidInput(sprintf('domain "%s" is reserved as the gickers.sh system domain', $normalizedDomain));
         }
 
         $existing = $this->deployStore->domainByName($normalizedDomain);

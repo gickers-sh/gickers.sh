@@ -226,7 +226,7 @@ final class TuiFunctionalTest extends KernelTestCase
 
         $tui->start();
         $initialOutput = $this->tickUntilSettled($tui, $vt);
-        $this->assertTrue(str_contains($initialOutput, 'Codes.sh') || str_contains($initialOutput, 'Soft Serve'));
+        $this->assertTrue(str_contains($initialOutput, 'Gickers.sh') || str_contains($initialOutput, 'Soft Serve'));
         $this->assertStringContainsString('About', $initialOutput);
 
         // Open expanded help grid
@@ -246,7 +246,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $this->assertStringContainsString('go to end', $screenText);
         $this->assertStringContainsString('toggle help', $screenText);
         // Ensure header and main selection page content remain visible above the helper
-        $this->assertTrue(str_contains($screenText, 'Codes.sh') || str_contains($screenText, 'Soft Serve'));
+        $this->assertTrue(str_contains($screenText, 'Gickers.sh') || str_contains($screenText, 'Soft Serve'));
         $this->assertStringContainsString('About', $screenText);
         $this->assertStringContainsString('No readme found.', $screenText);
 
@@ -254,7 +254,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $headerLineIndex = null;
         $helpLineIndex = null;
         foreach ($screenLines as $idx => $line) {
-            if (null === $headerLineIndex && (str_contains($line, 'Soft Serve') || str_contains($line, 'Codes.sh'))) {
+            if (null === $headerLineIndex && (str_contains($line, 'Soft Serve') || str_contains($line, 'Gickers.sh'))) {
                 $headerLineIndex = $idx;
             }
             if (null === $helpLineIndex && str_contains($line, 'toggle help')) {
@@ -432,7 +432,7 @@ final class TuiFunctionalTest extends KernelTestCase
             "# Main\n",
             "Initial commit\n\nBootstrap documentation body",
             'Alice Author',
-            'alice@codes.sh',
+            'alice@gickers.sh',
         );
         GitTestHelper::writeFile(
             $gitRepo,
@@ -688,7 +688,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $envMain->markDeployed('04a54bef59c494670dac37af76384308cf2552b3', $now);
         $this->deployStore->saveEnvironment($envMain);
 
-        $domain = new DeployDomain($envMain, 'prod.codes.sh', 'web', 8080, $now);
+        $domain = new DeployDomain($envMain, 'prod.gickers.sh', 'web', 8080, $now);
         $this->deployStore->saveDomain($domain);
 
         $envVar = new DeployEnvVar($envMain, 'APP_SECRET_KEY', 'super-secret-encrypted-val', $now);
@@ -726,7 +726,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $this->assertStringContainsString('[running]', $plainList);
         $this->assertStringContainsString('Uptime:', $plainList);
         $this->assertStringContainsString('04a54be', $plainList);
-        $this->assertStringContainsString('prod.codes.sh -> web:8080', $plainList);
+        $this->assertStringContainsString('prod.gickers.sh -> web:8080', $plainList);
         $this->assertStringContainsString('staging (branch)', $plainList);
         $this->assertStringContainsString('[stopped]', $plainList);
         $this->assertStringContainsString('Uptime: — (stopped)', $plainList);
@@ -735,7 +735,7 @@ final class TuiFunctionalTest extends KernelTestCase
         // Fuzzy filter deployments with '/'
         $vt->simulateInput('/');
         $this->tickUntilSettled($tui, $vt);
-        $vt->simulateInput('prod.codes');
+        $vt->simulateInput('prod.gickers');
         $output = $this->tickUntilSettled($tui, $vt);
         $plainFiltered = (string) preg_replace('/\e\[[0-9;]*m/', '', $output);
         $this->assertStringContainsString('main (branch)', $plainFiltered);
@@ -769,7 +769,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $this->assertStringContainsString('Selected Release · #' . $rel2->id() . ' (latest)', $plainDetail);
         $this->assertStringContainsString('Resource Quota', $plainDetail);
         $this->assertStringContainsString('512 MB RAM', $plainDetail);
-        $this->assertStringContainsString('https://prod.codes.sh -> web:8080', $plainDetail);
+        $this->assertStringContainsString('https://prod.gickers.sh -> web:8080', $plainDetail);
         $this->assertStringContainsString('APP_SECRET_KEY=••••••••', $plainDetail);
         $this->assertStringNotContainsString('super-secret-encrypted-val', $plainDetail);
         $this->assertStringContainsString('repo deploy redeploy ' . $repo->nameString() . ' main', $plainDetail);

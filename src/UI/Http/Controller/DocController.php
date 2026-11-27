@@ -45,7 +45,7 @@ final readonly class DocController
         $commands = $this->docRegistry->allCommands($isAdmin, $sshPrefix);
 
         $html = $this->twig->render('docs/index.html.twig', [
-            'serverName' => $this->settings->name ?: 'codes.sh',
+            'serverName' => $this->settings->name ?: 'gickers.sh',
             'currentUsername' => $user?->username(),
             'isAdmin' => $isAdmin,
             'sshPrefix' => $sshPrefix,
@@ -81,7 +81,7 @@ final readonly class DocController
         }
 
         $html = $this->twig->render('docs/command.html.twig', [
-            'serverName' => $this->settings->name ?: 'codes.sh',
+            'serverName' => $this->settings->name ?: 'gickers.sh',
             'currentUsername' => $user?->username(),
             'isAdmin' => $isAdmin,
             'sshPrefix' => $sshPrefix,
@@ -110,7 +110,7 @@ final readonly class DocController
     {
         $raw = trim($this->settings->sshPublicUrl);
         if ('' === $raw) {
-            return 'ssh codes.sh';
+            return 'ssh gickers.sh';
         }
 
         $parts = parse_url($raw);

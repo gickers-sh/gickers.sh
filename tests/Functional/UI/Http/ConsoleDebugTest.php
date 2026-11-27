@@ -132,7 +132,7 @@ final class ConsoleDebugTest extends KernelTestCase
         $cookie = $this->tokens->issueSession($admin);
 
         $payload = (string) json_encode([
-            'command' => 'ssh codes.sh about',
+            'command' => 'ssh gickers.sh about',
             'user' => $admin->username(),
         ]);
 
@@ -153,7 +153,7 @@ final class ConsoleDebugTest extends KernelTestCase
 
         $randomUser = 'user' . bin2hex(random_bytes(3));
         $payload = (string) json_encode([
-            'command' => 'ssh ' . $randomUser . '@codes.sh signup | bash',
+            'command' => 'ssh ' . $randomUser . '@gickers.sh signup | bash',
             'user' => $admin->username(),
         ]);
 

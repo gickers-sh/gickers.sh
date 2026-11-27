@@ -22,9 +22,9 @@ use Symfony\Component\Console\Tester\CommandTester;
 final class AboutCommandTest extends KernelTestCase
 {
     private const ABOUT_README = <<<'MD'
-# codes.sh
+# gickers.sh
 
-Welcome to **codes.sh** - the self-hostable Git server for the command line.
+Welcome to **gickers.sh** - the self-hostable Git server for the command line.
 
 - Fast
 - Modern TUI
@@ -109,7 +109,7 @@ MD;
         $display = $tester->getDisplay();
 
         // Must contain rendered content
-        self::assertStringContainsString('codes.sh', $display);
+        self::assertStringContainsString('gickers.sh', $display);
         self::assertStringContainsString('self-hostable Git server', $display);
         self::assertStringContainsString('Fast', $display);
 
@@ -125,7 +125,7 @@ MD;
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
         $display = $tester->getDisplay();
-        self::assertStringContainsString('codes.sh', $display);
+        self::assertStringContainsString('gickers.sh', $display);
         self::assertStringContainsString("\e[", $display);
     }
 
@@ -152,7 +152,7 @@ MD;
 
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
         $display = $tester->getDisplay();
-        self::assertStringContainsString('codes.sh', $display);
+        self::assertStringContainsString('gickers.sh', $display);
         self::assertStringNotContainsString('Press [Enter]', $display);
     }
 }

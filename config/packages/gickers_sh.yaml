@@ -1,6 +1,7 @@
 parameters:
-    codes_sh.default_data_path: '%kernel.project_dir%/.data'
-    env(SOFT_SERVE_DATA_PATH): '%codes_sh.default_data_path%'
+    gickers_sh.default_data_path: '%kernel.project_dir%/.data'
+    codes_sh.default_data_path: '%gickers_sh.default_data_path%'
+    env(SOFT_SERVE_DATA_PATH): '%gickers_sh.default_data_path%'
 
 services:
     App\Shared\Infrastructure\Config\ServerSettings:

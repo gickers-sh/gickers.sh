@@ -53,7 +53,10 @@ final class ImportSqliteCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
 
-        $source = $input->getArgument('source') ?? $this->projectDir . '/.data/codes-sh.db';
+        $defaultSqlite = is_file($this->projectDir . '/.data/gickers-sh.db')
+            ? $this->projectDir . '/.data/gickers-sh.db'
+            : (is_file($this->projectDir . '/.data/codes-sh.db') ? $this->projectDir . '/.data/codes-sh.db' : $this->projectDir . '/.data/gickers-sh.db');
+        $source = $input->getArgument('source') ?? $defaultSqlite;
         if (!is_file($source)) {
             $io->error(sprintf('SQLite file not found: %s', $source));
 

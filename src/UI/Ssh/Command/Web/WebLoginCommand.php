@@ -159,14 +159,14 @@ final class WebLoginCommand extends AbstractSshCommand
     }
 
     /**
-     * Base SSH invocation for this server (e.g. `ssh codes.sh` or `ssh -p 2223 host`),
+     * Base SSH invocation for this server (e.g. `ssh gickers.sh` or `ssh -p 2223 host`),
      * derived from the configured public SSH URL.
      */
     private function sshHint(): string
     {
         $raw = trim($this->settings->sshPublicUrl);
         if ('' === $raw) {
-            return 'ssh codes.sh';
+            return 'ssh gickers.sh';
         }
 
         $url = str_contains($raw, '://') ? $raw : 'ssh://'.$raw;
