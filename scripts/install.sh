@@ -1165,7 +1165,7 @@ if [ ! -f "$INSTALL_DIR/compose.yaml" ]; then
         gum_spin $! "Copie des fichiers sources vers $INSTALL_DIR..."
     else
         (
-            git clone --depth 1 https://github.com/gickers-sh/gickers.sh.git "$INSTALL_DIR" >/dev/null 2>&1 || true
+            git clone --depth 1 https://github.com/gickerssh/gickers.sh.git "$INSTALL_DIR" >/dev/null 2>&1 || true
         ) &
         gum_spin $! "Téléchargement du projet gickers.sh..."
     fi

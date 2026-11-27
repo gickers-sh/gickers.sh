@@ -112,10 +112,10 @@ Deploy your production-ready **gickers.sh** server (Git forge, isolated containe
 You can bootstrap a completely fresh Linux VPS or Windows Server using curl/irm without needing PHP installed on the host:
 ```bash
 # Linux / macOS (Ubuntu, Debian)
-curl -fsSL https://raw.githubusercontent.com/gickers-sh/gickers.sh/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/gickerssh/gickers.sh/main/scripts/install.sh | bash
 
 # Windows Server (PowerShell)
-irm https://raw.githubusercontent.com/gickers-sh/gickers.sh/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/gickerssh/gickers.sh/main/scripts/install.ps1 | iex
 ```
 
 #### 2. Remote One-Shot (Over SSH)

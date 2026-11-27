@@ -453,7 +453,7 @@ New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 Set-Location $installDir
 
 if (-not (Test-Path "compose.yaml")) {
-    git clone --depth 1 https://github.com/gickers-sh/gickers.sh.git .
+    git clone --depth 1 https://github.com/gickerssh/gickers.sh.git .
 }
 
 New-Item -ItemType Directory -Force -Path ".data", ".data/caddy/sites", "var", "var/cache", "var/log" | Out-Null
