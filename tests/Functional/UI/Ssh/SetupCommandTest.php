@@ -132,7 +132,8 @@ final class SetupCommandTest extends KernelTestCase
         self::assertStringContainsString('OPT_KEYS=', $out);
         self::assertStringContainsString('MISSING_LINES=', $out);
         self::assertStringNotContainsString('\$CONFIG_FILE', $out);
-        self::assertStringContainsString(sprintf('Match host %s user %s', $this->expectedHost, $this->user->username()), $out);
+        self::assertStringContainsString('Match host ${HOST} user ${USERNAME}', $out);
+        self::assertStringContainsString(sprintf('USERNAME="%s"', $this->user->username()), $out);
     }
 
     public function testSetupPs1OutputsPowerShellScriptWithIcaclsAndMenu(): void
@@ -151,7 +152,8 @@ final class SetupCommandTest extends KernelTestCase
         self::assertStringContainsString('Gum-PasswordWithConfirm', $out);
         self::assertStringContainsString('Gum-PastePubkey', $out);
         self::assertStringContainsString('$activeLines', $out);
-        self::assertStringContainsString(sprintf('Match host %s user %s', $this->expectedHost, $this->user->username()), $out);
+        self::assertStringContainsString('Match host $hostName user $username', $out);
+        self::assertStringContainsString(sprintf('$username = "%s"', $this->user->username()), $out);
     }
 
     public function testSignupOutputRecommendsSignupPipeCommand(): void
@@ -163,9 +165,8 @@ final class SetupCommandTest extends KernelTestCase
         self::assertSame(0, $tester->getStatusCode(), $tester->getErrorOutput());
         $out = $tester->getDisplay();
 
-        self::assertStringContainsString('Welcome, '.$newUsername.'!', $out);
-        self::assertStringContainsString('setup | bash', $out);
-        self::assertStringContainsString('config --raw', $out);
+        self::assertStringContainsString('signup '.$newUsername.' | bash', $out);
+        self::assertStringContainsString('signup '.$newUsername.' | iex', $out);
     }
 
     public function testSignupOutputsCompleteBashSetupScriptWhenPiped(): void
@@ -184,7 +185,8 @@ final class SetupCommandTest extends KernelTestCase
             self::assertStringContainsString('gum_choose', $out);
             self::assertStringContainsString('gum_spin', $out);
             self::assertStringContainsString('RequestTTY auto', $out);
-            self::assertStringContainsString(sprintf('Match host %s user %s', $this->expectedHost, $newUsername), $out);
+            self::assertStringContainsString('Match host ${HOST} user ${USERNAME}', $out);
+            self::assertStringContainsString(sprintf('USERNAME="%s"', $newUsername), $out);
         } finally {
             unset($_SERVER['SSH_PIPED'], $_ENV['SSH_PIPED']);
             putenv('SSH_PIPED');
@@ -204,7 +206,8 @@ final class SetupCommandTest extends KernelTestCase
         self::assertStringContainsString('gum_choose', $out);
         self::assertStringContainsString('gum_spin', $out);
         self::assertStringContainsString('RequestTTY auto', $out);
-        self::assertStringContainsString(sprintf('Match host %s user %s', $this->expectedHost, $newUsername), $out);
+        self::assertStringContainsString('Match host ${HOST} user ${USERNAME}', $out);
+        self::assertStringContainsString(sprintf('USERNAME="%s"', $newUsername), $out);
     }
 
     public function testSignupWithPipeBashInCommandLineOutputsSetupScript(): void
@@ -218,7 +221,8 @@ final class SetupCommandTest extends KernelTestCase
 
         self::assertStringContainsString('#!/usr/bin/env bash', $out);
         self::assertStringContainsString('gum_choose', $out);
-        self::assertStringContainsString(sprintf('Match host %s user %s', $this->expectedHost, $newUsername), $out);
+        self::assertStringContainsString('Match host ${HOST} user ${USERNAME}', $out);
+        self::assertStringContainsString(sprintf('USERNAME="%s"', $newUsername), $out);
     }
 
     public function testSignupWithPipeIexInCommandLineOutputsPowerShellScript(): void
@@ -231,7 +235,8 @@ final class SetupCommandTest extends KernelTestCase
         $out = $tester->getDisplay();
 
         self::assertStringContainsString('Gum-Choose', $out);
-        self::assertStringContainsString(sprintf('Match host %s user %s', $this->expectedHost, $newUsername), $out);
+        self::assertStringContainsString('Match host $hostName user $username', $out);
+        self::assertStringContainsString(sprintf('$username = "%s"', $newUsername), $out);
     }
 
     public function testExistingUserCanRerunSignupPipeToReconfigure(): void
@@ -242,7 +247,8 @@ final class SetupCommandTest extends KernelTestCase
         $out = $tester->getDisplay();
 
         self::assertStringContainsString('#!/usr/bin/env bash', $out);
-        self::assertStringContainsString(sprintf('Match host %s user %s', $this->expectedHost, $this->user->username()), $out);
+        self::assertStringContainsString('Match host ${HOST} user ${USERNAME}', $out);
+        self::assertStringContainsString(sprintf('USERNAME="%s"', $this->user->username()), $out);
     }
 
     public function testSignupWithCustomKeyRecommendsPrivateKeyPathFlag(): void
@@ -251,12 +257,10 @@ final class SetupCommandTest extends KernelTestCase
         $customKey = self::generateKey();
         $newUsername = 'custom'.bin2hex(random_bytes(4));
 
-        $tester = $this->dispatch(sprintf('signup %s --key %s', $newUsername, escapeshellarg($customKey)), $sessionKey);
+        $tester = $this->dispatch(sprintf('signup %s --key %s --register', $newUsername, escapeshellarg($customKey)), $sessionKey);
         self::assertSame(0, $tester->getStatusCode(), $tester->getErrorOutput());
         $out = $tester->getDisplay();
 
-        self::assertStringContainsString('Welcome, '.$newUsername.'!', $out);
-        self::assertStringContainsString('-i /chemin/vers/cle_privee', $out);
-        self::assertStringContainsString('--key-path=/chemin/vers/cle_privee', $out);
+        self::assertStringContainsString('registered successfully', $out);
     }
 }

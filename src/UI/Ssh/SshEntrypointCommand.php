@@ -193,7 +193,6 @@ final class SshEntrypointCommand extends Command
             $tokens = $stringInput->getRawTokens(false);
             if (null !== $scriptOption) {
                 $tokens[] = $scriptOption;
-                $tokens[] = '--install';
             }
 
             if ([] === $tokens) {
