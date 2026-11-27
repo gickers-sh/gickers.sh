@@ -142,14 +142,14 @@ docker-up: docker-env
 
 ## docker-watch: Start stack and follow with docker compose watch for hot reload
 docker-watch: docker-env
-	@pkill -f "docker.*compose.*watch" 2>/dev/null || true
+	@pgrep -f "docker compose.*watch" | grep -v "$$" | xargs kill 2>/dev/null || true
 	$(DC) build init deploy-dockerd
 	$(DC) up -d --no-build --remove-orphans
 	$(DC) watch --no-up
 
 ## docker-down: Stop the stack (add ARGS=-v to also drop volumes/data)
 docker-down:
-	@pkill -f "docker.*compose.*watch" 2>/dev/null || true
+	@pgrep -f "docker compose.*watch" | grep -v "$$" | xargs kill 2>/dev/null || true
 	$(DC) down --remove-orphans $(ARGS)
 
 ## docker-logs: Follow logs (optionally SERVICE=http|ssh|worker|init|postgres)

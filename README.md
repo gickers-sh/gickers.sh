@@ -108,25 +108,35 @@ A [Docker image][docker] is also available.
 
 Deploy your production-ready **gickers.sh** server (Git forge, isolated containers, auto-HTTPS via Caddy, database migrations, systemd service) in a single command with an interactive TokyoNight-styled wizard:
 
-#### Remote One-Shot (Over SSH)
+#### 1. Bootstrap on a Fresh VPS (Without Cloning & Without PHP)
+You can bootstrap a completely fresh Linux VPS or Windows Server using curl/irm without needing PHP installed on the host:
 ```bash
-# Linux / macOS
-ssh gickers.sh install | bash
+# Linux / macOS (Ubuntu, Debian)
+curl -fsSL https://raw.githubusercontent.com/gickers-sh/gickers.sh/main/scripts/install.sh | bash
 
-# Windows (PowerShell)
-ssh gickers.sh install | iex
-
-# Automated non-interactive installation
-ssh gickers.sh install --domain code.example.com -y | bash
+# Windows Server (PowerShell)
+irm https://raw.githubusercontent.com/gickers-sh/gickers.sh/main/scripts/install.ps1 | iex
 ```
 
-#### Local One-Shot (After cloning the repository)
+#### 2. Remote One-Shot (Over SSH)
+```bash
+# Linux / macOS
+ssh gickers.sh server install | bash
+
+# Windows (PowerShell)
+ssh gickers.sh server install | iex
+
+# Stream directly from your local dev machine to a target VPS:
+bin/console server:install --bash | ssh root@votre-vps.com bash
+```
+
+#### 3. Local One-Shot (After cloning the repository)
 ```bash
 # Using Symfony Console
-bin/console install
+bin/console server:install
 
-# Or using the soft CLI
-bin/soft install
+# Or using Makefile
+make server-install
 ```
 
 ---
