@@ -196,6 +196,22 @@ final class WikiFeatureTest extends KernelTestCase
         self::assertNull($this->wikiQuery->find('architecture'));
     }
 
+    public function testAnonymousUserCannotAccessWikiWhenAnonAccessIsNoAccess(): void
+    {
+        $serverPolicy = self::getContainer()->get(\App\Access\Application\ServerPolicy::class);
+        $serverPolicy->setAnonAccess(\App\Access\Domain\AccessLevel::NoAccess);
+
+        try {
+            $indexRes = $this->handleHttp(Request::create('/wiki', 'GET'));
+            self::assertSame(Response::HTTP_UNAUTHORIZED, $indexRes->getStatusCode());
+
+            $showRes = $this->handleHttp(Request::create('/wiki/home', 'GET'));
+            self::assertSame(Response::HTTP_UNAUTHORIZED, $showRes->getStatusCode());
+        } finally {
+            $serverPolicy->setAnonAccess(\App\Access\Domain\AccessLevel::ReadOnlyAccess);
+        }
+    }
+
     public function testTuiWikiTabListsFiltersAndOpensWikiPage(): void
     {
         ($this->saveWikiPage)(

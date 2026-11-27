@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\UI\Http\Controller;
 
+use App\Access\Application\ServerPolicy;
 use App\Identity\Domain\Model\User;
 use App\Identity\Infrastructure\Security\SecurityUser;
 use App\Repo\Domain\RepoStore;
@@ -24,6 +25,7 @@ final readonly class HomeController
         private ServerSettings $settings,
         private Security $security,
         private \Twig\Environment $twig,
+        private ServerPolicy $serverPolicy,
     ) {}
 
     #[Route('/', methods: ['GET'])]
@@ -63,6 +65,10 @@ final readonly class HomeController
      */
     private function publicRepositoriesCount(): int
     {
+        if (null === $this->domainUser() && !$this->serverPolicy->anonAccess()->canRead()) {
+            return 0;
+        }
+
         $count = 0;
         foreach ($this->repoStore->all() as $repo) {
             if (!$repo->isPrivate() && !$repo->isHidden()) {
