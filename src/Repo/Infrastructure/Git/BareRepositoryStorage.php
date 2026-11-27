@@ -8,6 +8,7 @@ use App\Repo\Domain\Git\GitRepository;
 use App\Repo\Domain\RepoDirectory;
 use App\Repo\Domain\RepoName;
 use App\Shared\Infrastructure\Config\ServerSettings;
+use App\Shared\Infrastructure\Process\MinimalProcessEnv;
 use Symfony\Component\DependencyInjection\Attribute\AsAlias;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Process\Process;
@@ -183,6 +184,7 @@ final class BareRepositoryStorage implements RepoDirectory
         bool $mirror,
         bool $lfs = false,
         string $lfsEndpoint = '',
+        bool $enforcePublicRemote = true,
     ): GitRepository {
         $targetPath = $this->pathFor($target);
         if ($this->exists($target)) {
@@ -194,24 +196,83 @@ final class BareRepositoryStorage implements RepoDirectory
             mkdir($parentDir, 0755, true);
         }
 
-        $args = ['clone', '--bare'];
+        $env = $enforcePublicRemote ? self::remoteGitEnv() : MinimalProcessEnv::build(['GIT_TERMINAL_PROMPT' => '0']);
+        $args = [
+            '-c',
+            'http.followRedirects=false',
+            '-c',
+            'submodule.recurse=false',
+        ];
+        if ($enforcePublicRemote) {
+            $args[] = '-c';
+            $args[] = 'protocol.file.allow=never';
+        }
+        $args[] = 'clone';
+        $args[] = '--bare';
         if ($mirror) {
             $args[] = '--mirror';
         }
+        $args[] = '--';
         $args[] = $remoteUrl;
         $args[] = $targetPath;
 
-        GitCommand::mustRun($parentDir, $args);
+        GitCommand::mustRun($parentDir, $args, env: $env);
 
         if ('' !== $lfsEndpoint) {
             GitCommand::mustRun($targetPath, ['config', 'lfs.url', $lfsEndpoint]);
         }
         if ($lfs) {
             GitCommand::mustRun($targetPath, ['config', 'soft-serve.lfs', 'true']);
-            GitCommand::mustRun($targetPath, ['lfs', 'fetch', '--all']);
+            GitCommand::mustRun($targetPath, ['-c', 'http.followRedirects=false', 'lfs', 'fetch', '--all'], env: $env);
         }
 
         return $this->open($target);
+    }
+
+    /**
+     * Returns all configured remote URLs (fetch url, pushurl, and optional lfs.url) for a repository.
+     *
+     * @return list<string>
+     */
+    public function remoteUrls(RepoName $name): array
+    {
+        if (!$this->exists($name)) {
+            return [];
+        }
+
+        $path = $this->pathFor($name);
+        $remotes = GitCommand::run($path, ['remote']);
+        if (!$remotes->isSuccessful()) {
+            return [];
+        }
+
+        $remoteNames = array_values(array_filter(
+            array_map('trim', explode("\n", trim($remotes->getOutput()))),
+            static fn (string $r): bool => '' !== $r,
+        ));
+
+        $urls = [];
+        foreach ($remoteNames as $remoteName) {
+            foreach (['url', 'pushurl'] as $key) {
+                $urlProc = GitCommand::run($path, ['config', '--get-all', sprintf('remote.%s.%s', $remoteName, $key)]);
+                if (!$urlProc->isSuccessful()) {
+                    continue;
+                }
+                foreach (explode("\n", trim($urlProc->getOutput())) as $url) {
+                    $url = trim($url);
+                    if ('' !== $url) {
+                        $urls[] = $url;
+                    }
+                }
+            }
+        }
+
+        $lfsUrlProc = GitCommand::run($path, ['config', '--get', 'lfs.url']);
+        if ($lfsUrlProc->isSuccessful() && '' !== trim($lfsUrlProc->getOutput())) {
+            $urls[] = trim($lfsUrlProc->getOutput());
+        }
+
+        return array_values(array_unique($urls));
     }
 
     /**
@@ -220,7 +281,7 @@ final class BareRepositoryStorage implements RepoDirectory
      *
      * @throws \RuntimeException when the repository is missing, has no remote, or git fails
      */
-    public function syncMirror(RepoName $name): void
+    public function syncMirror(RepoName $name, bool $enforcePublicRemote = true): void
     {
         if (!$this->exists($name)) {
             throw new \RuntimeException(sprintf('Repository "%s" does not exist.', $name->value));
@@ -234,19 +295,62 @@ final class BareRepositoryStorage implements RepoDirectory
         if (!$remotes->isSuccessful()) {
             throw self::gitFailure('git remote', $remotes);
         }
-        if ('' === trim($remotes->getOutput())) {
+        $remoteNames = array_values(array_filter(
+            array_map('trim', explode("\n", trim($remotes->getOutput()))),
+            static fn (string $r): bool => '' !== $r,
+        ));
+        if ([] === $remoteNames) {
             throw new \RuntimeException(sprintf('Mirror "%s" has no remote configured.', $name->value));
         }
+
+        $env = $enforcePublicRemote ? self::remoteGitEnv() : MinimalProcessEnv::build(['GIT_TERMINAL_PROMPT' => '0']);
+        $args = [
+            '-c',
+            'http.followRedirects=false',
+            '-c',
+            'submodule.recurse=false',
+        ];
+        if ($enforcePublicRemote) {
+            $args[] = '-c';
+            $args[] = 'protocol.file.allow=never';
+        }
+        $args[] = 'remote';
+        $args[] = 'update';
+        $args[] = '--prune';
 
         // Catching up with a large upstream can take minutes: like the git transport, no
         // wall-clock limit. Credential prompts are off so an upstream that started requiring
         // authentication fails fast instead of waiting for input nobody can give.
-        $update = GitCommand::start($path, ['remote', 'update', '--prune'], env: ['GIT_TERMINAL_PROMPT' => '0']);
+        $update = GitCommand::start($path, $args, env: $env);
         $update->setTimeout(null);
         $update->wait();
         if (!$update->isSuccessful()) {
             throw self::gitFailure('git remote update', $update);
         }
+    }
+
+    /**
+     * @return array<string, string|false>
+     */
+    private static function remoteGitEnv(): array
+    {
+        return MinimalProcessEnv::build([
+            'GIT_ALLOW_PROTOCOL' => 'http:https',
+            'GIT_TERMINAL_PROMPT' => '0',
+            'GIT_CONFIG_NOSYSTEM' => '1',
+            'GIT_CONFIG_GLOBAL' => '/dev/null',
+        ], [
+            'PATH',
+            'HOME',
+            'TMPDIR',
+            'TZ',
+            'HTTP_PROXY',
+            'HTTPS_PROXY',
+            'NO_PROXY',
+            'http_proxy',
+            'https_proxy',
+            'no_proxy',
+        ]);
     }
 
     /**

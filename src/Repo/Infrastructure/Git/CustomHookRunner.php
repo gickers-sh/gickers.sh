@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Repo\Infrastructure\Git;
 
 use App\Shared\Infrastructure\Config\ServerSettings;
+use App\Shared\Infrastructure\Process\MinimalProcessEnv;
 use Symfony\Component\Process\Process;
 
 /**
@@ -42,7 +43,7 @@ final readonly class CustomHookRunner
             return 0;
         }
 
-        $process = new Process([$path, ...$args], null, [] === $env ? null : $env);
+        $process = new Process([$path, ...$args], null, MinimalProcessEnv::build($env));
         if ('' !== $stdin) {
             $process->setInput($stdin);
         }

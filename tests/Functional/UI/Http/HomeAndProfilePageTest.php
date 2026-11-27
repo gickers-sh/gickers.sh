@@ -41,8 +41,8 @@ final class HomeAndProfilePageTest extends KernelTestCase
         $owner = new User('author-' . bin2hex(random_bytes(3)), false, new \DateTimeImmutable());
         $this->users->save($owner);
 
-        $pub = ($this->createRepo)($owner, 'pub-' . bin2hex(random_bytes(4)), private: false, description: 'A public demo');
-        $priv = ($this->createRepo)($owner, 'priv-' . bin2hex(random_bytes(4)), private: true, description: 'A private demo');
+        $pub = ($this->createRepo)($owner, $owner->username() . '/pub-' . bin2hex(random_bytes(4)), private: false, description: 'A public demo');
+        $priv = ($this->createRepo)($owner, $owner->username() . '/priv-' . bin2hex(random_bytes(4)), private: true, description: 'A private demo');
 
         $response = $this->get('/');
         $this->assertSame(200, $response->getStatusCode());
@@ -68,8 +68,8 @@ final class HomeAndProfilePageTest extends KernelTestCase
         $owner = new User('author-' . bin2hex(random_bytes(3)), false, new \DateTimeImmutable());
         $this->users->save($owner);
 
-        $pub = ($this->createRepo)($owner, 'pub-' . bin2hex(random_bytes(4)), private: false, description: 'A public demo');
-        $priv = ($this->createRepo)($owner, 'priv-' . bin2hex(random_bytes(4)), private: true, description: 'A private demo');
+        $pub = ($this->createRepo)($owner, $owner->username() . '/pub-' . bin2hex(random_bytes(4)), private: false, description: 'A public demo');
+        $priv = ($this->createRepo)($owner, $owner->username() . '/priv-' . bin2hex(random_bytes(4)), private: true, description: 'A private demo');
 
         foreach (['/repos', '/repositories'] as $uri) {
             $response = $this->get($uri);
@@ -108,11 +108,11 @@ final class HomeAndProfilePageTest extends KernelTestCase
         $other = new User('other-' . bin2hex(random_bytes(3)), false, new \DateTimeImmutable());
         $this->users->save($other);
 
-        $myPub = ($this->createRepo)($owner, 'mypub-' . bin2hex(random_bytes(4)), private: false);
-        $myPriv = ($this->createRepo)($owner, 'mypriv-' . bin2hex(random_bytes(4)), private: true);
+        $myPub = ($this->createRepo)($owner, $owner->username() . '/mypub-' . bin2hex(random_bytes(4)), private: false);
+        $myPriv = ($this->createRepo)($owner, $owner->username() . '/mypriv-' . bin2hex(random_bytes(4)), private: true);
 
         // A repo owned by $other where $owner is collaborator
-        $collabRepo = ($this->createRepo)($other, 'collab-' . bin2hex(random_bytes(4)), private: true);
+        $collabRepo = ($this->createRepo)($other, $other->username() . '/collab-' . bin2hex(random_bytes(4)), private: true);
         ($this->addCollab)($other, $collabRepo->name(), $owner->username(), AccessLevel::ReadWriteAccess);
 
         $cookie = $this->tokens->issueSession($owner);
@@ -134,8 +134,8 @@ final class HomeAndProfilePageTest extends KernelTestCase
         $user = new User('artist-' . bin2hex(random_bytes(3)), false, new \DateTimeImmutable());
         $this->users->save($user);
 
-        $pub = ($this->createRepo)($user, 'paint-' . bin2hex(random_bytes(4)), private: false);
-        $priv = ($this->createRepo)($user, 'secret-art-' . bin2hex(random_bytes(4)), private: true);
+        $pub = ($this->createRepo)($user, $user->username() . '/paint-' . bin2hex(random_bytes(4)), private: false);
+        $priv = ($this->createRepo)($user, $user->username() . '/secret-art-' . bin2hex(random_bytes(4)), private: true);
 
         $response = $this->get('/@' . $user->username());
         $this->assertSame(200, $response->getStatusCode());
@@ -167,9 +167,11 @@ final class HomeAndProfilePageTest extends KernelTestCase
     {
         $user = new User('clash-' . bin2hex(random_bytes(3)), false, new \DateTimeImmutable());
         $this->users->save($user);
+        $admin = new User('clashadmin-' . bin2hex(random_bytes(3)), true, new \DateTimeImmutable());
+        $this->users->save($admin);
 
-        // Create a repository with the exact same name as the user
-        $repo = ($this->createRepo)($user, $user->username(), private: false);
+        // Admin creates a root-level repository with the exact same name as the user
+        $repo = ($this->createRepo)($admin, $user->username(), private: false);
         GitTestHelper::writeFile($this->storage->open(RepoName::fromInput($user->username())), 'main', 'README.md', "# Clash\n", 'readme');
 
         $response = $this->get('/' . $user->username());

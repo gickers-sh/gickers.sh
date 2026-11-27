@@ -43,6 +43,7 @@ final readonly class ForkRepo
         private HookInstaller $hookInstaller,
         private ClockInterface $clock,
         private EventDispatcherInterface $eventDispatcher,
+        private RepoNamespacePolicy $namespacePolicy = new RepoNamespacePolicy(),
     ) {
     }
 
@@ -69,6 +70,8 @@ final readonly class ForkRepo
             }
             $target = RepoName::fromInput('' !== $actor->username() ? $actor->username().'/'.$base : $base);
         }
+
+        $this->namespacePolicy->assertCanClaimName($actor, $target);
 
         if (!$this->accessResolver->levelFor($actor, $target, $this->repoStore->byName($target))->canWrite()) {
             throw new AccessDenied('unauthorized');

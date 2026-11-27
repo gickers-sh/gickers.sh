@@ -31,3 +31,10 @@ services:
 
     Termstrap\Command\RenderCommand:
         tags: ['console.command']
+
+when@test:
+    services:
+        App\Repo\Application\SyncMirrors:
+            autowire: true
+            arguments:
+                $enforcePublicRemote: false

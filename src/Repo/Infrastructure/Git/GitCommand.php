@@ -20,8 +20,8 @@ final class GitCommand
     /**
      * Runs `git <args>` and returns the finished process, successful or not.
      *
-     * @param list<string|Revision>      $args
-     * @param array<string, string>|null $env
+     * @param list<string|Revision>            $args
+     * @param array<string, string|false>|null $env
      */
     public static function run(string $cwd, array $args, ?string $input = null, ?array $env = null): Process
     {
@@ -34,8 +34,8 @@ final class GitCommand
     /**
      * Starts `git <args>` asynchronously without blocking and returns the running process.
      *
-     * @param list<string|Revision>      $args
-     * @param array<string, string>|null $env
+     * @param list<string|Revision>            $args
+     * @param array<string, string|false>|null $env
      */
     public static function start(string $cwd, array $args, ?string $input = null, ?array $env = null): Process
     {
@@ -48,8 +48,8 @@ final class GitCommand
     /**
      * Runs `git <args>` and returns its stdout.
      *
-     * @param list<string|Revision>      $args
-     * @param array<string, string>|null $env
+     * @param list<string|Revision>            $args
+     * @param array<string, string|false>|null $env
      *
      * @throws ProcessFailedException when git exits non-zero
      */
@@ -59,8 +59,8 @@ final class GitCommand
     }
 
     /**
-     * @param list<string|Revision>      $args
-     * @param array<string, string>|null $env
+     * @param list<string|Revision>            $args
+     * @param array<string, string|false>|null $env
      */
     private static function process(string $cwd, array $args, ?string $input, ?array $env): Process
     {

@@ -42,7 +42,8 @@ final readonly class UpdateRepoSettings
     ): Repo {
         $name = $name instanceof RepoName ? $name : RepoName::fromInput($name);
 
-        $repo = $this->accessGuard->assertRepo($actor, $name, AccessLevel::ReadWriteAccess);
+        $requiredAccess = null !== $private ? AccessLevel::AdminAccess : AccessLevel::ReadWriteAccess;
+        $repo = $this->accessGuard->assertRepo($actor, $name, $requiredAccess);
         if (null === $repo) {
             throw new NotFound('repository not found');
         }

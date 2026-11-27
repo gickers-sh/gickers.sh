@@ -93,7 +93,7 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
     public function testSmartHttpInfoRefsPublicRepo(): void
     {
         $owner = $this->newUser('alice');
-        $repo = ($this->createRepo)($owner, 'public-repo-'.bin2hex(random_bytes(4)), private: false);
+        $repo = ($this->createRepo)($owner, $owner->username().'/public-repo-'.bin2hex(random_bytes(4)), private: false);
 
         $request = Request::create(sprintf('/%s.git/info/refs?service=git-upload-pack', $repo->name()->value), 'GET');
         $response = $this->handle($request);
@@ -109,7 +109,7 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
         $otherUser = $this->newUser('eve');
         $ownerSecret = $this->issueSecret($owner, 'owner-token');
         $otherSecret = $this->issueSecret($otherUser, 'test-token');
-        $repo = ($this->createRepo)($owner, 'private-repo-'.bin2hex(random_bytes(4)), private: true);
+        $repo = ($this->createRepo)($owner, $owner->username().'/private-repo-'.bin2hex(random_bytes(4)), private: true);
 
         // Anonymous -> 401 with challenge headers
         $request = Request::create(sprintf('/%s.git/info/refs?service=git-upload-pack', $repo->name()->value), 'GET');
@@ -146,7 +146,7 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
     {
         $user = $this->newUser('carol');
         $secret = $this->issueSecret($user, 'push-token');
-        $newRepoName = 'auto-created-'.bin2hex(random_bytes(4));
+        $newRepoName = $user->username().'/auto-created-'.bin2hex(random_bytes(4));
 
         // Push advertisement by authorized user creates the repo!
         $request = Request::create(
@@ -165,7 +165,7 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
     public function testDumbHttpHeadAndPathTraversal(): void
     {
         $owner = $this->newUser('dave');
-        $repo = ($this->createRepo)($owner, 'dumb-repo-'.bin2hex(random_bytes(4)), private: false);
+        $repo = ($this->createRepo)($owner, $owner->username().'/dumb-repo-'.bin2hex(random_bytes(4)), private: false);
 
         $request = Request::create(sprintf('/%s.git/HEAD', $repo->name()->value), 'GET');
         $response = $this->handle($request);
@@ -184,7 +184,7 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
     public function testGoGetDiscovery(): void
     {
         $owner = $this->newUser('frank');
-        $repo = ($this->createRepo)($owner, 'pkg-demo-'.bin2hex(random_bytes(4)), private: false);
+        $repo = ($this->createRepo)($owner, $owner->username().'/pkg-demo-'.bin2hex(random_bytes(4)), private: false);
 
         $request = Request::create(sprintf('/%s?go-get=1', $repo->name()->value), 'GET');
         $response = $this->handle($request);
@@ -198,7 +198,7 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
     {
         $owner = $this->newUser('grace');
         $secret = $this->issueSecret($owner, 'lfs-token');
-        $repo = ($this->createRepo)($owner, 'lfs-repo-'.bin2hex(random_bytes(4)), private: false);
+        $repo = ($this->createRepo)($owner, $owner->username().'/lfs-repo-'.bin2hex(random_bytes(4)), private: false);
 
         $payload = 'Git LFS test binary payload '.bin2hex(random_bytes(8));
         $oid = hash('sha256', $payload);
@@ -329,7 +329,7 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
         $adminSecret = $this->issueSecret($admin, 'admin-tok');
         $otherSecret = $this->issueSecret($other, 'other-tok');
 
-        $repo = ($this->createRepo)($owner, 'lock-repo-'.bin2hex(random_bytes(4)), private: false);
+        $repo = ($this->createRepo)($owner, $owner->username().'/lock-repo-'.bin2hex(random_bytes(4)), private: false);
 
         // 1. Create lock
         $request = Request::create(
@@ -472,7 +472,7 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
     public function testTokenBearerAuthentication(): void
     {
         $user = $this->newUser('tokenuser');
-        $repo = ($this->createRepo)($user, 'token-repo-'.bin2hex(random_bytes(4)), private: false);
+        $repo = ($this->createRepo)($user, $user->username().'/token-repo-'.bin2hex(random_bytes(4)), private: false);
 
         // 1. Valid token issued via IssueLfsToken
         $issued = ($this->issueLfsToken)($user, $repo->name(), 'upload');
@@ -566,7 +566,7 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
     public function testInfoRefsWithoutSmartServiceFallsBackToDumbHttp(): void
     {
         $owner = $this->newUser('ivan');
-        $repo = ($this->createRepo)($owner, 'dumb-refs-'.bin2hex(random_bytes(4)), private: false);
+        $repo = ($this->createRepo)($owner, $owner->username().'/dumb-refs-'.bin2hex(random_bytes(4)), private: false);
 
         foreach (['', '?service=git-upload-archive'] as $query) {
             $response = $this->handle(Request::create(sprintf('/%s.git/info/refs%s', $repo->name()->value, $query), 'GET'));
@@ -579,7 +579,7 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
     public function testGoGetResolvesSubpackageToRepositoryRoot(): void
     {
         $owner = $this->newUser('judy');
-        $name = 'go-mod-'.bin2hex(random_bytes(4));
+        $name = $owner->username().'/go-mod-'.bin2hex(random_bytes(4));
         ($this->createRepo)($owner, $name, private: false);
 
         $response = $this->handle(Request::create(sprintf('/%s/pkg/util?go-get=1', $name), 'GET'));
@@ -597,7 +597,7 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
     {
         $owner = $this->newUser('kim');
         $secret = $this->issueSecret($owner, 'basic-token');
-        $repo = ($this->createRepo)($owner, 'basic-auth-'.bin2hex(random_bytes(4)), private: true);
+        $repo = ($this->createRepo)($owner, $owner->username().'/basic-auth-'.bin2hex(random_bytes(4)), private: true);
         $url = sprintf('/%s.git/info/refs?service=git-upload-pack', $repo->name()->value);
 
         $basic = static fn (string $credentials): Request => Request::create($url, 'GET', [], [], [], [
@@ -616,7 +616,7 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
     {
         $owner = $this->newUser('lena');
         $secret = $this->issueSecret($owner, 'lfs-errors');
-        $repo = ($this->createRepo)($owner, 'lfs-errors-'.bin2hex(random_bytes(4)), private: false);
+        $repo = ($this->createRepo)($owner, $owner->username().'/lfs-errors-'.bin2hex(random_bytes(4)), private: false);
 
         $payload = 'stored object '.bin2hex(random_bytes(8));
         $storedOid = hash('sha256', $payload);
@@ -652,7 +652,7 @@ final class GitHttpAndLfsFunctionalTest extends KernelTestCase
     {
         $owner = $this->newUser('mia');
         $authorization = 'Token '.$this->issueSecret($owner, 'lfs-actions');
-        $repo = ($this->createRepo)($owner, 'lfs-actions-'.bin2hex(random_bytes(4)), private: false);
+        $repo = ($this->createRepo)($owner, $owner->username().'/lfs-actions-'.bin2hex(random_bytes(4)), private: false);
 
         $objects = $this->lfsBatch($repo->name()->value, $authorization, 'upload', [
             ['oid' => str_repeat('e', 64), 'size' => 100],

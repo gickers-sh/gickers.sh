@@ -227,7 +227,7 @@ final class SyncMirrorsTest extends KernelTestCase
     private function mirror(string $label, GitRepository $upstream, bool $isMirror = true): RepoName
     {
         $name = RepoName::fromInput($label.'-'.$this->suffix);
-        $this->storage->importMirror($upstream->path, $name, true);
+        $this->storage->importMirror($upstream->path, $name, true, enforcePublicRemote: false);
         $this->onDisk[] = $name;
         $this->register($name, $isMirror);
 

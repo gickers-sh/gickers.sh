@@ -30,6 +30,7 @@ final readonly class RenameRepo
         private BareRepositoryStorage $storage,
         private ClockInterface $clock,
         private EventDispatcherInterface $eventDispatcher,
+        private RepoNamespacePolicy $namespacePolicy = new RepoNamespacePolicy(),
     ) {
     }
 
@@ -38,9 +39,12 @@ final readonly class RenameRepo
         $name = $name instanceof RepoName ? $name : RepoName::fromInput($name);
         $newName = $newName instanceof RepoName ? $newName : RepoName::fromInput($newName);
 
-        $repo = $this->accessGuard->assertRepo($actor, $name, AccessLevel::ReadWriteAccess);
+        $repo = $this->accessGuard->assertRepo($actor, $name, AccessLevel::AdminAccess);
         if (null === $repo) {
             throw new NotFound('repository not found');
+        }
+        if (null !== $actor) {
+            $this->namespacePolicy->assertCanClaimName($actor, $newName);
         }
 
         $oldName = $repo->nameString();

@@ -197,7 +197,7 @@ final class BareRepositoryStorageTest extends TestCase
         GitTestHelper::writeFile($sourceRepo, 'main', 'file.txt', "import content\n", 'init', 'Importer', 'import@codes.sh');
 
         $targetName = RepoName::fromInput('mirrored-target');
-        $mirrored = $this->storage->importMirror($sourceDir, $targetName, true);
+        $mirrored = $this->storage->importMirror($sourceDir, $targetName, true, enforcePublicRemote: false);
 
         $this->assertTrue($this->storage->exists($targetName));
         $this->assertSame('mirrored-target', $mirrored->name);

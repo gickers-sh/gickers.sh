@@ -36,6 +36,7 @@ final readonly class ImportRepo
         private SsrfGuard $ssrfGuard,
         private ClockInterface $clock,
         private EventDispatcherInterface $eventDispatcher,
+        private RepoNamespacePolicy $namespacePolicy = new RepoNamespacePolicy(),
     ) {}
 
     public function __invoke(
@@ -63,6 +64,7 @@ final readonly class ImportRepo
         if (null === $actor) {
             throw new AccessDenied('unauthorized');
         }
+        $this->namespacePolicy->assertCanClaimName($actor, $name);
         if ($this->storage->exists($name)) {
             throw new Conflict(sprintf('repository "%s" already exists', $name));
         }

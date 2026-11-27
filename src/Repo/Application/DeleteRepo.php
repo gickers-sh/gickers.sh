@@ -34,7 +34,7 @@ final readonly class DeleteRepo
     {
         $name = $name instanceof RepoName ? $name : RepoName::fromInput($name);
 
-        $repo = $this->accessGuard->assertRepo($actor, $name, AccessLevel::ReadWriteAccess);
+        $repo = $this->accessGuard->assertRepo($actor, $name, AccessLevel::AdminAccess);
         if (null === $repo) {
             throw new NotFound('repository not found');
         }

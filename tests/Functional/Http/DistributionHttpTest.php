@@ -69,7 +69,7 @@ final class DistributionHttpTest extends KernelTestCase
     /** @return array{0: string, 1: GitRepository} repo name and opened bare repo */
     private function repoWithContent(User $owner, bool $private): array
     {
-        $repo = ($this->createRepo)($owner, 'dist-'.bin2hex(random_bytes(4)), private: $private);
+        $repo = ($this->createRepo)($owner, $owner->username().'/dist-'.bin2hex(random_bytes(4)), private: $private);
         $git = $this->storage->open($repo->name());
         GitTestHelper::writeFile($git, 'main', 'README.md', "# Hello\nbody line\n", 'add readme');
         GitTestHelper::writeFile($git, 'main', 'assets/logo.bin', "\x00\x01\x02binary\xff", 'add bin');

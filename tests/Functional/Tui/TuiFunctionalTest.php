@@ -132,7 +132,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $user = new User('alice', false, new \DateTimeImmutable());
         $this->userStore->save($user);
 
-        ($this->createRepo)($user, 'feed-project', false, false, 'A public project', 'feed-project');
+        ($this->createRepo)($user, 'alice/feed-project', false, false, 'A public project', 'feed-project');
 
         $vt = new VirtualTerminal(80, 24);
         $app = $this->apps->create($vt, $user, true);
@@ -185,7 +185,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $user = new User('refresher', false, new \DateTimeImmutable());
         $this->userStore->save($user);
 
-        ($this->createRepo)($user, 'refresh-early', false, false, 'Loaded first', 'refresh-early');
+        ($this->createRepo)($user, 'refresher/refresh-early', false, false, 'Loaded first', 'refresh-early');
 
         $vt = new VirtualTerminal(80, 24);
         $app = $this->apps->create($vt, $user, true);
@@ -202,7 +202,7 @@ final class TuiFunctionalTest extends KernelTestCase
         $this->assertStringNotContainsString('refresh-late', $output);
 
         // A repo created after the initial load is not visible yet.
-        ($this->createRepo)($user, 'refresh-late', false, false, 'Created later', 'refresh-late');
+        ($this->createRepo)($user, 'refresher/refresh-late', false, false, 'Created later', 'refresh-late');
         $tui->tick();
         $this->assertStringNotContainsString('refresh-late', $vt->consumeOutput());
 
@@ -538,9 +538,9 @@ final class TuiFunctionalTest extends KernelTestCase
         $bob = new User('bob-owner-' . uniqid(), false, new \DateTimeImmutable());
         $this->userStore->save($bob);
 
-        ($this->createRepo)($alice, 'alpha-engine', false, false, 'High performance physics engine', 'Alpha Engine');
-        ($this->createRepo)($alice, 'zeta-dashboard', false, false, 'Admin analytics UI', 'Zeta Dashboard');
-        ($this->createRepo)($bob, 'omega-payments', false, false, 'Stripe billing gateway', 'Omega Payments');
+        ($this->createRepo)($alice, $alice->username() . '/alpha-engine', false, false, 'High performance physics engine', 'Alpha Engine');
+        ($this->createRepo)($alice, $alice->username() . '/zeta-dashboard', false, false, 'Admin analytics UI', 'Zeta Dashboard');
+        ($this->createRepo)($bob, $bob->username() . '/omega-payments', false, false, 'Stripe billing gateway', 'Omega Payments');
 
         $vt = new VirtualTerminal(90, 24);
         $app = $this->apps->create($vt, $alice, true);
@@ -642,7 +642,7 @@ final class TuiFunctionalTest extends KernelTestCase
         [$dir] = $this->createFixtureRepo();
         $user = new User('mia', false, new \DateTimeImmutable());
         $this->userStore->save($user);
-        $repo = ($this->createRepo)($user, 'clickable', false, false, 'Clickable repo', 'clickable');
+        $repo = ($this->createRepo)($user, 'mia/clickable', false, false, 'Clickable repo', 'clickable');
         // Point the repo at the fixture working tree so it opens on disk.
         $target = $this->repoDirectory->pathFor($repo->name());
         (new Process(['rm', '-rf', $target]))->run();

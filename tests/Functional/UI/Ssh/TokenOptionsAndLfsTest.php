@@ -78,7 +78,7 @@ final class TokenOptionsAndLfsTest extends KernelTestCase
 
     public function testTokenCreateWithOptionsAndLfsUsage(): void
     {
-        $repoName = 'lfs-test-repo-' . bin2hex(random_bytes(4));
+        $repoName = $this->user->username() . '/lfs-test-repo-' . bin2hex(random_bytes(4));
         $repo = ($this->createRepo)($this->user, $repoName, private: false);
 
         // 1. Create a scoped token with repo restriction and 2 hours TTL
@@ -126,7 +126,7 @@ final class TokenOptionsAndLfsTest extends KernelTestCase
         $this->assertSame(200, $response->getStatusCode(), 'Personal Access Token MUST authenticate Git LFS via Bearer');
 
         // 4. Using this token on another repo MUST fail because of repo restriction
-        $otherRepoName = 'other-repo-' . bin2hex(random_bytes(4));
+        $otherRepoName = $this->user->username() . '/other-repo-' . bin2hex(random_bytes(4));
         ($this->createRepo)($this->user, $otherRepoName, private: false);
 
         $otherRequest = Request::create(
@@ -162,7 +162,7 @@ final class TokenOptionsAndLfsTest extends KernelTestCase
 
     public function testSingleUseTokenOption(): void
     {
-        $repoName = 'singleuse-repo-' . bin2hex(random_bytes(4));
+        $repoName = $this->user->username() . '/singleuse-repo-' . bin2hex(random_bytes(4));
         ($this->createRepo)($this->user, $repoName, private: false);
 
         // 1. Create a single-use token via SSH CLI

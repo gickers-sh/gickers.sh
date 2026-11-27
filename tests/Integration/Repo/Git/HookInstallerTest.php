@@ -56,7 +56,7 @@ final class HookInstallerTest extends TestCase
             $this->assertFileExists($hookFile);
             $this->assertTrue(is_executable($hookFile));
             $content = (string) file_get_contents($hookFile);
-            $this->assertStringContainsString('${GIT_DIR}/hooks/${hookname}.d/*', $content);
+            $this->assertStringContainsString('"${GIT_DIR}/hooks/${hookname}.d/"*', $content);
             $this->assertStringContainsString('echo "${data}" | "${hook}" "$@"', $content);
             $this->assertStringContainsString('exit ${i}', $content);
 
@@ -69,9 +69,9 @@ final class HookInstallerTest extends TestCase
             $this->assertStringContainsString('soft:hook:'.$hook, $softContent);
 
             if ('update' === $hook) {
-                $this->assertStringContainsString('$1 $2 $3', $softContent);
+                $this->assertStringContainsString('"$1" "$2" "$3"', $softContent);
             } elseif ('post-update' === $hook) {
-                $this->assertStringContainsString('$@', $softContent);
+                $this->assertStringContainsString('"$@"', $softContent);
             }
         }
 

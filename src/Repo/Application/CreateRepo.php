@@ -35,6 +35,7 @@ final readonly class CreateRepo
         private HookInstaller $hookInstaller,
         private ClockInterface $clock,
         private EventDispatcherInterface $eventDispatcher,
+        private RepoNamespacePolicy $namespacePolicy = new RepoNamespacePolicy(),
     ) {
     }
 
@@ -57,6 +58,7 @@ final readonly class CreateRepo
         if (null === $actor) {
             throw new AccessDenied('unauthorized');
         }
+        $this->namespacePolicy->assertCanClaimName($actor, $name);
         if ($this->storage->exists($name)) {
             throw new Conflict(sprintf('repository "%s" already exists', $name));
         }

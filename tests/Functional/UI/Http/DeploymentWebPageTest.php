@@ -96,7 +96,7 @@ final class DeploymentWebPageTest extends KernelTestCase
         $owner = $this->user('alice');
         $ownerToken = $this->secret($owner);
 
-        $repo = ($this->createRepo)($owner, 'my-app-' . bin2hex(random_bytes(3)), private: false, description: 'Test app');
+        $repo = ($this->createRepo)($owner, $owner->username() . '/my-app-' . bin2hex(random_bytes(3)), private: false, description: 'Test app');
         $repoName = $repo->name()->value;
         $git = $this->storage->open(RepoName::fromInput($repoName));
         GitTestHelper::writeFile($git, 'main', 'Dockerfile', "FROM alpine\n", 'init');

@@ -42,7 +42,7 @@ final class WebLoginFlowTest extends KernelTestCase
         $owner = new User('weblogin-'.bin2hex(random_bytes(3)), false, new \DateTimeImmutable());
         $this->users->save($owner);
 
-        $repo = ($this->createRepo)($owner, 'wl-'.bin2hex(random_bytes(4)), private: true);
+        $repo = ($this->createRepo)($owner, $owner->username().'/wl-'.bin2hex(random_bytes(4)), private: true);
         $name = $repo->name()->value;
         GitTestHelper::writeFile($this->storage->open(RepoName::fromInput($name)), 'main', 'README.md', "# Secret\n", 'readme');
 
@@ -112,7 +112,7 @@ final class WebLoginFlowTest extends KernelTestCase
     {
         $owner = new User('wlpub-'.bin2hex(random_bytes(3)), false, new \DateTimeImmutable());
         $this->users->save($owner);
-        $repo = ($this->createRepo)($owner, 'wlp-'.bin2hex(random_bytes(4)), private: false);
+        $repo = ($this->createRepo)($owner, $owner->username().'/wlp-'.bin2hex(random_bytes(4)), private: false);
         $name = $repo->name()->value;
         GitTestHelper::writeFile($this->storage->open(RepoName::fromInput($name)), 'main', 'README.md', "# Pub\n", 'readme');
 
@@ -141,8 +141,8 @@ final class WebLoginFlowTest extends KernelTestCase
         $owner = new User('profileuser-'.bin2hex(random_bytes(3)), false, new \DateTimeImmutable());
         $this->users->save($owner);
 
-        $pubRepo = ($this->createRepo)($owner, 'pub-'.bin2hex(random_bytes(4)), private: false);
-        $privRepo = ($this->createRepo)($owner, 'priv-'.bin2hex(random_bytes(4)), private: true);
+        $pubRepo = ($this->createRepo)($owner, $owner->username().'/pub-'.bin2hex(random_bytes(4)), private: false);
+        $privRepo = ($this->createRepo)($owner, $owner->username().'/priv-'.bin2hex(random_bytes(4)), private: true);
 
         $response = $this->get('/@'.$owner->username());
         $this->assertSame(200, $response->getStatusCode());
@@ -196,7 +196,7 @@ final class WebLoginFlowTest extends KernelTestCase
         $this->users->save($owner);
         $initialVersion = $owner->webTokenVersion();
 
-        $repo = ($this->createRepo)($owner, 'logout-priv-'.bin2hex(random_bytes(4)), private: true);
+        $repo = ($this->createRepo)($owner, $owner->username().'/logout-priv-'.bin2hex(random_bytes(4)), private: true);
         $name = $repo->name()->value;
         GitTestHelper::writeFile($this->storage->open(RepoName::fromInput($name)), 'main', 'README.md', "# Private\n", 'readme');
 

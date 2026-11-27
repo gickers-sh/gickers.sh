@@ -81,7 +81,7 @@ final class RepoWebPageTest extends KernelTestCase
      */
     private function repo(User $owner, bool $private = false, string $description = ''): string
     {
-        $repo = ($this->createRepo)($owner, 'web-' . bin2hex(random_bytes(4)), private: $private, description: $description);
+        $repo = ($this->createRepo)($owner, $owner->username() . '/web-' . bin2hex(random_bytes(4)), private: $private, description: $description);
 
         return $repo->name()->value;
     }
@@ -295,8 +295,9 @@ final class RepoWebPageTest extends KernelTestCase
 
     public function testNestedRepositoryNameIsServedWithItsFullPath(): void
     {
-        $name = 'group-' . bin2hex(random_bytes(3)) . '/project';
-        ($this->createRepo)($this->user('lena'), $name);
+        $owner = $this->user('lena');
+        $name = $owner->username() . '/group-' . bin2hex(random_bytes(3)) . '/project';
+        ($this->createRepo)($owner, $name);
         GitTestHelper::writeFile($this->git($name), 'main', 'README.md', "# Nested\n", 'add readme');
 
         $response = $this->get('/' . $name);
