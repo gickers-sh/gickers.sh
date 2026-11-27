@@ -28,7 +28,7 @@ final class CommandCatalog
      * Restricted root command tree for unauthenticated SSH keys when self-service
      * signup is enabled: only `signup` is exposed.
      */
-    public function restrictedRootForUnknownKey(): CommandSpec
+    public function restrictedRootForUnknownKey(bool $canAnonRead = false): CommandSpec
     {
         $rootLong = <<<'DESC'
 Codes.sh is a self-hostable Git server for the command line. Your SSH key is not yet recognized. If self-service registration is enabled on this server, register yourself with the 'signup' command below to start creating and hosting repositories.
@@ -44,10 +44,27 @@ DESC;
   # Recover existing account with backup password
   {ssh} recover <username>
 EX;
+        if ($canAnonRead) {
+            $example .= <<<'EX'
+
+
+  # Read server about / README
+  {ssh} about
+
+  # Browse the server wiki
+  {ssh} wiki list
+EX;
+        }
 
         $root = new CommandSpec('', '', '', $rootLong, [], [], false, example: $example);
+        if ($canAnonRead) {
+            $root->addChild($this->aboutSpec());
+        }
         $root->addChild($this->signupSpec());
         $root->addChild($this->recoverSpec());
+        if ($canAnonRead) {
+            $root->addChild($this->wiki(false));
+        }
 
         return $root;
     }
@@ -153,31 +170,7 @@ EX;
         $root->addChild($this->hiddenLeaf('git-lfs-authenticate REPO OPERATION', 'Git LFS authenticate'));
         $root->addChild($this->hiddenLeaf('git-lfs-transfer REPO OPERATION', 'Git LFS transfer'));
 
-        $aboutLong = <<<'DESC'
-Displays the server about / README document (from the .soft-serve repository) rendered in the terminal using Termstrap.
-
-Scope:
-  Public (accessible to all authenticated and anonymous callers).
-
-Output:
-  Renders Markdown to ANSI using the Termstrap terminal engine.
-DESC;
-        $aboutExample = <<<'EX'
-  # Display server about page
-  {ssh} about
-EX;
-        $root->addChild($this->leaf('about', 'Show the server README (About)', $aboutLong, [], [
-            new FlagSpec('w', 'width', 'int', 'terminal width in columns (0 = auto-detect)'),
-        ], $aboutExample)->withUi(
-            category: 'explore',
-            title: 'About Server',
-            tier: 'read',
-            description: 'Show the server README (About)',
-            baseTemplate: 'about',
-            fields: [FieldSpec::opt('width', 'Terminal width', '-w', '80')],
-            scope: 'global',
-            order: 2,
-        ));
+        $root->addChild($this->aboutSpec());
 
         $helpLong = <<<'DESC'
 Help provides contextual guidance and usage manuals for any codes.sh command, command group, or nested subcommand.
@@ -497,6 +490,36 @@ EX;
         ));
 
         return $web;
+    }
+
+    private function aboutSpec(): CommandSpec
+    {
+        $aboutLong = <<<'DESC'
+Displays the server about / README document (from the .soft-serve repository) rendered in the terminal using Termstrap.
+
+Scope:
+  Public (accessible to all authenticated and anonymous callers).
+
+Output:
+  Renders Markdown to ANSI using the Termstrap terminal engine.
+DESC;
+        $aboutExample = <<<'EX'
+  # Display server about page
+  {ssh} about
+EX;
+
+        return $this->leaf('about', 'Show the server README (About)', $aboutLong, [], [
+            new FlagSpec('w', 'width', 'int', 'terminal width in columns (0 = auto-detect)'),
+        ], $aboutExample)->withUi(
+            category: 'explore',
+            title: 'About Server',
+            tier: 'read',
+            description: 'Show the server README (About)',
+            baseTemplate: 'about',
+            fields: [FieldSpec::opt('width', 'Terminal width', '-w', '80')],
+            scope: 'global',
+            order: 2,
+        );
     }
 
     private function signupSpec(): CommandSpec

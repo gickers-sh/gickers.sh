@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\UI\Ssh\Command;
 
+use App\Access\Application\ServerPolicy;
 use App\Repo\Application\Query\RepoQuery;
 use App\Repo\Infrastructure\Git\BareRepositoryStorage;
 use App\Repo\Infrastructure\Git\GitRepositoryReader;
+use App\Shared\Domain\Exception\AccessDenied;
 use App\UI\Ssh\SshSession;
 use App\UI\Tui\Render\TermstrapRenderer;
 use App\UI\Tui\Render\Theme;
@@ -14,9 +16,7 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
-use Symfony\Component\Console\Input\StreamableInputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Console\Terminal;
 
 final class AboutCommand extends AbstractSshCommand
 {
@@ -31,6 +31,7 @@ final class AboutCommand extends AbstractSshCommand
         private readonly BareRepositoryStorage $storage,
         private readonly GitRepositoryReader $gitReader,
         private readonly TermstrapRenderer $renderer,
+        private readonly ServerPolicy $serverPolicy,
     ) {
         parent::__construct($sshSession);
     }
@@ -45,12 +46,17 @@ final class AboutCommand extends AbstractSshCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        $actor = $this->actor();
+        if (null === $actor && !$this->serverPolicy->anonAccess()->canRead()) {
+            throw new AccessDenied('unauthorized');
+        }
+
         $ref = $this->stringArgument($input, 'reference', 'HEAD');
         $width = $this->resolveTerminalWidth($input, $output, 100);
 
         $readme = null;
         try {
-            $repo = $this->repoQuery->get($this->actor(), '.soft-serve');
+            $repo = $this->repoQuery->get($actor, '.soft-serve');
             $gitRepo = $this->storage->open($repo->name());
             $readme = $this->gitReader->readme($gitRepo, $ref);
         } catch (\Throwable) {

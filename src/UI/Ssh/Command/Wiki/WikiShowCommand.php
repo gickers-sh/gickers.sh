@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\UI\Ssh\Command\Wiki;
 
+use App\Access\Application\ServerPolicy;
+use App\Shared\Domain\Exception\AccessDenied;
 use App\Shared\Domain\Exception\NotFound;
 use App\UI\Ssh\Command\AbstractSshCommand;
 use App\UI\Ssh\SshSession;
@@ -32,6 +34,7 @@ final class WikiShowCommand extends AbstractSshCommand
         SshSession $sshSession,
         private readonly WikiQuery $wikiQuery,
         private readonly TermstrapRenderer $renderer,
+        private readonly ServerPolicy $serverPolicy,
     ) {
         parent::__construct($sshSession);
     }
@@ -47,6 +50,10 @@ final class WikiShowCommand extends AbstractSshCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        $actor = $this->actor();
+        if (null === $actor && !$this->serverPolicy->anonAccess()->canRead()) {
+            throw new AccessDenied('unauthorized');
+        }
         $slug = $this->stringArgument($input, 'slug');
         $page = $this->wikiQuery->find($slug);
         if (null === $page) {

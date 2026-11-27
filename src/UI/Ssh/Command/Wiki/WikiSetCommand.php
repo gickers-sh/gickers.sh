@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\UI\Ssh\Command\Wiki;
 
+use App\Shared\Domain\Exception\AccessDenied;
 use App\Shared\Domain\Exception\InvalidInput;
 use App\UI\Ssh\Command\AbstractSshCommand;
 use App\UI\Ssh\SshSession;
@@ -47,6 +48,11 @@ final class WikiSetCommand extends AbstractSshCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        $actor = $this->actor();
+        if (null === $actor || !$actor->isAdmin()) {
+            throw new AccessDenied('only server admins can edit wiki pages');
+        }
+
         $slug = $this->stringArgument($input, 'slug');
         $title = $this->nullableStringOption($input, 'title');
         $category = $this->nullableStringOption($input, 'category');

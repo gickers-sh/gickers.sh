@@ -860,4 +860,99 @@ final class SshEntrypointCommandTest extends KernelTestCase
         $errorText = $this->getOutputText($errorOut);
         $this->assertStringContainsString("\e[38;2;247;118;142m\e[1mError:\e[0m", $errorText);
     }
+
+    public function testUnknownKeyCanAccessAboutCommand(): void
+    {
+        $kp = sodium_crypto_sign_keypair();
+        $pk = sodium_crypto_sign_publickey($kp);
+        $unknownKey = 'ssh-ed25519 ' . base64_encode(pack('N', 11) . 'ssh-ed25519' . pack('N', 32) . $pk) . ' unknown@test';
+
+        $tester = $this->dispatch('about', $unknownKey);
+        $this->assertSame(0, $tester->getStatusCode());
+    }
+
+    public function testUnknownKeyCanAccessWikiReadCommands(): void
+    {
+        $kp = sodium_crypto_sign_keypair();
+        $pk = sodium_crypto_sign_publickey($kp);
+        $unknownKey = 'ssh-ed25519 ' . base64_encode(pack('N', 11) . 'ssh-ed25519' . pack('N', 32) . $pk) . ' unknown@test';
+
+        // 1. wiki list
+        $listTester = $this->dispatch('wiki list', $unknownKey);
+        $this->assertSame(0, $listTester->getStatusCode());
+
+        // 2. wiki help
+        $helpTester = $this->dispatch('help wiki', $unknownKey);
+        $this->assertSame(0, $helpTester->getStatusCode());
+        $helpText = $this->getOutputText($helpTester);
+        $this->assertStringContainsString('Browse, search, and manage the server-wide Wiki knowledge base', $helpText);
+        $this->assertStringNotContainsString('wiki set', $helpText);
+        $this->assertStringNotContainsString('wiki delete', $helpText);
+    }
+
+    public function testUnknownKeyCannotExecuteWikiWriteCommands(): void
+    {
+        $kp = sodium_crypto_sign_keypair();
+        $pk = sodium_crypto_sign_publickey($kp);
+        $unknownKey = 'ssh-ed25519 ' . base64_encode(pack('N', 11) . 'ssh-ed25519' . pack('N', 32) . $pk) . ' unknown@test';
+
+        // 1. wiki set
+        $setTester = $this->dispatch('wiki set test-page "Content"', $unknownKey);
+        $this->assertSame(1, $setTester->getStatusCode());
+        $this->assertStringContainsString('only server admins can edit wiki pages', $this->getOutputText($setTester));
+
+        // 2. wiki delete
+        $delTester = $this->dispatch('wiki delete test-page', $unknownKey);
+        $this->assertSame(1, $delTester->getStatusCode());
+        $this->assertStringContainsString('only server admins can delete wiki pages', $this->getOutputText($delTester));
+    }
+
+    public function testUnknownKeyRestrictedHelpIncludesAboutAndWiki(): void
+    {
+        $kp = sodium_crypto_sign_keypair();
+        $pk = sodium_crypto_sign_publickey($kp);
+        $unknownKey = 'ssh-ed25519 ' . base64_encode(pack('N', 11) . 'ssh-ed25519' . pack('N', 32) . $pk) . ' unknown@test';
+
+        $helpTester = $this->dispatch('help', $unknownKey);
+        $this->assertSame(0, $helpTester->getStatusCode());
+        $text = $this->getOutputText($helpTester);
+        $this->assertStringContainsString('about', $text);
+        $this->assertStringContainsString('wiki', $text);
+        $this->assertStringContainsString('signup', $text);
+        $this->assertStringNotContainsString('  repo ', $text);
+        $this->assertStringNotContainsString('  settings ', $text);
+    }
+
+    public function testWhenAnonAccessIsNoAccessUnknownKeyIsDeniedForAboutAndWiki(): void
+    {
+        $serverPolicy = self::getContainer()->get(\App\Access\Application\ServerPolicy::class);
+        $serverPolicy->setAnonAccess(\App\Access\Domain\AccessLevel::NoAccess);
+
+        try {
+            $kp = sodium_crypto_sign_keypair();
+            $pk = sodium_crypto_sign_publickey($kp);
+            $unknownKey = 'ssh-ed25519 ' . base64_encode(pack('N', 11) . 'ssh-ed25519' . pack('N', 32) . $pk) . ' unknown@test';
+
+            // 1. about is denied
+            $aboutTester = $this->dispatch('about', $unknownKey);
+            $this->assertSame(1, $aboutTester->getStatusCode());
+            $this->assertStringContainsString('signup', $this->getOutputText($aboutTester));
+
+            // 2. wiki is denied
+            $wikiTester = $this->dispatch('wiki list', $unknownKey);
+            $this->assertSame(1, $wikiTester->getStatusCode());
+            $this->assertStringContainsString('signup', $this->getOutputText($wikiTester));
+
+            // 3. help does not include about or wiki in available commands
+            $helpTester = $this->dispatch('help', $unknownKey);
+            $this->assertSame(0, $helpTester->getStatusCode());
+            $helpText = $this->getOutputText($helpTester);
+            $this->assertStringNotContainsString('  about ', $helpText);
+            $this->assertStringNotContainsString('  wiki ', $helpText);
+            $this->assertStringContainsString('signup', $helpText);
+            $this->assertStringContainsString('recover', $helpText);
+        } finally {
+            $serverPolicy->setAnonAccess(\App\Access\Domain\AccessLevel::ReadOnlyAccess);
+        }
+    }
 }

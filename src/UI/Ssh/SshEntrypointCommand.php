@@ -342,7 +342,8 @@ final class SshEntrypointCommand extends Command
         }
 
         if ($unknownKey && $node === $this->commandCatalog->root($isAdmin)) {
-            $node = $this->commandCatalog->restrictedRootForUnknownKey();
+            $canAnonRead = $this->serverPolicy->anonAccess()->canRead();
+            $node = $this->commandCatalog->restrictedRootForUnknownKey($canAnonRead);
         }
 
         $sshCommand = Help\HelpRenderer::sshCommandFromPublicUrl($this->serverSettings->sshPublicUrl, $targetUsername);
@@ -413,6 +414,12 @@ final class SshEntrypointCommand extends Command
             return false;
         }
 
+        $canAnonRead = $this->serverPolicy->anonAccess()->canRead();
+
+        if ($canAnonRead && (str_starts_with($tokens[0], 'wiki:') || in_array($tokens[0], ['about', 'wiki'], true))) {
+            return true;
+        }
+
         if (in_array($tokens[0], ['signup', 'setup', 'config', 'recover'], true)) {
             return true;
         }
@@ -422,13 +429,21 @@ final class SshEntrypointCommand extends Command
             static fn (string $t): bool => !in_array($t, ['--color', '--color=always', '--color=never', '--no-color', '--raw'], true)
         ));
 
-        return ['help'] === $filtered
-            || ['help', 'signup'] === $filtered
-            || ['help', 'setup'] === $filtered
-            || ['help', 'config'] === $filtered
-            || ['help', 'recover'] === $filtered
-            || ['-h'] === $filtered
-            || ['--help'] === $filtered;
+        if (['help'] === $filtered || ['-h'] === $filtered || ['--help'] === $filtered) {
+            return true;
+        }
+
+        if (count($filtered) >= 2 && 'help' === $filtered[0]) {
+            $helpTarget = $filtered[1];
+
+            if ($canAnonRead && (in_array($helpTarget, ['about', 'wiki'], true) || str_starts_with($helpTarget, 'wiki'))) {
+                return true;
+            }
+
+            return in_array($helpTarget, ['signup', 'setup', 'config', 'recover'], true);
+        }
+
+        return false;
     }
 
     private function resolveClientIdentifier(?string $fingerprint): string
@@ -486,6 +501,7 @@ final class SshEntrypointCommand extends Command
                     $cmdLinux = \App\UI\Ssh\Help\CliHighlighter::highlightLine(sprintf('%s signup | bash', $sshCommand));
                     $cmdWin = \App\UI\Ssh\Help\CliHighlighter::highlightLine(sprintf('%s signup | iex', $sshCommand));
                     $tip = \App\UI\Tui\Render\Theme::style("Le script d'onboarding configurera interactivement votre nom, vos clés SSH et votre ~/.ssh/config.", \App\UI\Tui\Render\Theme::MUTED);
+                    $helper = "  # For displaying more help.\n   " . \App\UI\Ssh\Help\CliHighlighter::highlightLine(sprintf('%s help', $sshCommand));
 
                     $msg = "\n"
                         . $banner . "\n\n"
@@ -494,7 +510,8 @@ final class SshEntrypointCommand extends Command
                         . '     ' . $cmdLinux . "\n\n"
                         . "     # Windows (PowerShell) :\n"
                         . '     ' . $cmdWin . "\n\n"
-                        . '  ' . $tip . "\n";
+                        . '  ' . $tip . "\n\n"
+                        . ' ' . $helper . "\n";
                 } else {
                     $msg = sprintf("Account @%s does not exist. Claim this username with:\n  %s signup | bash    # Linux / macOS\n  %s signup | iex     # Windows", $targetUsername, $sshCommand, $sshCommand);
                 }

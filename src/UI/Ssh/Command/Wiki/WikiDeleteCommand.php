@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\UI\Ssh\Command\Wiki;
 
+use App\Shared\Domain\Exception\AccessDenied;
 use App\UI\Ssh\Command\AbstractSshCommand;
 use App\UI\Ssh\SshSession;
 use App\Wiki\Application\DeleteWikiPage;
@@ -40,6 +41,11 @@ final class WikiDeleteCommand extends AbstractSshCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        $actor = $this->actor();
+        if (null === $actor || !$actor->isAdmin()) {
+            throw new AccessDenied('only server admins can delete wiki pages');
+        }
+
         $slug = $this->stringArgument($input, 'slug');
         ($this->deleteWikiPage)($this->actor(), $slug);
 

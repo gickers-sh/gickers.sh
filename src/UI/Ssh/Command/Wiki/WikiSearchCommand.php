@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\UI\Ssh\Command\Wiki;
 
+use App\Access\Application\ServerPolicy;
+use App\Shared\Domain\Exception\AccessDenied;
 use App\UI\Ssh\Command\AbstractSshCommand;
 use App\UI\Ssh\SshSession;
 use App\Wiki\Application\Query\WikiQuery;
@@ -27,6 +29,7 @@ final class WikiSearchCommand extends AbstractSshCommand
     public function __construct(
         SshSession $sshSession,
         private readonly WikiQuery $wikiQuery,
+        private readonly ServerPolicy $serverPolicy,
     ) {
         parent::__construct($sshSession);
     }
@@ -40,6 +43,10 @@ final class WikiSearchCommand extends AbstractSshCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        $actor = $this->actor();
+        if (null === $actor && !$this->serverPolicy->anonAccess()->canRead()) {
+            throw new AccessDenied('unauthorized');
+        }
         /** @var list<string> $words */
         $words = (array) $input->getArgument('query');
         $query = trim(implode(' ', $words));
