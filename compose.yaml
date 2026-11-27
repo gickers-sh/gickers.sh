@@ -42,7 +42,6 @@ x-app: &app
     DEPLOY_DOCKER_RUNTIME: ${DEPLOY_DOCKER_RUNTIME:-runsc}
     CADDY_TLS: ${CADDY_TLS:-}
   volumes:
-    - ./:/app
     - gickers-data:/app/.data
     - gickers-var:/app/var
   develop:
