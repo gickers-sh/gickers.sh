@@ -108,6 +108,7 @@ final class SshEntrypointCommand extends Command
             $user = null;
             $accessToken = null;
             $isRecover = $this->isRecoverCommandLine($commandLine);
+            $isInstall = $this->isInstallCommandLine($commandLine);
 
             $clientIdentifier = $this->resolveClientIdentifier($fingerprint);
 
@@ -155,15 +156,15 @@ final class SshEntrypointCommand extends Command
             }
 
             // A presented key (even an unregistered one) is not a keyless caller: it may still
-            // reach `signup` or `recover`. Only truly keyless connections are gated by allow-keyless here.
+            // reach `signup`, `recover`, or `install`. Only truly keyless connections are gated by allow-keyless here.
             $hasFingerprint = null !== $fingerprint && '' !== $fingerprint;
-            if (null === $user && !$hasFingerprint && !$this->serverPolicy->allowKeyless()) {
+            if (null === $user && !$hasFingerprint && !$isInstall && !$this->serverPolicy->allowKeyless()) {
                 throw new AccessDenied('unauthorized');
             }
-            // An unknown public key may recover an existing account via backup password even when
-            // self-service signup is closed; all other surfaces stay closed when allow-signup=false.
+            // An unknown public key may recover an existing account via backup password or fetch installer
+            // even when self-service signup is closed; all other surfaces stay closed when allow-signup=false.
             $unknownKey = null === $user && $hasFingerprint;
-            if ($unknownKey && !$isRecover && !$this->serverPolicy->allowSignup()) {
+            if ($unknownKey && !$isRecover && !$isInstall && !$this->serverPolicy->allowSignup()) {
                 throw new AccessDenied('unauthorized');
             }
 
@@ -444,7 +445,7 @@ final class SshEntrypointCommand extends Command
             return true;
         }
 
-        if (in_array($tokens[0], ['signup', 'setup', 'config', 'recover'], true)) {
+        if (in_array($tokens[0], ['signup', 'setup', 'config', 'recover', 'install', 'installer', 'deploy'], true)) {
             return true;
         }
 
@@ -464,10 +465,25 @@ final class SshEntrypointCommand extends Command
                 return true;
             }
 
-            return in_array($helpTarget, ['signup', 'setup', 'config', 'recover'], true);
+            return in_array($helpTarget, ['signup', 'setup', 'config', 'recover', 'install', 'installer', 'deploy'], true);
         }
 
         return false;
+    }
+
+    private function isInstallCommandLine(string $commandLine): bool
+    {
+        if ('' === $commandLine) {
+            return false;
+        }
+
+        try {
+            $tokens = (new StringInput($commandLine))->getRawTokens(false);
+
+            return [] !== $tokens && in_array(strtolower($tokens[0]), ['install', 'installer', 'deploy'], true);
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     private function isRecoverCommandLine(string $commandLine): bool

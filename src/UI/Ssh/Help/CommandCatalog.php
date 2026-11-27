@@ -62,6 +62,7 @@ EX;
         }
         $root->addChild($this->signupSpec());
         $root->addChild($this->recoverSpec());
+        $root->addChild($this->installSpec());
         if ($canAnonRead) {
             $root->addChild($this->wiki(false));
         }
@@ -260,6 +261,7 @@ EX;
 
         $root->addChild($this->signupSpec());
         $root->addChild($this->recoverSpec());
+        $root->addChild($this->installSpec());
         if ($includeAdmin) {
             $root->addChild($this->settings());
         }
@@ -569,6 +571,80 @@ EX;
             fields: [FieldSpec::arg('username', 'Desired username', 'alice', true)],
             scope: 'global',
             order: 12,
+        );
+    }
+
+    private function installSpec(): CommandSpec
+    {
+        $installLong = <<<'DESC'
+Generates a self-contained one-shot installer & deployment wizard for gickers.sh on your local machine or remote VPS.
+
+Configures domain, Docker CE & Compose stack, OpenSSH transition to port 2222, UFW firewall, systemd service, and PostgreSQL.
+
+Scope:
+  Public (all SSH keys and callers).
+
+Flags:
+      --admin-key string    initial admin SSH public key
+      --admin-user string   initial admin username
+      --allow-keyless bool  allow keyless SSH connections (true/false)
+      --allow-signup bool   allow public self-service signup (true/false)
+      --anon-access string  anonymous access policy (read-only, no-access, public)
+      --app-name string     application branding name
+      --bash                force Bash installer script
+      --db-name string      Postgres database name
+      --db-password string  Postgres database password
+      --db-user string      Postgres database user
+      --dir string          installation directory
+      --domain string       target public domain name (FQDN)
+      --dry-run             simulate deployment without modifying system
+      --http-port int       public HTTP port (default: 80)
+      --https-port int      public HTTPS port (default: 443)
+      --lfs bool            enable Git LFS (true/false)
+      --ps1                 force PowerShell installer script
+      --skip-docker         skip Docker CE installation
+      --skip-sshd-switch    do not switch host OpenSSH port from 22
+  -y, --yes                 non-interactive mode with defaults
+DESC;
+        $installExample = <<<'EX'
+  # One-shot installation & deployment (interactive wizard)
+  {ssh} install | bash            # Linux / macOS
+  {ssh} install | iex             # Windows (PowerShell)
+
+  # Automated non-interactive deployment
+  {ssh} install --domain code.example.com --yes | bash
+EX;
+
+        return $this->leaf('install', 'One-shot installer and deployment wizard for gickers.sh', $installLong, ['installer'], [
+            new FlagSpec('', 'admin-key', 'string', 'initial admin SSH public key'),
+            new FlagSpec('', 'admin-user', 'string', 'initial admin username'),
+            new FlagSpec('', 'allow-keyless', 'bool', 'allow keyless SSH connections (true/false)'),
+            new FlagSpec('', 'allow-signup', 'bool', 'allow public self-service signup (true/false)'),
+            new FlagSpec('', 'anon-access', 'string', 'anonymous access policy (read-only, no-access, public)'),
+            new FlagSpec('', 'app-name', 'string', 'application branding name'),
+            new FlagSpec('', 'bash', 'bool', 'force Bash installer script'),
+            new FlagSpec('', 'db-name', 'string', 'Postgres database name'),
+            new FlagSpec('', 'db-password', 'string', 'Postgres database password'),
+            new FlagSpec('', 'db-user', 'string', 'Postgres database user'),
+            new FlagSpec('', 'dir', 'string', 'installation directory'),
+            new FlagSpec('', 'domain', 'string', 'target public domain name (FQDN)'),
+            new FlagSpec('', 'dry-run', 'bool', 'simulate deployment without modifying system'),
+            new FlagSpec('', 'http-port', 'int', 'public HTTP port (default: 80)'),
+            new FlagSpec('', 'https-port', 'int', 'public HTTPS port (default: 443)'),
+            new FlagSpec('', 'lfs', 'bool', 'enable Git LFS (true/false)'),
+            new FlagSpec('', 'ps1', 'bool', 'force PowerShell installer script'),
+            new FlagSpec('', 'skip-docker', 'bool', 'skip Docker CE installation'),
+            new FlagSpec('', 'skip-sshd-switch', 'bool', 'do not switch host OpenSSH port from 22'),
+            new FlagSpec('y', 'yes', 'bool', 'non-interactive mode with defaults'),
+        ], $installExample)->withUi(
+            category: 'system',
+            title: 'Install & Deploy',
+            tier: 'read',
+            description: 'Generates one-shot installer script for local machine or remote VPS',
+            baseTemplate: 'install',
+            fields: [],
+            scope: 'global',
+            order: 8,
         );
     }
 

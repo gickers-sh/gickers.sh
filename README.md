@@ -104,6 +104,33 @@ A [Docker image][docker] is also available.
 
 ## Setting up a server
 
+### 🚀 One-Shot Automated Installation & Deployment
+
+Deploy your production-ready **gickers.sh** server (Git forge, isolated containers, auto-HTTPS via Caddy, database migrations, systemd service) in a single command with an interactive TokyoNight-styled wizard:
+
+#### Remote One-Shot (Over SSH)
+```bash
+# Linux / macOS
+ssh gickers.sh install | bash
+
+# Windows (PowerShell)
+ssh gickers.sh install | iex
+
+# Automated non-interactive installation
+ssh gickers.sh install --domain code.example.com -y | bash
+```
+
+#### Local One-Shot (After cloning the repository)
+```bash
+# Using Symfony Console
+bin/console install
+
+# Or using the soft CLI
+bin/soft install
+```
+
+---
+
 Make sure `git` is installed, then run `soft serve`. That’s it.
 
 This will create a `data` directory that will store all the repos, ssh keys,

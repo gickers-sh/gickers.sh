@@ -91,6 +91,17 @@ Browse through the core sections of the platform:
 
 ## Quick Navigation: Core Guides
 
+### 0. [⚡ Install: Deploy Your Own gickers.sh Server in One-Shot]
+Deploy an entire production server (Git forge, isolated containers, auto-HTTPS via Caddy, systemd integration) in a single command:
+```bash
+ssh gickers.sh install | bash      # Linux / macOS
+ssh gickers.sh install | iex       # Windows (PowerShell)
+```
+Or locally from a cloned repository:
+```bash
+bin/console install                # Or: bin/soft install
+```
+
 ### 1. [🚀 Signup: Claim Your Username in 5 Seconds](/wiki/signup)
 Unified signup and automated client onboarding in one command:
 ```bash

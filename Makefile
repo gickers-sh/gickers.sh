@@ -184,7 +184,11 @@ docker-import-repos:
 		-v "$(abspath $(DATA_DIR)/lfs):/seed/lfs:ro" \
 		--entrypoint sh worker -c 'cp -a /seed/repos/. /app/.data/repos/ && cp -a /seed/lfs/. /app/.data/lfs/ 2>/dev/null; php bin/soft admin sync-hooks'
 
-## deploy-vps: Run the automated VPS production deployment script (e.g. make deploy-vps ARGS="--domain gits.run")
+## install: Run the one-shot installer & deployment wizard (local or VPS)
+install:
+	@php bin/console install $(ARGS)
+
+## deploy-vps: Run the automated VPS production deployment script (delegates to bin/console install)
 deploy-vps:
 	@./scripts/deploy-vps.sh $(ARGS)
 

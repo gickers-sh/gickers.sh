@@ -7,6 +7,7 @@ namespace App\UI\Ssh\Setup;
 use App\Identity\Domain\Model\User;
 use App\Shared\Domain\Exception\InvalidInput;
 use App\Shared\Infrastructure\Config\ServerSettings;
+use App\UI\Terminal\TerminalFormHandler;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Termstrap\Termstrap;
 
@@ -15,11 +16,15 @@ use Termstrap\Termstrap;
  */
 final class SetupScriptGenerator
 {
+    private readonly TerminalFormHandler $terminalFormHandler;
+
     public function __construct(
         private readonly ServerSettings $serverSettings,
         #[Autowire('%kernel.environment%')]
         private readonly string $environment = 'prod',
+        ?TerminalFormHandler $terminalFormHandler = null,
     ) {
+        $this->terminalFormHandler = $terminalFormHandler ?? new TerminalFormHandler();
     }
 
     public function isProd(): bool
@@ -155,6 +160,7 @@ CONF;
         $templatePath = \dirname(__DIR__, 4) . '/templates/ssh/setup.sh';
 
         return $this->renderScript($templatePath, [
+            '__GUM_LIB__' => $this->terminalFormHandler->getBashLibrary(),
             '__HOST__' => $host,
             '__PORT__' => (string) $port,
             '__PORT_OPT__' => $portOpt,
@@ -199,6 +205,7 @@ CONF;
         $templatePath = \dirname(__DIR__, 4) . '/templates/ssh/setup.ps1';
 
         return $this->renderScript($templatePath, [
+            '__GUM_LIB__' => $this->terminalFormHandler->getPowerShellLibrary(),
             '__HOST__' => $host,
             '__PORT__' => (string) $port,
             '__PORT_OPT__' => $portOpt,

@@ -23,6 +23,7 @@ Available Commands:
   about                Show the server README (About)
   help                 Help about any command
   info                 Show your info
+  install              One-shot installer and deployment wizard for gickers.sh
   pubkey               Manage your public keys
   recover              Recover account access with your backup password
   repo                 Manage repositories
@@ -75,6 +76,72 @@ Examples:
 
 Flags:
   -h, --help   help for info
+########## help install
+Generates a self-contained one-shot installer & deployment wizard for gickers.sh on your local machine or remote VPS.
+
+Configures domain, Docker CE & Compose stack, OpenSSH transition to port 2222, UFW firewall, systemd service, and PostgreSQL.
+
+Scope:
+  Public (all SSH keys and callers).
+
+Flags:
+      --admin-key string    initial admin SSH public key
+      --admin-user string   initial admin username
+      --allow-keyless bool  allow keyless SSH connections (true/false)
+      --allow-signup bool   allow public self-service signup (true/false)
+      --anon-access string  anonymous access policy (read-only, no-access, public)
+      --app-name string     application branding name
+      --bash                force Bash installer script
+      --db-name string      Postgres database name
+      --db-password string  Postgres database password
+      --db-user string      Postgres database user
+      --dir string          installation directory
+      --domain string       target public domain name (FQDN)
+      --dry-run             simulate deployment without modifying system
+      --http-port int       public HTTP port (default: 80)
+      --https-port int      public HTTPS port (default: 443)
+      --lfs bool            enable Git LFS (true/false)
+      --ps1                 force PowerShell installer script
+      --skip-docker         skip Docker CE installation
+      --skip-sshd-switch    do not switch host OpenSSH port from 22
+  -y, --yes                 non-interactive mode with defaults
+
+Usage:
+   install [flags]
+
+Aliases:
+  install, installer
+
+Examples:
+  # One-shot installation & deployment (interactive wizard)
+  ssh -p 2223 localhost install | bash            # Linux / macOS
+  ssh -p 2223 localhost install | iex             # Windows (PowerShell)
+
+  # Automated non-interactive deployment
+  ssh -p 2223 localhost install --domain code.example.com --yes | bash
+
+Flags:
+      --admin-key string        initial admin SSH public key
+      --admin-user string       initial admin username
+      --allow-keyless bool      allow keyless SSH connections (true/false)
+      --allow-signup bool       allow public self-service signup (true/false)
+      --anon-access string      anonymous access policy (read-only, no-access, public)
+      --app-name string         application branding name
+      --bash bool               force Bash installer script
+      --db-name string          Postgres database name
+      --db-password string      Postgres database password
+      --db-user string          Postgres database user
+      --dir string              installation directory
+      --domain string           target public domain name (FQDN)
+      --dry-run bool            simulate deployment without modifying system
+  -h, --help                    help for install
+      --http-port int           public HTTP port (default: 80)
+      --https-port int          public HTTPS port (default: 443)
+      --lfs bool                enable Git LFS (true/false)
+      --ps1 bool                force PowerShell installer script
+      --skip-docker bool        skip Docker CE installation
+      --skip-sshd-switch bool   do not switch host OpenSSH port from 22
+  -y, --yes bool                non-interactive mode with defaults
 ########## help pubkey
 Manage OpenSSH public keys linked to your user account. Registered keys authenticate SSH CLI commands, interactive TUI browsing, and Git push/pull operations.
 
