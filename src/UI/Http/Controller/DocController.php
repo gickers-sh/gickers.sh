@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\UI\Http\Controller;
 
+use App\Access\Application\ServerPolicy;
 use App\Identity\Domain\Model\User;
 use App\Identity\Infrastructure\Security\SecurityUser;
+use App\Shared\Domain\Exception\AccessDenied;
 use App\Shared\Infrastructure\Config\ServerSettings;
 use App\UI\Ssh\Help\CommandDocumentationRegistry;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -25,6 +27,7 @@ final readonly class DocController
         private ServerSettings $settings,
         private Security $security,
         private \Twig\Environment $twig,
+        private ServerPolicy $serverPolicy,
     ) {}
 
     #[Route('/docs', name: 'app_docs_index', methods: ['GET'], priority: 20)]
@@ -32,6 +35,10 @@ final readonly class DocController
     public function __invoke(): Response
     {
         $user = $this->domainUser();
+        if (null === $user && !$this->serverPolicy->anonAccess()->canRead()) {
+            throw new AccessDenied('unauthorized');
+        }
+
         $isAdmin = $user?->isAdmin() ?? false;
         $sshPrefix = $this->sshPrefix();
 
@@ -61,6 +68,10 @@ final readonly class DocController
     public function show(string $path): Response
     {
         $user = $this->domainUser();
+        if (null === $user && !$this->serverPolicy->anonAccess()->canRead()) {
+            throw new AccessDenied('unauthorized');
+        }
+
         $isAdmin = $user?->isAdmin() ?? false;
         $sshPrefix = $this->sshPrefix();
 
