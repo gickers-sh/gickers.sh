@@ -3,6 +3,9 @@
 #  gickers.sh (hosted on gits.run) — Production VPS Deployment Script
 # ==============================================================================
 #  Automated deployment of gickers.sh Git forge & container platform:
+#    - Automatic non-root vs root detection (runs seamlessly without sudo)
+#    - Optional automated transition of host sshd from port 22 to 2222
+#    - Port 22 reserved for gickers.sh Git SSH by default
 #    - System dependency verification & installation (Docker CE, Git LFS, UFW, fail2ban)
 #    - Firewall configuration (ports 80, 443, SSH)
 #    - Production environment configuration (.env.docker)
@@ -58,7 +61,7 @@ DOMAIN="${DOMAIN:-gits.run}"
 APP_NAME="${APP_NAME:-Gickers.sh}"
 # By default, use current project directory (PWD/CWD); can be set explicitly via --dir
 INSTALL_DIR="${INSTALL_DIR:-$SCRIPT_DIR}"
-SSH_PORT="${SSH_PORT:-2223}"
+SSH_PORT="${SSH_PORT:-22}"
 HTTP_PORT="${HTTP_PORT:-80}"
 HTTPS_PORT="${HTTPS_PORT:-443}"
 POSTGRES_USER="${POSTGRES_USER:-gickers}"
@@ -66,7 +69,13 @@ POSTGRES_DB="${POSTGRES_DB:-gickers}"
 ADMIN_SSH_KEY="${ADMIN_SSH_KEY:-}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
 DRY_RUN="${DRY_RUN:-0}"
-SKIP_SYSTEM="${SKIP_SYSTEM:-0}"
+
+# Auto-detect root vs non-root
+if [[ $EUID -eq 0 ]]; then
+    IS_ROOT=1
+else
+    IS_ROOT=0
+fi
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -87,10 +96,6 @@ while [[ $# -gt 0 ]]; do
             ADMIN_SSH_KEY="$2"
             shift 2
             ;;
-        --skip-system|--no-root|--no-sudo)
-            SKIP_SYSTEM=1
-            shift
-            ;;
         -y|--yes|--non-interactive)
             NON_INTERACTIVE=1
             shift
@@ -105,9 +110,8 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --domain <domain>        Public domain name (default: gits.run)"
             echo "  --dir <path>             Installation directory (default: current project directory)"
-            echo "  --ssh-port <port>        Public SSH port for Git/CLI (default: 2223)"
+            echo "  --ssh-port <port>        Public SSH port for Git/CLI (default: 22)"
             echo "  --admin-key <pubkey>     Initial admin SSH public key"
-            echo "  --skip-system            Skip OS packages, UFW firewall and systemd (run as non-root)"
             echo "  -y, --non-interactive    Run non-interactively with defaults"
             echo "  --dry-run                Simulate deployment without applying changes"
             echo "  -h, --help               Show this help message"
@@ -125,31 +129,19 @@ banner
 # ------------------------------------------------------------------------------
 # 1. Privileges & OS Check
 # ------------------------------------------------------------------------------
-log_info "Vérification des prérequis système..."
+log_info "Vérification des privilèges et prérequis système..."
 
-if [[ $EUID -ne 0 ]]; then
-    if [[ "$SKIP_SYSTEM" -eq 1 ]]; then
-        log_info "Mode sans privilèges root (--skip-system). Les étapes système (apt, ufw, systemd) seront ignorées."
-    elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-        log_warn "Exécution en tant qu'utilisateur non-root ($(whoami)) avec accès Docker détecté."
-        log_info "Activation automatique du mode --skip-system (gestion système ignorée)."
-        SKIP_SYSTEM=1
-    elif [[ "$DRY_RUN" -eq 1 ]]; then
-        log_warn "[DRY-RUN] Exécution en tant qu'utilisateur non-root ($(whoami)). Le déploiement réel nécessitera sudo/root."
-    else
-        log_error "Ce script nécessite les privilèges root (sudo) pour installer Docker, configurer le pare-feu et systemd."
-        log_error "Si votre VPS est déjà configuré et que votre utilisateur a accès à Docker, relancez avec : $0 --skip-system"
-        exit 1
-    fi
+if [[ $IS_ROOT -eq 1 ]]; then
+    log_info "Privilèges root détectés : les étapes d'infrastructure système (apt, ufw, bascule sshd, systemd) seront configurées."
+else
+    log_info "Utilisateur non-root détecté ($(whoami)) : exécution automatique en mode applicatif (les étapes système demandant sudo sont ignorées)."
 fi
 
 if [[ -f /etc/os-release ]]; then
     . /etc/os-release
     OS_NAME="$ID"
     OS_VERSION="$VERSION_ID"
-    log_info "Système d'exploitation détecté : $PRETTY_NAME ($OS_NAME $OS_VERSION)"
-else
-    log_warn "Fichier /etc/os-release introuvable. Système non standard."
+    log_info "Système d'exploitation : $PRETTY_NAME ($OS_NAME $OS_VERSION)"
 fi
 
 # ------------------------------------------------------------------------------
@@ -164,10 +156,12 @@ echo "  • Ports HTTP / HTTPS    : $HTTP_PORT / $HTTPS_PORT"
 
 # Auto-detect admin SSH public key if not provided
 if [[ -z "$ADMIN_SSH_KEY" ]]; then
-    if [[ -f /root/.ssh/authorized_keys ]]; then
+    if [[ -f /root/.ssh/authorized_keys && $IS_ROOT -eq 1 ]]; then
         ADMIN_SSH_KEY=$(head -n 1 /root/.ssh/authorized_keys || true)
     elif [[ -n "${SUDO_USER:-}" && -f "/home/$SUDO_USER/.ssh/authorized_keys" ]]; then
         ADMIN_SSH_KEY=$(head -n 1 "/home/$SUDO_USER/.ssh/authorized_keys" || true)
+    elif [[ -f "$HOME/.ssh/authorized_keys" ]]; then
+        ADMIN_SSH_KEY=$(head -n 1 "$HOME/.ssh/authorized_keys" || true)
     fi
 fi
 
@@ -198,10 +192,10 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
     exit 0
 fi
 
-if [[ "$SKIP_SYSTEM" -eq 0 ]]; then
-    # ------------------------------------------------------------------------------
-    # 3. Installation des paquets système
-    # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# 3. Étapes d'infrastructure système (uniquement si root/sudo)
+# ------------------------------------------------------------------------------
+if [[ $IS_ROOT -eq 1 ]]; then
     log_info "Mise à jour des dépôts et installation des dépendances système..."
 
     export DEBIAN_FRONTEND=noninteractive
@@ -219,9 +213,7 @@ if [[ "$SKIP_SYSTEM" -eq 0 ]]; then
         openssl \
         tar
 
-    # ------------------------------------------------------------------------------
-    # 4. Installation officielle de Docker CE & Docker Compose Plugin
-    # ------------------------------------------------------------------------------
+    # Installation officielle de Docker CE si nécessaire
     if ! command -v docker >/dev/null 2>&1; then
         log_info "Installation de Docker CE officiel..."
         install -m 0755 -d /etc/apt/keyrings
@@ -245,66 +237,106 @@ if [[ "$SKIP_SYSTEM" -eq 0 ]]; then
 
     systemctl enable --now docker
 
-    # Add non-root sudo user to docker group if applicable
+    # Ajouter l'utilisateur non-root appelant au groupe docker
     if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
         usermod -aG docker "$SUDO_USER" 2>/dev/null || true
         log_info "Utilisateur non-root '$SUDO_USER' ajouté au groupe docker."
     fi
 
-    # ------------------------------------------------------------------------------
-    # 5. Configuration du Pare-feu (UFW)
-    # ------------------------------------------------------------------------------
-    log_info "Configuration des règles de pare-feu UFW..."
+    # --------------------------------------------------------------------------
+    # Bascule automatique du daemon SSH système de 22 vers 2222
+    # --------------------------------------------------------------------------
+    if [[ "$SSH_PORT" == "22" ]]; then
+        # Vérifier si OpenSSH écoute actuellement sur le port 22
+        SSH_OCCUPIED=$(ss -tlnp 2>/dev/null | grep -E ':22[[:space:]]' | grep -E 'sshd|systemd|ssh' || true)
+        if [[ -n "$SSH_OCCUPIED" ]]; then
+            log_warn "Le port 22 est actuellement utilisé par le serveur SSH du système hôte (sshd)."
+            log_info "Bascule sécurisée d'OpenSSH vers le port 2222 pour libérer le port 22..."
 
-    # Preserve current SSH port
-    CURRENT_SSH_PORT=$(ss -tlnp 2>/dev/null | grep -E 'sshd|ssh' | awk '{print $4}' | awk -F: '{print $NF}' | head -n 1 || echo "22")
-    if [[ -z "$CURRENT_SSH_PORT" ]]; then
-        CURRENT_SSH_PORT="22"
+            # 1. Ouvrir le port 2222 dans UFW AVANT de toucher à SSH
+            if command -v ufw >/dev/null 2>&1; then
+                ufw allow 2222/tcp comment 'System SSH (moved from 22)' || true
+            fi
+
+            # 2. Configurer sshd pour écouter sur 2222
+            if [[ -d /etc/ssh/sshd_config.d ]]; then
+                cat > /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf << 'EOF_SSHD'
+# Configuré automatiquement par gickers.sh pour libérer le port 22
+Port 2222
+EOF_SSHD
+                chmod 644 /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf
+            fi
+
+            if [[ -f /etc/ssh/sshd_config ]]; then
+                # Si Port 22 est explicitement décommenté dans sshd_config principal, le remplacer
+                sed -i -E 's/^[#[:space:]]*Port[[:space:]]+22[[:space:]]*$/Port 2222/' /etc/ssh/sshd_config
+            fi
+
+            # Gestion Ubuntu 22.10+ / 24.04 (systemd ssh.socket activation)
+            if systemctl is-active --quiet ssh.socket 2>/dev/null; then
+                log_info "Ajustement du socket systemd ssh.socket..."
+                mkdir -p /etc/systemd/system/ssh.socket.d
+                cat > /etc/systemd/system/ssh.socket.d/listen-2222.conf << 'EOF_SOCKET'
+[Socket]
+ListenStream=
+ListenStream=2222
+EOF_SOCKET
+                systemctl daemon-reload
+                systemctl restart ssh.socket || true
+            else
+                systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null || true
+            fi
+
+            sleep 2
+            log_success "Le SSH système du VPS écoute désormais sur le port 2222."
+            echo ""
+            echo -e "${YELLOW}========================================================================${NC}"
+            echo -e "${BOLD}${YELLOW}  [IMPORTANT] TRANSITION DU PORT SSH DU VPS EFFECTUÉE :${NC}"
+            echo -e "  Le port 22 est désormais libéré pour ${CYAN}gickers.sh (Git & TUI)${NC}."
+            echo -e "  Pour vos prochaines connexions d'administration SSH au serveur VPS :"
+            echo -e "  ${BOLD}ssh -p 2222 $(whoami)@<IP_DU_VPS>${NC}"
+            echo -e "  (Votre session SSH actuelle n'est pas interrompue)"
+            echo -e "${YELLOW}========================================================================${NC}"
+            echo ""
+        else
+            log_info "Le port 22 est déjà libre sur l'hôte."
+        fi
     fi
 
-    log_info "Autorisation du port SSH système ($CURRENT_SSH_PORT/tcp)..."
-    ufw allow "$CURRENT_SSH_PORT"/tcp comment 'Host SSH daemon' || true
+    # --------------------------------------------------------------------------
+    # Configuration du Pare-feu (UFW)
+    # --------------------------------------------------------------------------
+    log_info "Configuration des règles de pare-feu UFW..."
+    CURRENT_SSH_PORT=$(ss -tlnp 2>/dev/null | grep -E 'sshd|ssh' | awk '{print $4}' | awk -F: '{print $NF}' | head -n 1 || echo "2222")
+    [[ -z "$CURRENT_SSH_PORT" ]] && CURRENT_SSH_PORT="2222"
 
-    # Allow HTTP & HTTPS
-    log_info "Autorisation des ports Web (80/tcp, 443/tcp)..."
+    ufw allow "$CURRENT_SSH_PORT"/tcp comment 'Host SSH daemon' || true
     ufw allow "$HTTP_PORT"/tcp comment 'Gickers HTTP / ACME' || true
     ufw allow "$HTTPS_PORT"/tcp comment 'Gickers HTTPS' || true
-
-    # Allow Gickers SSH port if different from system SSH
     if [[ "$SSH_PORT" != "$CURRENT_SSH_PORT" ]]; then
-        log_info "Autorisation du port Git SSH gickers ($SSH_PORT/tcp)..."
         ufw allow "$SSH_PORT"/tcp comment 'Gickers Git SSH' || true
     fi
-
-    # Enable UFW non-interactively
     ufw --force enable || true
     log_success "Pare-feu configuré."
-else
-    log_info "Étapes système ignorées (--skip-system)."
 fi
 
 # ------------------------------------------------------------------------------
-# 6. Déploiement des fichiers de l'application
+# 4. Déploiement applicatif & configuration
 # ------------------------------------------------------------------------------
 log_info "Préparation du répertoire d'application $INSTALL_DIR..."
 mkdir -p "$INSTALL_DIR"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
 if [[ "$SCRIPT_DIR" != "$INSTALL_DIR" ]]; then
-    log_info "Copie des fichiers du projet depuis $SCRIPT_DIR vers $INSTALL_DIR..."
+    log_info "Synchronisation des fichiers du projet vers $INSTALL_DIR..."
     tar --exclude='.git' --exclude='.data' --exclude='var' -cf - -C "$SCRIPT_DIR" . | tar -xf - -C "$INSTALL_DIR"
 fi
 
 cd "$INSTALL_DIR"
 
-# Ensure data directories exist with correct permissions
+# Ensure data directories exist
 mkdir -p .data .data/caddy/sites var var/cache var/log
 chmod 755 .data .data/caddy/sites var
 
-# ------------------------------------------------------------------------------
-# 7. Génération des secrets et du fichier .env.docker
-# ------------------------------------------------------------------------------
 log_info "Génération de la configuration .env.docker de production..."
 
 APP_SECRET=$(openssl rand -hex 16)
@@ -322,6 +354,13 @@ if [[ -f .env.docker ]]; then
     if [[ -n "$EXISTING_PG_PASS" && "$EXISTING_PG_PASS" != "gickers" ]]; then
         POSTGRES_PASSWORD="$EXISTING_PG_PASS"
     fi
+fi
+
+# Compute SSH public URL
+if [[ "$SSH_PORT" == "22" ]]; then
+    SOFT_SERVE_SSH_URL="ssh://${DOMAIN}"
+else
+    SOFT_SERVE_SSH_URL="ssh://${DOMAIN}:${SSH_PORT}"
 fi
 
 cat > .env.docker << EOF
@@ -347,7 +386,7 @@ SSH_PORT=${SSH_PORT}
 # Public Host & URLs (Production Target: ${DOMAIN})
 APP_DOMAIN=${DOMAIN}
 SOFT_SERVE_HTTP_PUBLIC_URL=https://${DOMAIN}
-SOFT_SERVE_SSH_PUBLIC_URL=ssh://${DOMAIN}:${SSH_PORT}
+SOFT_SERVE_SSH_PUBLIC_URL=${SOFT_SERVE_SSH_URL}
 
 # TLS (Empty for automated Let's Encrypt certificates managed by Caddy)
 CADDY_TLS=""
@@ -371,7 +410,7 @@ chmod 600 .env.docker
 log_success "Fichier .env.docker configuré."
 
 # ------------------------------------------------------------------------------
-# 8. Build et initialisation des conteneurs
+# 5. Build et démarrage de la stack Docker
 # ------------------------------------------------------------------------------
 log_info "Construction des images Docker gickers-sh..."
 docker compose --env-file .env.docker build
@@ -393,16 +432,16 @@ if [[ $RETRY -eq $MAX_RETRY ]]; then
 fi
 log_success "PostgreSQL est prêt."
 
-log_info "Exécution du conteneur d'initialisation (migrations & boostrap)..."
+log_info "Exécution du conteneur d'initialisation (migrations & bootstrap)..."
 docker compose --env-file .env.docker run --rm init
 
 log_info "Démarrage complet de la stack (HTTP, SSH, Worker, Deploy-Engine)..."
 docker compose --env-file .env.docker up -d
 
 # ------------------------------------------------------------------------------
-# 9. Service Systemd pour persistance au démarrage du VPS
+# 6. Service Systemd (si root) et réassignation des permissions
 # ------------------------------------------------------------------------------
-if [[ "$SKIP_SYSTEM" -eq 0 && $EUID -eq 0 ]]; then
+if [[ $IS_ROOT -eq 1 ]]; then
     log_info "Configuration du service systemd gickers.service..."
 
     cat > /etc/systemd/system/gickers.service << EOF
@@ -426,19 +465,19 @@ WantedBy=multi-user.target
 EOF
 
     systemctl daemon-reload
-    systemctl enable gickers.service
+    systemctl enable gickers.service 2>/dev/null || true
     log_success "Service systemd gickers.service activé."
-fi
 
-# Restore file ownership to non-root user if run with sudo
-if [[ $EUID -eq 0 && -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
-    chown -R "$SUDO_USER":"$SUDO_USER" "$INSTALL_DIR" 2>/dev/null || true
+    # Rétablir la propriété des fichiers à l'utilisateur non-root appelant
+    if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
+        chown -R "$SUDO_USER":"$SUDO_USER" "$INSTALL_DIR" 2>/dev/null || true
+    fi
 fi
 
 # ------------------------------------------------------------------------------
-# 10. Validation & Résumé
+# 7. Validation & Résumé
 # ------------------------------------------------------------------------------
-sleep 5
+sleep 3
 log_info "État des conteneurs :"
 docker compose --env-file .env.docker ps
 
@@ -463,7 +502,7 @@ echo ""
 echo -e "  ${BOLD}Administration du service :${NC}"
 echo -e "    • Statut stack :       ${YELLOW}docker compose -f ${INSTALL_DIR}/compose.yaml ps${NC}"
 echo -e "    • Voir les logs :      ${YELLOW}docker compose -f ${INSTALL_DIR}/compose.yaml logs -f${NC}"
-echo -e "    • Redémarrer :         ${YELLOW}systemctl restart gickers${NC}"
+echo -e "    • Redémarrer :         ${YELLOW}docker compose -f ${INSTALL_DIR}/compose.yaml restart${NC}"
 echo -e "    • Fichier config :     ${YELLOW}${INSTALL_DIR}/.env.docker${NC}"
 echo ""
 echo -e "  ${BOLD}Rappels DNS :${NC}"
@@ -471,5 +510,3 @@ echo -e "    Assurez-vous que l'enregistrement DNS A ou CNAME pour ${BOLD}${DOMA
 echo -e "    vers l'adresse IP publique de ce serveur VPS pour que Caddy délivre"
 echo -e "    automatiquement le certificat SSL Let's Encrypt."
 echo ""
-EOF
-chmod +x /Users/duck/app/gophp/codes.sh/scripts/deploy-vps.sh

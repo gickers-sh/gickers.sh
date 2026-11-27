@@ -30,7 +30,7 @@ x-app: &app
     # 0.0.0.0 inside the container; the host-side port is set per service below.
     SOFT_SERVE_SSH_LISTEN_ADDR: 0.0.0.0:2223
     SOFT_SERVE_HTTP_LISTEN_ADDR: 0.0.0.0:80
-    SOFT_SERVE_SSH_PUBLIC_URL: ${SOFT_SERVE_SSH_PUBLIC_URL:-ssh://${APP_DOMAIN:-gits.run}:${SSH_PORT:-2223}}
+    SOFT_SERVE_SSH_PUBLIC_URL: ${SOFT_SERVE_SSH_PUBLIC_URL:-ssh://${APP_DOMAIN:-gits.run}}
     SOFT_SERVE_HTTP_PUBLIC_URL: ${SOFT_SERVE_HTTP_PUBLIC_URL:-https://${APP_DOMAIN:-gits.run}}
     SOFT_SERVE_LFS_ENABLED: ${SOFT_SERVE_LFS_ENABLED:-true}
     SOFT_SERVE_ANON_ACCESS: ${SOFT_SERVE_ANON_ACCESS:-read-only}
@@ -116,7 +116,7 @@ services:
     <<: *app
     command: ["serve", "--only=ssh", "--skip-init"]
     ports:
-      - "${SSH_PORT:-2223}:2223"
+      - "${SSH_PORT:-22}:2223"
     environment:
       <<: *app-env
       CADDY_ADMIN_ADDR: http:2019
