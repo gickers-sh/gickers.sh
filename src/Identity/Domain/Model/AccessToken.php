@@ -15,6 +15,25 @@ class AccessToken
 {
     public const PREFIX = 'ss_';
 
+    /** @var list<string> */
+    public const VALID_USER_SCOPES = [
+        '*',
+        'all',
+        'admin',
+        'repo:read',
+        'repo:write',
+        'repo:admin',
+        'read',
+        'write',
+        'lfs',
+    ];
+
+    /** @var list<string> */
+    public const EPHEMERAL_LFS_SCOPES = [
+        'lfs:download',
+        'lfs:upload',
+    ];
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -172,8 +191,10 @@ class AccessToken
 
     public function hasScope(string $scope): bool
     {
-        $scopes = $this->scopes();
-        if (in_array('*', $scopes, true) || in_array('all', $scopes, true)) {
+        $scope = strtolower(trim($scope));
+        $scopes = array_map(static fn (string $s): string => strtolower(trim($s)), $this->scopes());
+
+        if (in_array('*', $scopes, true) || in_array('all', $scopes, true) || in_array('admin', $scopes, true)) {
             return true;
         }
 
@@ -181,16 +202,36 @@ class AccessToken
             return true;
         }
 
-        // Hierarchy check, e.g. 'write' covers 'read', 'repo:write' covers 'repo:read', 'admin' covers everything
-        if (in_array('admin', $scopes, true) || in_array('repo:admin', $scopes, true)) {
-            return true;
+        return match ($scope) {
+            'repo:read', 'read' => [] !== array_intersect($scopes, ['repo:admin', 'repo:write', 'repo:read', 'write', 'read']),
+            'repo:write', 'write' => [] !== array_intersect($scopes, ['repo:admin', 'repo:write', 'write']),
+            'repo:admin' => in_array('repo:admin', $scopes, true),
+            'lfs:download' => [] !== array_intersect($scopes, ['lfs', 'lfs:upload', 'lfs:download', 'repo:admin', 'repo:write', 'repo:read', 'write', 'read']),
+            'lfs:upload' => [] !== array_intersect($scopes, ['lfs', 'lfs:upload', 'repo:admin', 'repo:write', 'write']),
+            'lfs' => in_array('lfs', $scopes, true),
+            default => false,
+        };
+    }
+
+    public function isEphemeralLfsOnly(): bool
+    {
+        $scopes = array_map(static fn (string $s): string => strtolower(trim($s)), $this->scopes());
+        if ([] === $scopes) {
+            return false;
         }
 
-        if (str_ends_with($scope, ':read') || 'read' === $scope) {
-            return in_array('write', $scopes, true) || in_array('repo:write', $scopes, true);
+        foreach ($scopes as $scope) {
+            if (!in_array($scope, self::EPHEMERAL_LFS_SCOPES, true)) {
+                return false;
+            }
         }
 
-        return false;
+        return true;
+    }
+
+    public function hasRepoRestrictions(): bool
+    {
+        return [] !== $this->repos();
     }
 
     public function allowsRepo(string $repo): bool
@@ -200,14 +241,20 @@ class AccessToken
             return true;
         }
 
-        $sanitized = preg_replace('/\.git$/', '', $repo) ?? $repo;
+        $sanitized = self::normalizeRepoName($repo);
         foreach ($repos as $r) {
-            $rSanitized = preg_replace('/\.git$/', '', $r) ?? $r;
-            if (0 === strcasecmp($sanitized, $rSanitized)) {
+            if (0 === strcasecmp($sanitized, self::normalizeRepoName($r))) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static function normalizeRepoName(string $repo): string
+    {
+        $trimmed = trim($repo, " \t\n\r\0\x0B/'\"");
+
+        return preg_replace('/\.git$/i', '', $trimmed) ?? $trimmed;
     }
 }

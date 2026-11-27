@@ -183,10 +183,13 @@ final class AccessTokenAuthenticator extends AbstractAuthenticator
     {
         $attr = $request->attributes->get('repo');
         if (\is_string($attr) && '' !== $attr) {
-            return preg_replace('/\.git$/', '', $attr) ?? $attr;
+            return preg_replace('/\.git$/i', '', trim($attr, '/')) ?? $attr;
         }
 
         $path = $request->getPathInfo();
+        if (preg_match('#^/(.+?)(?:\.git)?(?:/info/lfs(?:/.*)?|/info/refs|/git-(?:upload|receive)-pack)$#', $path, $m)) {
+            return $m[1];
+        }
         if (preg_match('#^/([^/]+?)(?:\.git)?(?:/.*)?$#', $path, $m)) {
             return $m[1];
         }
@@ -200,9 +203,35 @@ final class AccessTokenAuthenticator extends AbstractAuthenticator
             throw new BadCredentialsException(sprintf('Access token is not authorized for repository "%s".', $repo));
         }
 
-        $isPush = str_contains($request->getPathInfo(), 'git-receive-pack') || 'git-receive-pack' === $request->query->get('service');
-        if ($isPush && !$token->hasScope('repo:write') && !$token->hasScope('write') && !$token->hasScope('*') && !$token->hasScope('all')) {
+        $path = $request->getPathInfo();
+        $isLfs = str_contains($path, '/info/lfs') || 'application/vnd.git-lfs+json' === $request->headers->get('Accept');
+        if ($isLfs) {
+            $method = strtoupper($request->getMethod());
+            $isWriteLfs = \in_array($method, ['PUT', 'DELETE'], true)
+                || ('POST' === $method && (str_contains($path, '/verify') || str_contains($path, '/locks')));
+            if (!$isWriteLfs && 'POST' === $method && str_contains($path, '/objects/batch')) {
+                $decoded = json_decode($request->getContent(), true);
+                if (\is_array($decoded) && 'upload' === ($decoded['operation'] ?? null)) {
+                    $isWriteLfs = true;
+                }
+            }
+            if (!$token->hasScope($isWriteLfs ? 'lfs:upload' : 'lfs:download')) {
+                throw new BadCredentialsException('Access token missing required scope for Git LFS.');
+            }
+
+            return;
+        }
+
+        if ($token->isEphemeralLfsOnly()) {
+            throw new BadCredentialsException('Git LFS ephemeral token cannot be used outside Git LFS endpoints.');
+        }
+
+        $isPush = str_contains($path, 'git-receive-pack') || 'git-receive-pack' === $request->query->get('service');
+        if ($isPush && !$token->hasScope('repo:write')) {
             throw new BadCredentialsException('Access token missing required write scope.');
+        }
+        if (!$isPush && !$token->hasScope('repo:read')) {
+            throw new BadCredentialsException('Access token missing required read scope.');
         }
     }
 

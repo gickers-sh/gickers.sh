@@ -55,13 +55,15 @@ final readonly class IssueLfsToken
         $expiresAt = $now->add(new \DateInterval('PT'.self::TTL_SECONDS.'S'));
         $issuer = $this->settings->httpPublicUrl;
 
+        $ephemeralScope = 'upload' === $operation ? 'lfs:upload' : 'lfs:download';
+
         [, $secret] = ($this->issueAccessToken)(
             actor: $actor,
             name: sprintf('lfs-%s-%s', $name->value, bin2hex(random_bytes(3))),
             expiresAt: $expiresAt,
-            scopes: ['lfs'],
+            scopes: [$ephemeralScope],
             repos: [$name->value],
-            description: sprintf('Git LFS ephemeral token for %s', $name->value),
+            description: sprintf('Git LFS ephemeral %s token for %s', $operation, $name->value),
         );
 
         return [

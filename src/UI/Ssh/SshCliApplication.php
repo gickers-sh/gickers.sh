@@ -22,6 +22,8 @@ class SshCliApplication extends Application
     public function __construct(
         #[AutowireLocator('app.ssh_command', defaultIndexMethod: 'sshName')]
         private readonly ContainerInterface $commandLocator,
+        private readonly ?SshSession $sshSession = null,
+        private readonly ?SshTokenAuthorizer $tokenAuthorizer = null,
     ) {
         parent::__construct('codes.sh', '1.0.0');
         $this->setAutoExit(false);
@@ -109,6 +111,18 @@ class SshCliApplication extends Application
         $args = $resolved->arguments;
         if (!$hasRawOption) {
             $args = array_values(array_filter($args, static fn (string $a): bool => '--raw' !== $a));
+        }
+
+        $accessToken = $this->sshSession?->accessToken();
+        if (null !== $accessToken && null !== $this->tokenAuthorizer) {
+            $boundInput = new ArgvInput(['ssh', ...$args]);
+            $boundInput->bind($command->getDefinition());
+            $this->tokenAuthorizer->assertCommandAllowed(
+                $accessToken,
+                $resolved->name,
+                $boundInput,
+                $this->sshSession->user(),
+            );
         }
 
         $argv = ['ssh', $resolved->name, ...$args];

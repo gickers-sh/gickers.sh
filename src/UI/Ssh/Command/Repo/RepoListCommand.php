@@ -58,6 +58,14 @@ final class RepoListCommand extends AbstractSshCommand
             $repos = $this->repoQuery->visibleTo($actor);
         }
 
+        $accessToken = $this->sshSession->accessToken();
+        if (null !== $accessToken && $accessToken->hasRepoRestrictions()) {
+            $repos = array_values(array_filter(
+                $repos,
+                static fn ($repo): bool => $accessToken->allowsRepo($repo->nameString()),
+            ));
+        }
+
         foreach ($repos as $repo) {
             if ($this->isDecorated($output)) {
                 $line = \App\UI\Tui\Render\Theme::style($repo->nameString(), \App\UI\Tui\Render\Theme::CYAN, bold: true);

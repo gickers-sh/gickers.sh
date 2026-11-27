@@ -46,6 +46,7 @@ final class SshEntrypointCommand extends Command
         private readonly \App\Identity\Application\AuthenticateAccessToken $authenticateAccessToken,
         private readonly \App\Identity\Domain\UserStore $userStore,
         private readonly \App\Identity\Infrastructure\Security\LoginThrottler $loginThrottler,
+        private readonly SshTokenAuthorizer $tokenAuthorizer,
     ) {
         parent::__construct();
     }
@@ -105,63 +106,69 @@ final class SshEntrypointCommand extends Command
             $fingerprint = $this->resolveFingerprint($input);
             $rawKey = $this->resolveRawKey($input);
             $user = null;
+            $accessToken = null;
+            $isRecover = $this->isRecoverCommandLine($commandLine);
 
             $clientIdentifier = $this->resolveClientIdentifier($fingerprint);
 
             if (null !== $tokenSecret && '' !== $tokenSecret) {
-                $throttleTarget = $targetUsername ?? 'token:' . substr(hash('sha256', $tokenSecret), 0, 16);
-                $this->loginThrottler->assertNotLocked($throttleTarget, $clientIdentifier);
+                $this->loginThrottler->assertClientNotLocked($clientIdentifier);
 
-                $tokenUser = ($this->authenticateAccessToken)($tokenSecret);
-                if (null === $tokenUser) {
-                    $this->loginThrottler->recordFailure($throttleTarget, $clientIdentifier);
+                $accessToken = $this->authenticateAccessToken->findToken($tokenSecret);
+                if (null === $accessToken) {
+                    $this->loginThrottler->recordClientFailure($clientIdentifier);
                     $errOutput->writeln('<error>Invalid or expired personal access token.</error>');
 
                     return Command::FAILURE;
                 }
+                if ($accessToken->isEphemeralLfsOnly()) {
+                    $this->loginThrottler->recordClientFailure($clientIdentifier);
+                    throw new AccessDenied('Git LFS ephemeral token cannot be used over SSH.');
+                }
+                $tokenUser = $accessToken->user();
                 if (null !== $targetUsername && $tokenUser->username() !== strtolower($targetUsername)) {
-                    $this->loginThrottler->recordFailure($throttleTarget, $clientIdentifier);
-                    $errOutput->writeln(sprintf('<error>Personal access token belongs to @%s, not requested @%s.</error>', $tokenUser->username(), $targetUsername));
+                    $this->loginThrottler->recordClientFailure($clientIdentifier);
+                    $errOutput->writeln('<error>Personal access token is not valid for the requested account.</error>');
 
                     return Command::FAILURE;
                 }
-                $this->loginThrottler->recordSuccess($throttleTarget, $clientIdentifier);
+                $this->loginThrottler->recordClientSuccess($clientIdentifier);
                 $user = $tokenUser;
             } elseif (null !== $fingerprint && '' !== $fingerprint) {
-                if (null !== $targetUsername) {
-                    $this->loginThrottler->assertNotLocked($targetUsername, $clientIdentifier);
+                if (null !== $targetUsername && !$isRecover) {
+                    $this->loginThrottler->assertClientNotLocked($clientIdentifier);
                 }
 
                 $user = ($this->authenticateSshKey)($fingerprint, $targetUsername);
-                if (null === $user && null !== $targetUsername) {
+                if (null === $user && null !== $targetUsername && !$isRecover) {
                     $targetUser = $this->userStore->byUsername($targetUsername);
                     if (null !== $targetUser) {
-                        $this->loginThrottler->recordFailure($targetUsername, $clientIdentifier);
+                        $this->loginThrottler->recordClientFailure($clientIdentifier);
                         $errOutput->writeln(sprintf('<error>The presented SSH key is not authorized for account @%s.</error>', $targetUsername));
 
                         return Command::FAILURE;
                     }
                 }
                 if (null !== $user && null !== $targetUsername) {
-                    $this->loginThrottler->recordSuccess($targetUsername, $clientIdentifier);
+                    $this->loginThrottler->recordClientSuccess($clientIdentifier);
                 }
             }
 
             // A presented key (even an unregistered one) is not a keyless caller: it may still
-            // reach `signup`. Only truly keyless connections are gated by allow-keyless here.
+            // reach `signup` or `recover`. Only truly keyless connections are gated by allow-keyless here.
             $hasFingerprint = null !== $fingerprint && '' !== $fingerprint;
             if (null === $user && !$hasFingerprint && !$this->serverPolicy->allowKeyless()) {
                 throw new AccessDenied('unauthorized');
             }
-            // An unknown public key may only self-register when allow-signup is enabled;
-            // every other surface stays closed until it is bound to a user.
+            // An unknown public key may recover an existing account via backup password even when
+            // self-service signup is closed; all other surfaces stay closed when allow-signup=false.
             $unknownKey = null === $user && $hasFingerprint;
-            if ($unknownKey && !$this->serverPolicy->allowSignup()) {
+            if ($unknownKey && !$isRecover && !$this->serverPolicy->allowSignup()) {
                 throw new AccessDenied('unauthorized');
             }
 
             // Fill SshSession and Security TokenStorage
-            $this->sshSession->authenticate($user, $fingerprint, $rawKey);
+            $this->sshSession->authenticate($user, $fingerprint, $rawKey, $accessToken);
             if (null !== $user) {
                 $secUser = new SecurityUser($user);
                 $token = new PreAuthenticatedToken($secUser, 'ssh', $secUser->getRoles());
@@ -173,6 +180,9 @@ final class SshEntrypointCommand extends Command
             if ('' === $commandLine) {
                 if ($unknownKey) {
                     return $this->denyUnknownKey($errOutput, $targetUsername);
+                }
+                if (null !== $accessToken) {
+                    $this->tokenAuthorizer->assertTuiAllowed($accessToken, null, $user);
                 }
 
                 return $this->runTui(null, $output, $errOutput);
@@ -198,6 +208,9 @@ final class SshEntrypointCommand extends Command
             if ([] === $tokens) {
                 if ($unknownKey) {
                     return $this->denyUnknownKey($errOutput, $targetUsername);
+                }
+                if (null !== $accessToken) {
+                    $this->tokenAuthorizer->assertTuiAllowed($accessToken, null, $user);
                 }
 
                 return $this->runTui(null, $output, $errOutput);
@@ -225,6 +238,9 @@ final class SshEntrypointCommand extends Command
             // TUI routing
             if ('tui' === $firstToken || '-t' === $firstToken || '--target' === $firstToken || str_starts_with($firstToken, '-t=')) {
                 $initialRepo = $this->parseTuiRepo($tokens);
+                if (null !== $accessToken) {
+                    $this->tokenAuthorizer->assertTuiAllowed($accessToken, $initialRepo, $user);
+                }
 
                 return $this->runTui($initialRepo, $output, $errOutput);
             }
@@ -233,6 +249,9 @@ final class SshEntrypointCommand extends Command
             if (in_array($firstToken, ['git-upload-pack', 'git-receive-pack', 'git-upload-archive'], true)) {
                 if (count($tokens) < 2) {
                     throw new InvalidInput('Missing repository argument');
+                }
+                if (null !== $accessToken) {
+                    $this->tokenAuthorizer->assertGitTransportAllowed($accessToken, $firstToken, $tokens[1], $user);
                 }
 
                 $app = $this->getApplication();
@@ -257,6 +276,9 @@ final class SshEntrypointCommand extends Command
                 if (3 !== count($tokens)) {
                     throw new InvalidInput('usage: git-lfs-authenticate REPO OPERATION');
                 }
+                if (null !== $accessToken) {
+                    $this->tokenAuthorizer->assertLfsAuthenticateAllowed($accessToken, $tokens[1], $tokens[2], $user);
+                }
 
                 $output->writeln(
                     json_encode(($this->issueLfsToken)($user, $tokens[1], $tokens[2]), \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_SLASHES),
@@ -274,7 +296,9 @@ final class SshEntrypointCommand extends Command
 
             // Help routing: `help [path…]`, a trailing `--help`/`-h`, or a bare
             // command group all render cobra-style usage, matching upstream.
-            $isAdmin = null !== $user && $user->isAdmin();
+            $isAdmin = null !== $user
+                && $user->isAdmin()
+                && (null === $accessToken || ($accessToken->hasScope('admin') && !$accessToken->hasRepoRestrictions()));
             $helpOutput = $this->renderHelp($tokens, $firstToken, $unknownKey, $isAdmin, $output, $targetUsername);
             if (null !== $helpOutput) {
                 $output->write($helpOutput, false, OutputInterface::OUTPUT_RAW);
@@ -444,6 +468,29 @@ final class SshEntrypointCommand extends Command
         }
 
         return false;
+    }
+
+    private function isRecoverCommandLine(string $commandLine): bool
+    {
+        if ('' === $commandLine) {
+            return false;
+        }
+
+        try {
+            $tokens = (new StringInput($commandLine))->getRawTokens(false);
+        } catch (\Throwable) {
+            return false;
+        }
+
+        if ([] === $tokens) {
+            return false;
+        }
+
+        if ('recover' === $tokens[0]) {
+            return true;
+        }
+
+        return 'help' === $tokens[0] && isset($tokens[1]) && 'recover' === $tokens[1];
     }
 
     private function resolveClientIdentifier(?string $fingerprint): string

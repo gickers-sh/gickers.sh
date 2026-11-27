@@ -46,6 +46,41 @@ final readonly class LoginThrottler
         }
     }
 
+    /**
+     * Checks only whether the caller address/client is currently locked out (without locking a target account).
+     * Used for non-secret probes such as unrecognized SSH keys or invalid PATs to prevent remote account lockout DoS.
+     */
+    public function assertClientNotLocked(string $clientIdentifier): void
+    {
+        if ('' === trim($clientIdentifier)) {
+            return;
+        }
+
+        $now = $this->clock->now()->getTimestamp();
+        $clientRetry = $this->getRetryAfter($this->clientKey($clientIdentifier), $now);
+        if ($clientRetry > 0) {
+            throw new AccessDenied(sprintf('Too many failed attempts from your address. Try again in %d seconds.', $clientRetry));
+        }
+    }
+
+    public function recordClientFailure(string $clientIdentifier): void
+    {
+        if ('' === trim($clientIdentifier)) {
+            return;
+        }
+
+        $this->incrementFailures($this->clientKey($clientIdentifier), $this->clock->now()->getTimestamp());
+    }
+
+    public function recordClientSuccess(string $clientIdentifier): void
+    {
+        if ('' === trim($clientIdentifier)) {
+            return;
+        }
+
+        $this->cache->deleteItem($this->clientKey($clientIdentifier));
+    }
+
     public function recordFailure(string $target, ?string $clientIdentifier = null): void
     {
         $now = $this->clock->now()->getTimestamp();

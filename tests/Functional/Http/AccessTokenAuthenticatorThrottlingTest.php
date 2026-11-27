@@ -42,6 +42,12 @@ final class AccessTokenAuthenticatorThrottlingTest extends KernelTestCase
         $this->throttler->reset($this->targetUser->username(), '127.0.0.1');
     }
 
+    protected function tearDown(): void
+    {
+        $this->throttler->reset($this->targetUser->username(), '127.0.0.1');
+        parent::tearDown();
+    }
+
     private function handle(Request $request): Response
     {
         $kernel = self::$kernel ?? throw new \LogicException('Kernel not booted');

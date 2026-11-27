@@ -62,13 +62,17 @@ final class UserPasswordCommand extends AbstractSshCommand
         }
 
         $targetUsername = $this->nullableStringArgument($input, 'username') ?? $actor->username();
+        $isChangingSelf = $actor->username() === strtolower($targetUsername);
+        if (!$isChangingSelf && !$actor->isAdmin()) {
+            throw new AccessDenied('unauthorized');
+        }
+
         $targetUser = $this->userStore->byUsername($targetUsername);
         if (null === $targetUser) {
             throw new NotFound(sprintf('user "%s" not found', $targetUsername));
         }
 
         $hasExistingPassword = null !== $targetUser->passwordHash() && '' !== $targetUser->passwordHash();
-        $isChangingSelf = $actor->username() === $targetUser->username();
 
         // When changing own existing recovery password, verify current password first
         if ($hasExistingPassword && $isChangingSelf) {

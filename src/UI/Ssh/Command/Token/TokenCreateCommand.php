@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\UI\Ssh\Command\Token;
 
 use App\Identity\Application\IssueAccessToken;
+use App\Identity\Domain\Model\AccessToken;
 use App\Identity\Domain\UserStore;
 use App\Repo\Domain\RepoName;
 use App\Shared\Domain\DurationParser;
+use App\Shared\Domain\Exception\AccessDenied;
 use App\Shared\Domain\Exception\InvalidInput;
 use App\UI\Ssh\Command\AbstractSshCommand;
 use App\UI\Ssh\SshSession;
@@ -80,10 +82,18 @@ final class TokenCreateCommand extends AbstractSshCommand
             foreach (explode(',', $scopeArg) as $sub) {
                 $sub = trim(strtolower($sub));
                 if ('' !== $sub) {
+                    if (!\in_array($sub, AccessToken::VALID_USER_SCOPES, true)) {
+                        throw new InvalidInput(sprintf(
+                            'Unknown token scope "%s". Allowed scopes: %s',
+                            $sub,
+                            implode(', ', AccessToken::VALID_USER_SCOPES),
+                        ));
+                    }
                     $scopes[] = $sub;
                 }
             }
         }
+        $scopes = array_values(array_unique($scopes));
         if ([] === $scopes) {
             $scopes = ['*'];
         }
@@ -105,10 +115,19 @@ final class TokenCreateCommand extends AbstractSshCommand
 
         $singleUse = (bool) ($input->getOption('single-use') || $input->getOption('one-time'));
 
+        $actor = $this->actor();
+        if (null === $actor) {
+            throw new AccessDenied('unauthorized');
+        }
+
         $targetUser = null;
         $targetUsername = $input->getOption('user');
         if (is_string($targetUsername) && '' !== trim($targetUsername)) {
-            $targetUser = $this->userStore->byUsername(trim($targetUsername));
+            $trimmedTarget = trim($targetUsername);
+            if ($actor->username() !== strtolower($trimmedTarget) && !$actor->isAdmin()) {
+                throw new AccessDenied('only admins can issue tokens for other users');
+            }
+            $targetUser = $this->userStore->byUsername($trimmedTarget);
             if (null === $targetUser) {
                 throw new InvalidInput(sprintf('Target user "%s" not found', $targetUsername));
             }

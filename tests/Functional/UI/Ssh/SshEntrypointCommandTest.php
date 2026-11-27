@@ -628,18 +628,12 @@ final class SshEntrypointCommandTest extends KernelTestCase
         $container = static::getContainer();
         $userStore = $container->get(UserStore::class);
         $bob = new User('bob-' . bin2hex(random_bytes(3)), false, new \DateTimeImmutable());
-        $bob->addPublicKey(SshKey::parse(self::KEY_ED25519_A), new \DateTimeImmutable());
         $userStore->save($bob);
 
-        // Default connection without user resolves to Alice (first owner)
+        // Default connection without user resolves strictly to Alice
         $defaultTester = $this->dispatch('info', $this->aliceFp);
         $this->assertSame(0, $defaultTester->getStatusCode());
         $this->assertStringContainsString('Username: alice', $this->getOutputText($defaultTester));
-
-        // Explicit connection as Bob selects Bob
-        $bobTester = $this->dispatch('info', $this->aliceFp, null, $bob->username());
-        $this->assertSame(0, $bobTester->getStatusCode());
-        $this->assertStringContainsString('Username: ' . $bob->username(), $this->getOutputText($bobTester));
 
         // Explicit connection as Alice selects Alice
         $aliceTester = $this->dispatch('info', $this->aliceFp, null, 'alice');
@@ -647,11 +641,9 @@ final class SshEntrypointCommandTest extends KernelTestCase
         $this->assertStringContainsString('Username: alice', $this->getOutputText($aliceTester));
 
         // Connection with existing but unauthorized target user fails with unauthorized message
-        $charlie = new User('charlie', false, new \DateTimeImmutable());
-        $userStore->save($charlie);
-        $unauthTester = $this->dispatch('info', $this->aliceFp, null, 'charlie');
+        $unauthTester = $this->dispatch('info', $this->aliceFp, null, $bob->username());
         $this->assertSame(1, $unauthTester->getStatusCode());
-        $this->assertStringContainsString('The presented SSH key is not authorized for account @charlie', $this->getOutputText($unauthTester));
+        $this->assertStringContainsString('The presented SSH key is not authorized for account @' . $bob->username(), $this->getOutputText($unauthTester));
 
         // Connection with unknown target user proposes signup
         $unknownTester = $this->dispatch('info', $this->aliceFp, null, 'unknown-user');
@@ -679,10 +671,11 @@ final class SshEntrypointCommandTest extends KernelTestCase
         $this->assertSame(0, $matchingTester->getStatusCode());
         $this->assertStringContainsString('Username: alice', $this->getOutputText($matchingTester));
 
-        // Valid token not matching requested user is rejected
+        // Valid token not matching requested user is rejected without revealing token owner
         $mismatchTester = $this->dispatch('info', null, null, 'bob', $secret);
         $this->assertSame(1, $mismatchTester->getStatusCode());
-        $this->assertStringContainsString('Personal access token belongs to @alice, not requested @bob', $this->getOutputText($mismatchTester));
+        $this->assertStringContainsString('Personal access token is not valid for the requested account', $this->getOutputText($mismatchTester));
+        $this->assertStringNotContainsString('@alice', $this->getOutputText($mismatchTester));
 
         // Invalid token is rejected
         $invalidTester = $this->dispatch('info', null, null, null, 'sec_invalid_token_' . bin2hex(random_bytes(6)));

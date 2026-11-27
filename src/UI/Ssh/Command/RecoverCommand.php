@@ -9,8 +9,8 @@ use App\Identity\Domain\UserStore;
 use App\Identity\Infrastructure\Security\LoginThrottler;
 use App\Identity\Infrastructure\Security\SecurityUser;
 use App\Shared\Domain\Exception\AccessDenied;
+use App\Shared\Domain\Exception\Conflict;
 use App\Shared\Domain\Exception\InvalidInput;
-use App\Shared\Domain\Exception\NotFound;
 use App\Shared\Infrastructure\Config\ServerSettings;
 use App\UI\Ssh\Help\HelpRenderer;
 use App\UI\Ssh\SshSession;
@@ -81,13 +81,6 @@ final class RecoverCommand extends AbstractSshCommand
         $this->loginThrottler->assertNotLocked($username, $client);
 
         $user = $this->userStore->byUsername($username);
-        if (null === $user) {
-            throw new NotFound(sprintf('User "%s" not found', $username));
-        }
-
-        if (null === $user->passwordHash() || '' === $user->passwordHash()) {
-            throw new AccessDenied(sprintf('Account @%s has no backup password configured. Please contact a server admin.', $user->username()));
-        }
 
         $plainPassword = $this->nullableStringOption($input, 'password');
         if (null === $plainPassword && (bool) $input->getOption('stdin')) {
@@ -102,10 +95,16 @@ final class RecoverCommand extends AbstractSshCommand
         }
 
         if (null === $plainPassword || '' === $plainPassword) {
-            $plainPassword = $this->promptPassword($input, $output, sprintf('Enter backup password for @%s: ', $user->username()));
+            $plainPassword = $this->promptPassword($input, $output, sprintf('Enter backup password for @%s: ', $username));
         }
 
-        if ('' === $plainPassword || !$this->passwordHasher->isPasswordValid(new SecurityUser($user), $plainPassword)) {
+        if (
+            null === $user
+            || null === $user->passwordHash()
+            || '' === $user->passwordHash()
+            || '' === $plainPassword
+            || !$this->passwordHasher->isPasswordValid(new SecurityUser($user), $plainPassword)
+        ) {
             $this->loginThrottler->recordFailure($username, $client);
             throw new AccessDenied('Invalid backup password.');
         }
@@ -113,6 +112,10 @@ final class RecoverCommand extends AbstractSshCommand
         $this->loginThrottler->recordSuccess($username, $client);
 
         $sshKey = SshKey::parse($keyLine);
+        $existingOwner = $this->userStore->byFingerprint($sshKey->fingerprint);
+        if (null !== $existingOwner && $existingOwner->id() !== $user->id()) {
+            throw new Conflict('this public key is already registered to another account');
+        }
         $alreadyAttached = false;
         foreach ($user->publicKeys() as $pk) {
             if ($pk->fingerprint() === $sshKey->fingerprint) {
