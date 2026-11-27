@@ -33,7 +33,15 @@ const (
 	maxConcurrentSessions = 128
 	ptyKillGrace          = 2 * time.Second
 	shutdownKillGrace     = 3 * time.Second
+	maxClientEnvVars      = 16
+	maxClientEnvValueLen  = 256
+	maxClientVersionLen   = 256
+	maxTerminalDimension  = 9999
 )
+
+// extraAllowedBaseEnv is only populated by tests (main_test.go) to pass test-helper
+// control variables to the mock child binary. Production builds leave it nil.
+var extraAllowedBaseEnv map[string]bool
 
 type ptyReqPayload struct {
 	Term     string
@@ -456,14 +464,15 @@ func (s *server) handleSession(
 			switch req.Type {
 			case "env":
 				var p envPayload
-				if err := ssh.Unmarshal(req.Payload, &p); err != nil || !isAllowedEnvVar(p.Name) || containsNul(p.Value) {
+				if err := ssh.Unmarshal(req.Payload, &p); err != nil || !isAllowedEnvVar(p.Name) || !isValidEnvValue(p.Name, p.Value) {
+					_ = req.Reply(false, nil)
+					continue
+				}
+				if _, exists := state.env[p.Name]; !exists && len(state.env) >= maxClientEnvVars {
 					_ = req.Reply(false, nil)
 					continue
 				}
 				state.env[p.Name] = p.Value
-				if p.Name == "COLORTERM" {
-					state.env["SSH_CLIENT_COLORTERM"] = p.Value
-				}
 				_ = req.Reply(true, nil)
 
 			case "pty-req":
@@ -472,7 +481,7 @@ func (s *server) handleSession(
 					continue
 				}
 				var p ptyReqPayload
-				if err := ssh.Unmarshal(req.Payload, &p); err != nil || containsNul(p.Term) {
+				if err := ssh.Unmarshal(req.Payload, &p); err != nil || (p.Term != "" && !isValidTerm(p.Term)) {
 					_ = req.Reply(false, nil)
 					continue
 				}
@@ -821,27 +830,106 @@ func exitCodeFromErr(err error) uint32 {
 }
 
 func isAllowedEnvVar(name string) bool {
-	if containsNul(name) {
-		return false
-	}
 	switch name {
-	case "TERM", "COLORTERM", "LANG", "COLUMNS", "LINES":
+	case "TERM", "COLORTERM", "LANG", "COLUMNS", "LINES",
+		"LC_ALL", "LC_CTYPE", "LC_COLLATE", "LC_MESSAGES", "LC_MONETARY", "LC_NUMERIC", "LC_TIME":
 		return true
 	}
-	if !strings.HasPrefix(name, "LC_") || len(name) <= 3 {
+	return false
+}
+
+func isValidTerm(val string) bool {
+	if len(val) == 0 || len(val) > 64 {
 		return false
 	}
-	for i := 3; i < len(name); i++ {
-		c := name[i]
-		if !((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
+	for i := 0; i < len(val); i++ {
+		c := val[i]
+		isAlphaNum := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+		if !isAlphaNum && c != '_' && c != '.' && c != '+' && c != '-' {
 			return false
 		}
 	}
 	return true
 }
 
+func isValidLocale(val string) bool {
+	if len(val) == 0 || len(val) > 64 {
+		return false
+	}
+	for i := 0; i < len(val); i++ {
+		c := val[i]
+		isAlphaNum := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+		if !isAlphaNum && c != '_' && c != '.' && c != '@' && c != '+' && c != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+func isValidEnvValue(name, val string) bool {
+	if len(val) > maxClientEnvValueLen || containsControlOrNul(val) {
+		return false
+	}
+	switch name {
+	case "TERM", "COLORTERM":
+		return isValidTerm(val)
+	case "COLUMNS", "LINES":
+		n, err := strconv.Atoi(val)
+		return err == nil && n >= 1 && n <= maxTerminalDimension
+	case "LANG", "LC_ALL", "LC_CTYPE", "LC_COLLATE", "LC_MESSAGES", "LC_MONETARY", "LC_NUMERIC", "LC_TIME":
+		return isValidLocale(val)
+	default:
+		return false
+	}
+}
+
 func containsNul(s string) bool {
 	return strings.IndexByte(s, 0) >= 0
+}
+
+func containsControlOrNul(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < 0x20 || s[i] == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
+func sanitizeClientVersion(v string) string {
+	var b strings.Builder
+	b.Grow(min(len(v), maxClientVersionLen))
+	for i := 0; i < len(v) && b.Len() < maxClientVersionLen; i++ {
+		c := v[i]
+		if c >= 0x20 && c < 0x7f {
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
+}
+
+func isAllowedBaseEnvVar(name string) bool {
+	if extraAllowedBaseEnv != nil && extraAllowedBaseEnv[name] {
+		return true
+	}
+	// Never inherit session/auth/client spoofing variables from the server process env.
+	if name == "CODES_TOKEN" || strings.HasPrefix(name, "SSH_") {
+		return false
+	}
+	switch name {
+	case "PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "TZ", "LANG", "LC_ALL",
+		"APP_ENV", "APP_DEBUG", "APP_SECRET", "DATABASE_URL", "MESSENGER_TRANSPORT_DSN",
+		"DOCKER_HOST", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH",
+		"NO_COLOR", "CLICOLOR_FORCE", "COMPOSER_HOME",
+		"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy":
+		return true
+	}
+	for _, prefix := range []string{"SOFT_SERVE_", "CADDY_", "DEPLOY_", "PHP_", "SYMFONY_", "XDG_"} {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func buildChildEnv(
@@ -858,13 +946,19 @@ func buildChildEnv(
 	cols uint32,
 	lines uint32,
 ) []string {
-	overrides := make(map[string]string, len(sessionEnv)+10)
+	overrides := make(map[string]string, len(sessionEnv)+12)
 	for k, v := range sessionEnv {
+		if !isAllowedEnvVar(k) || !isValidEnvValue(k, v) {
+			continue
+		}
 		overrides[k] = v
+		if k == "COLORTERM" {
+			overrides["SSH_CLIENT_COLORTERM"] = v
+		}
 	}
 	if ttyName != "" {
 		overrides["SSH_TTY"] = ttyName
-		if ptyTerm != "" {
+		if ptyTerm != "" && isValidTerm(ptyTerm) {
 			overrides["TERM"] = ptyTerm
 		}
 	} else {
@@ -876,17 +970,18 @@ func buildChildEnv(
 	if u := strings.TrimSpace(sshUser); u != "" {
 		overrides["SSH_USER"] = u
 	}
-	if strings.Contains(clientVersion, "for_Windows") || strings.Contains(clientVersion, "Windows") {
+	sanitizedVersion := sanitizeClientVersion(clientVersion)
+	if strings.Contains(sanitizedVersion, "for_Windows") || strings.Contains(sanitizedVersion, "Windows") {
 		overrides["SSH_CLIENT_OS"] = "windows"
 	}
-	if clientVersion != "" {
-		overrides["SSH_CLIENT_VERSION"] = clientVersion
+	if sanitizedVersion != "" {
+		overrides["SSH_CLIENT_VERSION"] = sanitizedVersion
 	}
 	if cols > 0 {
-		overrides["COLUMNS"] = strconv.Itoa(int(cols))
+		overrides["COLUMNS"] = strconv.Itoa(int(min(cols, maxTerminalDimension)))
 	}
 	if lines > 0 {
-		overrides["LINES"] = strconv.Itoa(int(lines))
+		overrides["LINES"] = strconv.Itoa(int(min(lines, maxTerminalDimension)))
 	}
 
 	clientIP, clientPort := splitHostPort(remoteAddr)
@@ -894,21 +989,13 @@ func buildChildEnv(
 	overrides["SSH_CONNECTION"] = fmt.Sprintf("%s %s %s %s", clientIP, clientPort, serverIP, serverPort)
 	overrides["SSH_CLIENT"] = fmt.Sprintf("%s %s %s", clientIP, clientPort, serverPort)
 
-	stripped := map[string]bool{
-		"SSH_ORIGINAL_COMMAND": true,
-		"SSH_CONNECTION":       true,
-		"SSH_CLIENT":           true,
-		"SSH_TTY":              true,
-		"SSH_USER":             true,
-	}
-
-	out := make([]string, 0, len(base)+len(overrides))
+	out := make([]string, 0, len(overrides)+16)
 	for _, entry := range base {
 		k, _, ok := strings.Cut(entry, "=")
 		if !ok {
 			continue
 		}
-		if stripped[k] {
+		if !isAllowedBaseEnvVar(k) {
 			continue
 		}
 		if _, replaced := overrides[k]; replaced {

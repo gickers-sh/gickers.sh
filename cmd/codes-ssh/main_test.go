@@ -27,6 +27,16 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+func init() {
+	extraAllowedBaseEnv = map[string]bool{
+		"GO_CODES_SSH_TEST_HELPER": true,
+		"HELPER_MODE":              true,
+		"HELPER_MARKER":            true,
+		"HELPER_STDERR":            true,
+		"HELPER_EXIT_CODE":         true,
+	}
+}
+
 // TestMain lets the test binary double as a fast mock `php` executable when
 // GO_CODES_SSH_TEST_HELPER=1, avoiding slow external shells or PHP boots in Go unit tests.
 func TestMain(m *testing.M) {
@@ -375,6 +385,9 @@ func TestAuthAcceptsAnyUsernameAndPubkeyAlgorithms(t *testing.T) {
 
 			wantKey := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(tc.signer.PublicKey())))
 			wantArgs := []string{"/app/bin/console", "soft:ssh:dispatch", "--key=" + wantKey}
+			if strings.TrimSpace(tc.user) != "" {
+				wantArgs = append(wantArgs, "--user="+strings.TrimSpace(tc.user))
+			}
 			if len(rep.Args) != len(wantArgs) {
 				t.Fatalf("args = %v, want %v", rep.Args, wantArgs)
 			}
@@ -752,5 +765,97 @@ func TestBuildChildEnvIncludesSSHUser(t *testing.T) {
 	}
 	if hasSpoofed {
 		t.Errorf("expected spoofed SSH_USER to be replaced, got: %v", env)
+	}
+}
+
+func TestBuildChildEnvAllowlistAndStripsSensitiveVars(t *testing.T) {
+	base := []string{
+		"PATH=/usr/bin",
+		"APP_ENV=prod",
+		"SOFT_SERVE_DATA_PATH=/app/.data",
+		"CODES_TOKEN=ss_leaked_token",
+		"SSH_TOKEN=ss_leaked_ssh_token",
+		"SSH_PIPED=1",
+		"SSH_CLIENT_OS=windows",
+		"SSH_CLIENT_VERSION=spoofed",
+		"SSH_CLIENT_COLORTERM=truecolor",
+		"AWS_SECRET_ACCESS_KEY=should-not-pass",
+		"RANDOM_HOST_SECRET=nope",
+	}
+	sessionEnv := map[string]string{
+		"TERM":           "xterm-256color",
+		"LC_CUSTOM_EVIL": "bad",
+		"CODES_TOKEN":    "ss_from_client",
+	}
+	remoteAddr, _ := net.ResolveTCPAddr("tcp", "10.0.0.1:54321")
+	localAddr, _ := net.ResolveTCPAddr("tcp", "10.0.0.2:2223")
+
+	env := buildChildEnv(base, sessionEnv, remoteAddr, localAddr, "xterm-256color", "/dev/pts/1", true, "info", "alice", "SSH-2.0-OpenSSH_9.0\r\nEvil", 80, 24)
+	envMap := make(map[string]string, len(env))
+	for _, kv := range env {
+		k, v, ok := strings.Cut(kv, "=")
+		if ok {
+			envMap[k] = v
+		}
+	}
+
+	for _, forbidden := range []string{"CODES_TOKEN", "SSH_TOKEN", "SSH_PIPED", "SSH_CLIENT_OS", "SSH_CLIENT_COLORTERM", "AWS_SECRET_ACCESS_KEY", "RANDOM_HOST_SECRET", "LC_CUSTOM_EVIL"} {
+		if v, exists := envMap[forbidden]; exists {
+			t.Errorf("expected %s to be stripped, got %q", forbidden, v)
+		}
+	}
+	if envMap["APP_ENV"] != "prod" || envMap["SOFT_SERVE_DATA_PATH"] != "/app/.data" {
+		t.Errorf("expected allowlisted server env vars to remain, got %+v", envMap)
+	}
+	if strings.ContainsAny(envMap["SSH_CLIENT_VERSION"], "\r\n") {
+		t.Errorf("expected control characters stripped from SSH_CLIENT_VERSION, got %q", envMap["SSH_CLIENT_VERSION"])
+	}
+}
+
+func TestEnvStrictValidationAndQuota(t *testing.T) {
+	addr, hostPub, _ := startTestServer(t)
+	userSigner := generateTestEd25519Signer(t)
+
+	client, err := ssh.Dial("tcp", addr, &ssh.ClientConfig{
+		User:            "alice",
+		Auth:            []ssh.AuthMethod{ssh.PublicKeys(userSigner)},
+		HostKeyCallback: ssh.FixedHostKey(hostPub),
+	})
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer client.Close()
+
+	sess, err := client.NewSession()
+	if err != nil {
+		t.Fatalf("new session: %v", err)
+	}
+	defer sess.Close()
+
+	// Non-standard LC_* must be rejected
+	if err := sess.Setenv("LC_CUSTOM_HUGE", "value"); err == nil {
+		t.Fatal("expected non-POSIX LC_CUSTOM_HUGE to be rejected")
+	}
+	// Control chars / invalid TERM must be rejected
+	if err := sess.Setenv("TERM", "xterm;rm -rf /"); err == nil {
+		t.Fatal("expected invalid TERM to be rejected")
+	}
+	// Oversized value must be rejected
+	if err := sess.Setenv("LANG", strings.Repeat("a", 300)); err == nil {
+		t.Fatal("expected oversized LANG to be rejected")
+	}
+	// Non-numeric / out-of-range COLUMNS must be rejected
+	if err := sess.Setenv("COLUMNS", "999999"); err == nil {
+		t.Fatal("expected out-of-range COLUMNS to be rejected")
+	}
+	if err := sess.Setenv("COLUMNS", "abc"); err == nil {
+		t.Fatal("expected non-numeric COLUMNS to be rejected")
+	}
+	// Valid POSIX env must succeed
+	if err := sess.Setenv("LC_CTYPE", "en_US.UTF-8"); err != nil {
+		t.Fatalf("expected valid LC_CTYPE to succeed: %v", err)
+	}
+	if err := sess.Setenv("COLUMNS", "120"); err != nil {
+		t.Fatalf("expected valid COLUMNS to succeed: %v", err)
 	}
 }
