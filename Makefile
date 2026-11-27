@@ -184,9 +184,12 @@ docker-import-repos:
 		-v "$(abspath $(DATA_DIR)/lfs):/seed/lfs:ro" \
 		--entrypoint sh worker -c 'cp -a /seed/repos/. /app/.data/repos/ && cp -a /seed/lfs/. /app/.data/lfs/ 2>/dev/null; php bin/soft admin sync-hooks'
 
-## install: Run the one-shot installer & deployment wizard (local or VPS)
-install:
-	@php bin/console install $(ARGS)
+## server-install: Run the one-shot installer & deployment wizard (local or VPS)
+server-install:
+	@php bin/console server:install $(ARGS)
+
+## deploy: Alias for server-install
+deploy: server-install
 
 ## deploy-vps: Run the automated VPS production deployment script (delegates to bin/console install)
 deploy-vps:
