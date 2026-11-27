@@ -17,6 +17,7 @@ $sshPort = "__SSH_PORT__"
 $httpPort = "__HTTP_PORT__"
 $httpsPort = "__HTTPS_PORT__"
 $installDir = "__INSTALL_DIR__"
+$systemUser = "__SYSTEM_USER__"
 $adminSshKey = "__ADMIN_KEY__"
 $adminUser = "__ADMIN_USER__"
 $postgresUser = "__POSTGRES_USER__"
@@ -28,6 +29,13 @@ $allowKeyless = "__ALLOW_KEYLESS__"
 $lfsEnabled = "__LFS_ENABLED__"
 $nonInteractive = ("__NON_INTERACTIVE__" -eq "1")
 $dryRun = ("__DRY_RUN__" -eq "1")
+$stepDocker = "__STEP_DOCKER__"
+$stepFirewall = "__STEP_FIREWALL__"
+
+# Default system user
+if ([string]::IsNullOrEmpty($systemUser)) {
+    $systemUser = $env:USERNAME
+}
 
 if ([string]::IsNullOrEmpty($installDir)) {
     if (Test-Path "compose.yaml") {
@@ -37,7 +45,73 @@ if ([string]::IsNullOrEmpty($installDir)) {
     }
 }
 
+# Auto-detect existing Docker
+$dockerInstalled = 0
+try {
+    $null = docker --version
+    $dockerInstalled = 1
+} catch {
+    $dockerInstalled = 0
+}
+
+# Auto-detect existing Admin SSH key
+if ([string]::IsNullOrEmpty($adminSshKey)) {
+    $edKey = Join-Path $HOME ".ssh\id_ed25519.pub"
+    $rsaKey = Join-Path $HOME ".ssh\id_rsa.pub"
+    if (Test-Path $edKey) {
+        $adminSshKey = (Get-Content $edKey -Raw).Trim()
+    } elseif (Test-Path $rsaKey) {
+        $adminSshKey = (Get-Content $rsaKey -Raw).Trim()
+    }
+}
+
 if (-not $nonInteractive) {
+    # 0. User & Isolation choice
+    $userOpts = @(
+        "Utiliser l'utilisateur Windows actuel ($env:USERNAME) [Recommandé]",
+        "Spécifier un compte ou utilisateur de service dédié..."
+    )
+    $userChoice = Gum-Choose -Title "Compte d'exécution pour gickers.sh" -Options $userOpts
+    if ($userChoice -eq 1) {
+        $systemUser = Gum-Input -PromptLabel "Nom du compte utilisateur" -DefaultValue "gickers"
+    }
+
+    # 1. Étape Docker
+    if ($dockerInstalled -eq 1) {
+        Write-Host "  $escGreen✔$escReset $escBold${escWhite}Docker Desktop / Engine déjà installé et actif.$escReset"
+    } else {
+        $dockerOpts = @(
+            "[Afficher les commandes] Télécharger et installer Docker Desktop pour Windows",
+            "[Ignorer cette étape] J'installerai Docker plus tard manuellement"
+        )
+        $dockerChoice = Gum-Choose -Title "Docker non détecté sur cette machine" -Options $dockerOpts
+        if ($dockerChoice -eq 0) {
+            Write-Host "`n  $escBold${escCyan}Installation manuelle recommandée de Docker Desktop :$escReset"
+            Write-Host "    $escGold winget install -e --id Docker.DockerDesktop $escReset"
+            Write-Host "    ou téléchargez l'installateur depuis : https://www.docker.com/products/docker-desktop/`n"
+        }
+    }
+
+    # 2. Pare-feu Windows
+    $fwOpts = @(
+        "[Exécution automatique] Ouvrir les ports Web ($httpPort, $httpsPort) et Git SSH ($sshPort) dans le pare-feu Windows",
+        "[Ignorer cette étape] Je gère mes règles de pare-feu moi-même",
+        "[Afficher les commandes] Voir les commandes PowerShell de configuration du pare-feu"
+    )
+    $fwChoice = Gum-Choose -Title "Pare-feu Windows Defender" -Options $fwOpts
+    if ($fwChoice -eq 2) {
+        Write-Host "`n  $escBold${escCyan}Commandes PowerShell du pare-feu Windows :$escReset"
+        Write-Host "    New-NetFirewallRule -DisplayName 'Gickers HTTP' -Direction Inbound -LocalPort $httpPort -Protocol TCP -Action Allow"
+        Write-Host "    New-NetFirewallRule -DisplayName 'Gickers HTTPS' -Direction Inbound -LocalPort $httpsPort -Protocol TCP -Action Allow"
+        Write-Host "    New-NetFirewallRule -DisplayName 'Gickers Git SSH' -Direction Inbound -LocalPort $sshPort -Protocol TCP -Action Allow`n"
+        $stepFirewall = "show"
+    } elseif ($fwChoice -eq 1) {
+        $stepFirewall = "skip"
+    } else {
+        $stepFirewall = "auto"
+    }
+
+    # 3. Paramètres applicatifs
     $domain = Gum-Input -PromptLabel "Domaine public (FQDN)" -DefaultValue $domain -Placeholder "ex: gits.run ou code.mon-domaine.com"
     $domain = $domain.Trim()
 
@@ -57,7 +131,9 @@ if (-not $nonInteractive) {
 
     $adminUser = Gum-Input -PromptLabel "Nom d'utilisateur administrateur" -DefaultValue $adminUser
 
-    Write-Host "`n  $escBold${escCyan}Configuration du déploiement :$escReset"
+    # 4. Summary & Confirmation
+    Write-Host "`n  $escBold${escCyan}Configuration finale du déploiement :$escReset"
+    Write-Host "    • Utilisateur :   $escBold$escGreen$systemUser$escReset"
     Write-Host "    • Domaine :       $escBold$escWhite$domain$escReset"
     Write-Host "    • Application :   $escBold$escWhite$appName$escReset"
     Write-Host "    • Répertoire :    $escGold$installDir$escReset"
@@ -74,6 +150,18 @@ if (-not $nonInteractive) {
 if ($dryRun) {
     Write-Host "`n  $escGreen✔$escReset $escBold${escGreen}[DRY-RUN] Validation réussie. Aucune modification.$escReset`n"
     exit 0
+}
+
+# Règles pare-feu si sélectionné en mode auto
+if ($stepFirewall -eq "auto") {
+    try {
+        New-NetFirewallRule -DisplayName "Gickers HTTP" -Direction Inbound -LocalPort [int]$httpPort -Protocol TCP -Action Allow -ErrorAction SilentlyContinue | Out-Null
+        New-NetFirewallRule -DisplayName "Gickers HTTPS" -Direction Inbound -LocalPort [int]$httpsPort -Protocol TCP -Action Allow -ErrorAction SilentlyContinue | Out-Null
+        New-NetFirewallRule -DisplayName "Gickers Git SSH" -Direction Inbound -LocalPort [int]$sshPort -Protocol TCP -Action Allow -ErrorAction SilentlyContinue | Out-Null
+        Write-Host "  $escGreen✔$escReset $escBold$escWhite Règles du pare-feu Windows appliquées.$escReset"
+    } catch {
+        Write-Host "  $escGold!$escReset $escMuted Impossible d'ajouter automatiquement les règles de pare-feu (droits administrateur requis).$escReset"
+    }
 }
 
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null

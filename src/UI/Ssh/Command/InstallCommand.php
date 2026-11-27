@@ -73,7 +73,8 @@ final class InstallCommand extends AbstractSshCommand
             ->addOption('step-docker', null, InputOption::VALUE_REQUIRED, 'Docker step mode: auto, skip, or show')
             ->addOption('step-sshd', null, InputOption::VALUE_REQUIRED, 'SSH switch step mode: auto, skip, or show')
             ->addOption('step-firewall', null, InputOption::VALUE_REQUIRED, 'Firewall step mode: auto, skip, or show')
-            ->addOption('step-systemd', null, InputOption::VALUE_REQUIRED, 'Systemd step mode: auto, skip, or show');
+            ->addOption('step-systemd', null, InputOption::VALUE_REQUIRED, 'Systemd step mode: auto, skip, or show')
+            ->addOption('system-user', null, InputOption::VALUE_REQUIRED, 'Dedicated host system user for running gickers.sh');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -117,6 +118,7 @@ final class InstallCommand extends AbstractSshCommand
             'step_sshd' => $this->nullableStringOption($input, 'step-sshd'),
             'step_firewall' => $this->nullableStringOption($input, 'step-firewall'),
             'step_systemd' => $this->nullableStringOption($input, 'step-systemd'),
+            'system_user' => $this->nullableStringOption($input, 'system-user'),
         ];
 
         $isWindows = (bool) $input->getOption('ps1')

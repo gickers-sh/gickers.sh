@@ -45,6 +45,7 @@ STEP_DOCKER="__STEP_DOCKER__"
 STEP_SSHD="__STEP_SSHD__"
 STEP_FIREWALL="__STEP_FIREWALL__"
 STEP_SYSTEMD="__STEP_SYSTEMD__"
+SYSTEM_USER="__SYSTEM_USER__"
 
 # Auto-detect root vs non-root
 if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
@@ -78,6 +79,7 @@ while [ $# -gt 0 ]; do
         --step-sshd) STEP_SSHD="$2"; shift 2 ;;
         --step-firewall) STEP_FIREWALL="$2"; shift 2 ;;
         --step-systemd) STEP_SYSTEMD="$2"; shift 2 ;;
+        --system-user) SYSTEM_USER="$2"; shift 2 ;;
         --skip-docker) STEP_DOCKER="skip"; shift ;;
         --skip-sshd-switch) STEP_SSHD="skip"; shift ;;
         --skip-firewall) STEP_FIREWALL="skip"; shift ;;
@@ -124,14 +126,26 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# Resolve default install directory if empty
+# Resolve default install directory and user if empty
+CURRENT_LOGIN_USER="$(id -un 2>/dev/null || whoami 2>/dev/null || echo "gickers")"
+
+if [ -z "$SYSTEM_USER" ]; then
+    if [ "$IS_ROOT" -eq 1 ]; then
+        SYSTEM_USER="gickers"
+    else
+        SYSTEM_USER="$CURRENT_LOGIN_USER"
+    fi
+fi
+
 if [ -z "$INSTALL_DIR" ]; then
     if [ -n "$PROJECT_ROOT" ]; then
         INSTALL_DIR="$PROJECT_ROOT"
-    elif [ "$IS_ROOT" -eq 1 ]; then
+    elif [ "$SYSTEM_USER" = "root" ]; then
         INSTALL_DIR="/var/www/gickers"
+    elif [ -d "/home/$SYSTEM_USER" ]; then
+        INSTALL_DIR="/home/$SYSTEM_USER/gickers.sh"
     else
-        INSTALL_DIR="$HOME/gickers.sh"
+        INSTALL_DIR="/var/lib/gickers"
     fi
 fi
 
@@ -478,6 +492,41 @@ EOF
     # --------------------------------------------------------------------------
     # Formulaire de configuration applicative
     # --------------------------------------------------------------------------
+    # 0. Utilisateur système dédié et isolation
+    USER_OPTS=()
+    if [ "$IS_ROOT" -eq 1 ] || [ "$USE_SUDO" = "1" ]; then
+        USER_OPTS+=(
+            "[Recommandé] Créer ou utiliser l'utilisateur système dédié non-root (gickers)"
+            "Utiliser l'utilisateur actuel ($CURRENT_USER)"
+            "Spécifier un autre utilisateur système..."
+        )
+        gum_choose "Utilisateur système pour exécuter gickers.sh" "${USER_OPTS[@]}" && USER_SELECTION=$? || USER_SELECTION=$?
+        case "$USER_SELECTION" in
+            0)
+                SYSTEM_USER="gickers"
+                if [ -z "$PROJECT_ROOT" ]; then
+                    INSTALL_DIR="/home/gickers/gickers.sh"
+                fi
+                ;;
+            1)
+                SYSTEM_USER="$CURRENT_USER"
+                if [ -z "$PROJECT_ROOT" ]; then
+                    if [ "$CURRENT_USER" = "root" ]; then
+                        INSTALL_DIR="/var/www/gickers"
+                    else
+                        INSTALL_DIR="$HOME/gickers.sh"
+                    fi
+                fi
+                ;;
+            2)
+                gum_input "Nom de l'utilisateur système" SYSTEM_USER "gickers"
+                if [ -z "$PROJECT_ROOT" ]; then
+                    INSTALL_DIR="/home/$SYSTEM_USER/gickers.sh"
+                fi
+                ;;
+        esac
+    fi
+
     # 1. Target Domain
     gum_input "Domaine public (FQDN)" DOMAIN "$DOMAIN" "ex: gits.run ou code.mon-domaine.com"
     DOMAIN=$(echo "$DOMAIN" | tr -d '[:space:]')
@@ -575,6 +624,7 @@ EOF
     # 8. Summary & Confirmation
     printf "\n"
     printf "  %s%sConfiguration finale du déploiement :%s\n" "$C_BOLD" "$C_CYAN" "$C_RESET"
+    printf "    • %sUtilisateur hôte :%s     %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_BOLD$C_GREEN" "$SYSTEM_USER" "$C_RESET"
     printf "    • %sDomaine public :%s       %shttps://%s%s\n" "$C_MUTED" "$C_RESET" "$C_BOLD$C_WHITE" "$DOMAIN" "$C_RESET"
     printf "    • %sNom d'usage :%s          %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_BOLD$C_WHITE" "$APP_NAME" "$C_RESET"
     printf "    • %sRépertoire cible :%s     %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_GOLD" "$INSTALL_DIR" "$C_RESET"
@@ -608,7 +658,17 @@ elif [ -n "$SUDO_CMD" ]; then
     EXEC_SUDO="sudo"
 fi
 
-# A. Installation des dépendances et Docker CE
+# A. Utilisateur système dédié et Docker CE
+if [ "$IS_ROOT" -eq 1 ] || [ -n "$EXEC_SUDO" ]; then
+    # Création de l'utilisateur système dédié si nécessaire
+    if [ "$SYSTEM_USER" != "root" ] && ! id -u "$SYSTEM_USER" >/dev/null 2>&1; then
+        (
+            $EXEC_SUDO useradd -m -s /bin/bash -U "$SYSTEM_USER" >/dev/null 2>&1 || true
+        ) &
+        gum_spin $! "Création de l'utilisateur système dédié ($SYSTEM_USER)..."
+    fi
+fi
+
 if [ "$STEP_DOCKER" = "auto" ] && [ -n "$EXEC_SUDO" -o "$IS_ROOT" -eq 1 ]; then
     if command -v apt-get >/dev/null 2>&1; then
         (
@@ -637,6 +697,9 @@ if [ "$STEP_DOCKER" = "auto" ] && [ -n "$EXEC_SUDO" -o "$IS_ROOT" -eq 1 ]; then
         fi
     fi
 
+    if [ "$SYSTEM_USER" != "root" ] && id -u "$SYSTEM_USER" >/dev/null 2>&1; then
+        $EXEC_SUDO usermod -aG docker "$SYSTEM_USER" 2>/dev/null || true
+    fi
     if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
         $EXEC_SUDO usermod -aG docker "$SUDO_USER" 2>/dev/null || true
     elif [ "$IS_ROOT" -eq 0 ]; then
@@ -812,6 +875,12 @@ gum_spin $! "Démarrage complet de la stack (HTTP, SSH, Worker, Deploy-Engine)..
 # 8. Service Systemd (gickers.service)
 # ------------------------------------------------------------------------------
 if [ "$STEP_SYSTEMD" = "auto" ] && [ -n "$EXEC_SUDO" -o "$IS_ROOT" -eq 1 ]; then
+    SYSTEMD_USER_DIRECTIVE=""
+    if [ "$SYSTEM_USER" != "root" ] && id -u "$SYSTEM_USER" >/dev/null 2>&1; then
+        SYSTEMD_USER_DIRECTIVE="User=${SYSTEM_USER}
+Group=${SYSTEM_USER}"
+    fi
+
     (
         echo "[Unit]
 Description=Gickers.sh Git Forge & Container Platform
@@ -822,6 +891,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+${SYSTEMD_USER_DIRECTIVE}
 WorkingDirectory=${INSTALL_DIR}
 ExecStart=/usr/bin/docker compose --env-file .env.docker up -d
 ExecStop=/usr/bin/docker compose --env-file .env.docker down
@@ -836,7 +906,9 @@ WantedBy=multi-user.target" | $EXEC_SUDO tee /etc/systemd/system/gickers.service
     ) &
     gum_spin $! "Activation du service systemd gickers.service..."
 
-    if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+    if [ "$SYSTEM_USER" != "root" ] && id -u "$SYSTEM_USER" >/dev/null 2>&1; then
+        $EXEC_SUDO chown -R "$SYSTEM_USER":"$SYSTEM_USER" "$INSTALL_DIR" 2>/dev/null || true
+    elif [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
         $EXEC_SUDO chown -R "$SUDO_USER":"$SUDO_USER" "$INSTALL_DIR" 2>/dev/null || true
     fi
 fi

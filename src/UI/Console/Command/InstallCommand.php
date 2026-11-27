@@ -55,7 +55,8 @@ final class InstallCommand extends Command
             ->addOption('step-docker', null, InputOption::VALUE_REQUIRED, 'Docker step mode: auto, skip, or show')
             ->addOption('step-sshd', null, InputOption::VALUE_REQUIRED, 'SSH switch step mode: auto, skip, or show')
             ->addOption('step-firewall', null, InputOption::VALUE_REQUIRED, 'Firewall step mode: auto, skip, or show')
-            ->addOption('step-systemd', null, InputOption::VALUE_REQUIRED, 'Systemd step mode: auto, skip, or show');
+            ->addOption('step-systemd', null, InputOption::VALUE_REQUIRED, 'Systemd step mode: auto, skip, or show')
+            ->addOption('system-user', null, InputOption::VALUE_REQUIRED, 'Dedicated host system user for running gickers.sh');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -129,6 +130,11 @@ final class InstallCommand extends Command
                 $cmdArgs[] = '--step-systemd';
                 $cmdArgs[] = trim($stepSystemd);
             }
+            $systemUser = $input->getOption('system-user');
+            if (is_string($systemUser) && '' !== trim($systemUser)) {
+                $cmdArgs[] = '--system-user';
+                $cmdArgs[] = trim($systemUser);
+            }
 
             $process = new Process($cmdArgs);
             $process->setTimeout(null);
@@ -197,6 +203,7 @@ final class InstallCommand extends Command
             'step_sshd' => is_string($stepSshd) && '' !== trim($stepSshd) ? trim($stepSshd) : null,
             'step_firewall' => is_string($stepFirewall) && '' !== trim($stepFirewall) ? trim($stepFirewall) : null,
             'step_systemd' => is_string($stepSystemd) && '' !== trim($stepSystemd) ? trim($stepSystemd) : null,
+            'system_user' => is_string($input->getOption('system-user')) && '' !== trim((string) $input->getOption('system-user')) ? trim((string) $input->getOption('system-user')) : null,
         ];
     }
 }

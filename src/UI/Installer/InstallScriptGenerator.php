@@ -108,6 +108,7 @@ final class InstallScriptGenerator
         $stepSshd = (string) ($options['step_sshd'] ?? ((bool) ($options['skip_sshd_switch'] ?? false) ? 'skip' : 'auto'));
         $stepFirewall = (string) ($options['step_firewall'] ?? ((bool) ($options['skip_firewall'] ?? false) ? 'skip' : 'auto'));
         $stepSystemd = (string) ($options['step_systemd'] ?? ((bool) ($options['skip_systemd'] ?? false) ? 'skip' : 'auto'));
+        $systemUser = (string) ($options['system_user'] ?? '');
 
         $headerCard = $this->renderHeaderCard($domain, $appName);
         $successCard = $this->renderSuccessCard($domain, $appName, $sshPort);
@@ -122,6 +123,7 @@ final class InstallScriptGenerator
             '__HTTP_PORT__' => (string) $httpPort,
             '__HTTPS_PORT__' => (string) $httpsPort,
             '__INSTALL_DIR__' => $installDir,
+            '__SYSTEM_USER__' => $systemUser,
             '__ADMIN_KEY__' => $adminKey,
             '__ADMIN_USER__' => $adminUser,
             '__POSTGRES_USER__' => $dbUser,
@@ -173,6 +175,7 @@ final class InstallScriptGenerator
         $stepSshd = (string) ($options['step_sshd'] ?? ((bool) ($options['skip_sshd_switch'] ?? false) ? 'skip' : 'auto'));
         $stepFirewall = (string) ($options['step_firewall'] ?? ((bool) ($options['skip_firewall'] ?? false) ? 'skip' : 'auto'));
         $stepSystemd = (string) ($options['step_systemd'] ?? ((bool) ($options['skip_systemd'] ?? false) ? 'skip' : 'auto'));
+        $systemUser = (string) ($options['system_user'] ?? '');
 
         $headerCard = $this->renderHeaderCard($domain, $appName);
         $successCard = $this->renderSuccessCard($domain, $appName, $sshPort);
@@ -187,6 +190,7 @@ final class InstallScriptGenerator
             '__HTTP_PORT__' => (string) $httpPort,
             '__HTTPS_PORT__' => (string) $httpsPort,
             '__INSTALL_DIR__' => $installDir,
+            '__SYSTEM_USER__' => $systemUser,
             '__ADMIN_KEY__' => $adminKey,
             '__ADMIN_USER__' => $adminUser,
             '__POSTGRES_USER__' => $dbUser,
