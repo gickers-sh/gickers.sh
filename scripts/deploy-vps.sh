@@ -50,11 +50,15 @@ banner() {
 EOF
 }
 
-# Defaults (can be overridden via environment variables)
+# Detect repository root directory from script location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Defaults (can be overridden via environment variables or CLI options)
 DOMAIN="${DOMAIN:-gits.run}"
 APP_NAME="${APP_NAME:-Gickers.sh}"
-INSTALL_DIR="${INSTALL_DIR:-/opt/gickers}"
-SSH_PORT="${SSH_PORT:-22}"
+# By default, use current project directory (PWD/CWD); can be set explicitly via --dir
+INSTALL_DIR="${INSTALL_DIR:-$SCRIPT_DIR}"
+SSH_PORT="${SSH_PORT:-2223}"
 HTTP_PORT="${HTTP_PORT:-80}"
 HTTPS_PORT="${HTTPS_PORT:-443}"
 POSTGRES_USER="${POSTGRES_USER:-gickers}"
@@ -95,7 +99,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --domain <domain>        Public domain name (default: gits.run)"
-            echo "  --dir <path>             Installation directory (default: /opt/gickers)"
+            echo "  --dir <path>             Installation directory (default: current project directory)"
             echo "  --ssh-port <port>        Public SSH port for Git/CLI (default: 2223)"
             echo "  --admin-key <pubkey>     Initial admin SSH public key"
             echo "  -y, --non-interactive    Run non-interactively with defaults"
