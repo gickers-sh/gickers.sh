@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\UI\Ssh\Command\Settings;
+namespace App\UI\Ssh\Command\Server;
 
 use App\Access\Application\AccessGuard;
 use App\Access\Application\ServerPolicy;
@@ -14,11 +14,22 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
-final class SettingsDeployPolicyCommand extends AbstractSshCommand
+final class ServerSettingsDeployPolicyCommand extends AbstractSshCommand
 {
     public static function sshName(): string
     {
-        return 'settings:deploy-policy';
+        return 'server:settings:deploy-policy';
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function sshAliases(): array
+    {
+        return [
+            'settings:deploy-policy',
+            'host:settings:deploy-policy',
+        ];
     }
 
     public function __construct(
@@ -48,7 +59,13 @@ final class SettingsDeployPolicyCommand extends AbstractSshCommand
             return Command::SUCCESS;
         }
 
-        $policy = DeployPolicy::fromString($policyArg);
+        $policy = DeployPolicy::tryFrom($policyArg);
+        if (null === $policy) {
+            $this->line($output, 'Invalid policy. Must be one of: admins-only, authorized, repo-admins');
+
+            return Command::FAILURE;
+        }
+
         $this->serverPolicy->setDeployPolicy($policy);
 
         return Command::SUCCESS;

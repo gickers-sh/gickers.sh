@@ -98,6 +98,9 @@ final class SshCommandResolver
         } elseif (in_array($tokens[0], ['deploy', 'deployments', 'deployment'], true)) {
             array_shift($tokens);
             array_unshift($tokens, 'repo', 'deploy');
+        } elseif (in_array($tokens[0], ['settings'], true)) {
+            array_shift($tokens);
+            array_unshift($tokens, 'server', 'settings');
         }
 
         // Group alias normalizations on token 0
@@ -106,6 +109,7 @@ final class SshCommandResolver
             'pubkeys', 'publickey', 'publickeys' => 'pubkey',
             'access-token' => 'token',
             'users' => 'user',
+            'host' => 'server',
             default => $tokens[0],
         };
 

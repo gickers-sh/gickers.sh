@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\UI\Ssh\Command\Settings;
+namespace App\UI\Ssh\Command\Server;
 
 use App\Access\Application\AccessGuard;
 use App\Access\Application\ServerPolicy;
@@ -13,11 +13,22 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
-final class SettingsAllowKeylessCommand extends AbstractSshCommand
+final class ServerSettingsAllowKeylessCommand extends AbstractSshCommand
 {
     public static function sshName(): string
     {
-        return 'settings:allow-keyless';
+        return 'server:settings:allow-keyless';
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function sshAliases(): array
+    {
+        return [
+            'settings:allow-keyless',
+            'host:settings:allow-keyless',
+        ];
     }
 
     public function __construct(
@@ -49,7 +60,6 @@ final class SettingsAllowKeylessCommand extends AbstractSshCommand
         $allow = $this->parseBooleanArgument($allowArg, 'allow-keyless');
         $this->serverPolicy->setAllowKeyless($allow);
 
-        // Go soft serve updates allow-keyless silently without stdout/stderr output.
         return Command::SUCCESS;
     }
 }

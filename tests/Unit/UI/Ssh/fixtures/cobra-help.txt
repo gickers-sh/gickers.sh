@@ -27,6 +27,7 @@ Available Commands:
   pubkey               Manage your public keys
   recover              Recover account access with your backup password
   repo                 Manage repositories
+  server               Manage host server, status, settings, and updates
   set-username         Set your username
   settings             Manage server settings
   signup               Register yourself as a new user with your SSH key

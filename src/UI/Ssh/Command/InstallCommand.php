@@ -28,7 +28,11 @@ final class InstallCommand extends AbstractSshCommand
 
     public static function sshAliases(): array
     {
-        return ['installer'];
+        return [
+            'installer',
+            'server:install',
+            'host:install',
+        ];
     }
 
     public function __construct(

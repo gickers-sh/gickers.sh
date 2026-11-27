@@ -13,9 +13,9 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Process\Process;
 
 #[AsCommand(
-    name: 'install',
+    name: 'server:install',
     description: 'One-shot installer and deployment wizard for gickers.sh (local or remote script generator)',
-    aliases: ['deploy', 'soft:install'],
+    aliases: ['install', 'host:install', 'deploy', 'soft:install'],
 )]
 final class InstallCommand extends Command
 {

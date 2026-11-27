@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\UI\Ssh\Command\Settings;
+namespace App\UI\Ssh\Command\Server;
 
 use App\Access\Application\AccessGuard;
 use App\Access\Application\ServerPolicy;
@@ -13,11 +13,22 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
-final class SettingsAllowSignupCommand extends AbstractSshCommand
+final class ServerSettingsAllowSignupCommand extends AbstractSshCommand
 {
     public static function sshName(): string
     {
-        return 'settings:allow-signup';
+        return 'server:settings:allow-signup';
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function sshAliases(): array
+    {
+        return [
+            'settings:allow-signup',
+            'host:settings:allow-signup',
+        ];
     }
 
     public function __construct(

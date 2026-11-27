@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\UI\Ssh\Command\Settings;
+namespace App\UI\Ssh\Command\Server;
 
 use App\Access\Application\AccessGuard;
 use App\Access\Application\ServerPolicy;
@@ -15,11 +15,22 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
-final class SettingsAnonAccessCommand extends AbstractSshCommand
+final class ServerSettingsAnonAccessCommand extends AbstractSshCommand
 {
     public static function sshName(): string
     {
-        return 'settings:anon-access';
+        return 'server:settings:anon-access';
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function sshAliases(): array
+    {
+        return [
+            'settings:anon-access',
+            'host:settings:anon-access',
+        ];
     }
 
     public function __construct(
@@ -56,7 +67,6 @@ final class SettingsAnonAccessCommand extends AbstractSshCommand
 
         $this->serverPolicy->setAnonAccess($level);
 
-        // Go soft serve updates anon-access silently without stdout/stderr output.
         return Command::SUCCESS;
     }
 }

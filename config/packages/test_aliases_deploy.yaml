@@ -1,7 +1,7 @@
 when@test:
     services:
         test.settings_deploy_policy_command:
-            alias: App\UI\Ssh\Command\Settings\SettingsDeployPolicyCommand
+            alias: App\UI\Ssh\Command\Server\ServerSettingsDeployPolicyCommand
             public: true
         test.user_deploy_allow_command:
             alias: App\UI\Ssh\Command\User\UserDeployAllowCommand

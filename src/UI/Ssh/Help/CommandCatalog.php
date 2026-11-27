@@ -263,6 +263,7 @@ EX;
         $root->addChild($this->recoverSpec());
         $root->addChild($this->installSpec());
         if ($includeAdmin) {
+            $root->addChild($this->serverSpec());
             $root->addChild($this->settings());
         }
         $root->addChild($this->token());
@@ -778,6 +779,65 @@ EX;
         ));
 
         return $pubkey;
+    }
+
+    private function serverSpec(): CommandSpec
+    {
+        $serverLong = <<<'DESC'
+Manage host server configuration, status metrics, and one-shot updates.
+
+Scope:
+  Server Admin only.
+DESC;
+        $server = $this->group('server', 'Manage host server, status, settings, and updates', ['host'], $serverLong);
+
+        $statusLong = <<<'DESC'
+Displays server health, system resources (disk usage, OS/kernel, PHP runtime), and platform metrics (users, repositories, active deployments).
+
+Scope:
+  Server Admin only.
+DESC;
+        $statusExample = <<<'EX'
+  # Inspect host server health and metrics
+  {ssh} server status
+  {ssh} host status
+EX;
+        $server->addChild($this->leaf('status', 'Display server health, system resources, and platform metrics', $statusLong, ['info'], [], $statusExample)->withUi(
+            category: 'server',
+            title: 'Server Status',
+            tier: 'admin',
+            description: 'Display server health, system resources, and platform metrics',
+            baseTemplate: 'server status',
+            fields: [],
+            scope: 'global',
+            order: 50,
+        ));
+
+        $updateLong = <<<'DESC'
+Generates a self-contained update and upgrade script for the host server, pulling latest git commits and rebuilding containers.
+
+Scope:
+  Server Admin only.
+DESC;
+        $updateExample = <<<'EX'
+  # Update host server over SSH
+  {ssh} server update | bash
+  {ssh} host update | bash
+EX;
+        $server->addChild($this->leaf('update', 'Generate self-contained update script for the host server', $updateLong, ['upgrade'], [], $updateExample)->withUi(
+            category: 'server',
+            title: 'Server Update',
+            tier: 'admin',
+            description: 'Generate self-contained update script for the host server',
+            baseTemplate: 'server update',
+            fields: [],
+            scope: 'global',
+            order: 51,
+        ));
+
+        $server->addChild($this->settings());
+
+        return $server;
     }
 
     private function settings(): CommandSpec

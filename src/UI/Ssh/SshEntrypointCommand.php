@@ -449,6 +449,10 @@ final class SshEntrypointCommand extends Command
             return true;
         }
 
+        if (count($tokens) >= 2 && in_array($tokens[0], ['server', 'host'], true) && 'install' === $tokens[1]) {
+            return true;
+        }
+
         $filtered = array_values(array_filter(
             $tokens,
             static fn (string $t): bool => !in_array($t, ['--color', '--color=always', '--color=never', '--no-color', '--raw'], true)
@@ -480,7 +484,16 @@ final class SshEntrypointCommand extends Command
         try {
             $tokens = (new StringInput($commandLine))->getRawTokens(false);
 
-            return [] !== $tokens && in_array(strtolower($tokens[0]), ['install', 'installer', 'deploy'], true);
+            if ([] === $tokens) {
+                return false;
+            }
+
+            $first = strtolower($tokens[0]);
+            if (in_array($first, ['install', 'installer', 'deploy'], true)) {
+                return true;
+            }
+
+            return in_array($first, ['server', 'host'], true) && isset($tokens[1]) && 'install' === strtolower($tokens[1]);
         } catch (\Throwable) {
             return false;
         }
