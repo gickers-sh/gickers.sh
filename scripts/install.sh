@@ -52,14 +52,24 @@ gum_choose() {
         esac
     fi
 
+    local term_cols
+    term_cols=$(tput cols 2>/dev/null || echo 80)
+    [ -z "$term_cols" ] && term_cols=80
+    local max_width=$(( term_cols - 8 ))
+    [ "$max_width" -lt 30 ] && max_width=30
+
     printf "\n  %s?%s %s%s%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$prompt_title" "$C_RESET"
 
     draw_items() {
         for i in "${!options[@]}"; do
+            local opt_text="${options[i]}"
+            if [ "${#opt_text}" -gt "$max_width" ]; then
+                opt_text="${opt_text:0:$((max_width - 3))}..."
+            fi
             if [ "$i" -eq "$selected" ]; then
-                printf "    ${BG_SELECT} %s❯ %s%s %s\n" "$C_PINK" "$C_BOLD$C_CYAN" "${options[i]}" "$C_RESET"
+                printf "\r${ESC}[2K    ${BG_SELECT} %s❯ %s%s %s\n" "$C_PINK" "$C_BOLD$C_CYAN" "$opt_text" "$C_RESET"
             else
-                printf "      %s%s%s\n" "$C_MUTED" "${options[i]}" "$C_RESET"
+                printf "\r${ESC}[2K      %s%s%s\n" "$C_MUTED" "$opt_text" "$C_RESET"
             fi
         done
     }
@@ -70,19 +80,27 @@ gum_choose() {
     while true; do
         IFS= read -rsn1 key < "$TTY_INPUT" || break
         if [[ $key == $'\x1b' ]]; then
-            read -rsn2 -t 0.1 rest < "$TTY_INPUT" || true
+            read -rsn2 -t 0.2 rest < "$TTY_INPUT" || true
             case "$rest" in
-                "[A"|"k")
+                "[A"|"OA")
                     selected=$(( (selected - 1 + count) % count ))
-                    printf "${ESC}[%dA" "$count"
+                    printf "\r${ESC}[%dA" "$count"
                     draw_items
                     ;;
-                "[B"|"j")
+                "[B"|"OB")
                     selected=$(( (selected + 1) % count ))
-                    printf "${ESC}[%dA" "$count"
+                    printf "\r${ESC}[%dA" "$count"
                     draw_items
                     ;;
             esac
+        elif [[ $key == "k" ]]; then
+            selected=$(( (selected - 1 + count) % count ))
+            printf "\r${ESC}[%dA" "$count"
+            draw_items
+        elif [[ $key == "j" ]]; then
+            selected=$(( (selected + 1) % count ))
+            printf "\r${ESC}[%dA" "$count"
+            draw_items
         elif [[ $key == "" ]]; then
             break
         elif [[ $key =~ ^[1-9]$ ]] && [ "$key" -le "$count" ]; then
@@ -411,7 +429,11 @@ cat << 'EOF'
 EOF
 
 # Detect default script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "$PWD")"
+if [ -n "${BASH_SOURCE[0]:-}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "$PWD")"
+else
+    SCRIPT_DIR="$PWD"
+fi
 if [ -f "$SCRIPT_DIR/compose.yaml" ]; then
     PROJECT_ROOT="$SCRIPT_DIR"
 elif [ -f "$PWD/compose.yaml" ]; then
@@ -640,10 +662,10 @@ else
 
         SUDO_OPTIONS=()
         if [ "$CAN_SUDO" -eq 1 ]; then
-            SUDO_OPTIONS+=("Activer le mode sudo pour automatiser les étapes système (Recommandé sur un VPS)")
+            SUDO_OPTIONS+=("Activer le mode sudo (Recommandé VPS : Docker, UFW, SSH 22, systemd)")
         fi
         SUDO_OPTIONS+=(
-            "Continuer en mode applicatif utilisateur (Docker sans modifier le système hôte)"
+            "Continuer en mode applicatif utilisateur (Docker sans modifier l'hôte)"
             "Afficher les conseils d'usage et les impacts de sécurité"
         )
 
@@ -720,7 +742,7 @@ if [ "$NON_INTERACTIVE" -eq 0 ]; then
         STEP_DOCKER="skip"
     elif [ "$STEP_DOCKER" = "auto" ]; then
         DOCKER_MENU=(
-            "[Exécution automatique] Installer Docker CE officiel & Docker Compose (Recommandé)"
+            "[Exécution auto] Installer Docker CE officiel & Docker Compose (Recommandé)"
             "[Ignorer cette étape] Je gère l'installation de Docker moi-même"
             "[Afficher les commandes] Voir les commandes d'installation manuelles annotées"
         )
@@ -757,7 +779,7 @@ EOF
     if [ "$SSHD_ON_PORT_22" -eq 1 ]; then
         printf "\n  %s!%s %sLe port 22 est actuellement occupé par le serveur OpenSSH hôte (sshd).%s\n" "$C_GOLD" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
         SSHD_MENU=(
-            "[Exécution automatique] Basculer OpenSSH hôte vers le port 2222 (Port 22 réservé à Git)"
+            "[Exécution auto] Basculer OpenSSH hôte vers le port 2222 (Port 22 réservé à Git)"
             "[Port alternatif] Conserver OpenSSH sur 22 et utiliser le port 2223 pour gickers.sh"
             "[Ignorer cette étape] Ne pas modifier la configuration OpenSSH"
             "[Afficher les commandes] Voir les commandes manuelles de migration de port OpenSSH"
@@ -806,7 +828,7 @@ EOF
     if [ "$UFW_ACTIVE" -eq 1 ]; then
         if [ "$STEP_FIREWALL" = "auto" ]; then
             UFW_MENU=(
-                "[Exécution automatique] Autoriser les ports Web (80, 443), Git ($SSH_PORT) et hôte dans UFW"
+                "[Exécution auto] Autoriser les ports Web (80, 443), Git ($SSH_PORT) et hôte dans UFW"
                 "[Ignorer cette étape] Je gère mes règles de pare-feu moi-même"
                 "[Afficher les commandes] Voir les règles de pare-feu UFW à appliquer manuellement"
             )
@@ -845,7 +867,7 @@ EOF
         STEP_SYSTEMD="skip"
     elif [ "$STEP_SYSTEMD" = "auto" ]; then
         SYSTEMD_MENU=(
-            "[Exécution automatique] Créer et activer gickers.service pour redémarrage auto au boot"
+            "[Exécution auto] Créer et activer gickers.service pour redémarrage auto au boot"
             "[Ignorer cette étape] Gérer les conteneurs manuellement via docker compose"
             "[Afficher les commandes] Voir le fichier d'unité systemd et les commandes systemctl"
         )
@@ -1165,7 +1187,7 @@ if [ ! -f "$INSTALL_DIR/compose.yaml" ]; then
         gum_spin $! "Copie des fichiers sources vers $INSTALL_DIR..."
     else
         (
-            git clone --depth 1 https://github.com/gickerssh/gickers.sh.git "$INSTALL_DIR" >/dev/null 2>&1 || true
+            git clone --depth 1 https://github.com/gickerssh/gickers.sh.git "$INSTALL_DIR" >/dev/null 2>&1 || git clone --depth 1 https://github.com/gickerssh/gickers.sh.git . >/dev/null 2>&1 || true
         ) &
         gum_spin $! "Téléchargement du projet gickers.sh..."
     fi

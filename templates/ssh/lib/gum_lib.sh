@@ -45,14 +45,24 @@ gum_choose() {
         esac
     fi
 
+    local term_cols
+    term_cols=$(tput cols 2>/dev/null || echo 80)
+    [ -z "$term_cols" ] && term_cols=80
+    local max_width=$(( term_cols - 8 ))
+    [ "$max_width" -lt 30 ] && max_width=30
+
     printf "\n  %s?%s %s%s%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$prompt_title" "$C_RESET"
 
     draw_items() {
         for i in "${!options[@]}"; do
+            local opt_text="${options[i]}"
+            if [ "${#opt_text}" -gt "$max_width" ]; then
+                opt_text="${opt_text:0:$((max_width - 3))}..."
+            fi
             if [ "$i" -eq "$selected" ]; then
-                printf "    ${BG_SELECT} %s❯ %s%s %s\n" "$C_PINK" "$C_BOLD$C_CYAN" "${options[i]}" "$C_RESET"
+                printf "\r${ESC}[2K    ${BG_SELECT} %s❯ %s%s %s\n" "$C_PINK" "$C_BOLD$C_CYAN" "$opt_text" "$C_RESET"
             else
-                printf "      %s%s%s\n" "$C_MUTED" "${options[i]}" "$C_RESET"
+                printf "\r${ESC}[2K      %s%s%s\n" "$C_MUTED" "$opt_text" "$C_RESET"
             fi
         done
     }
@@ -63,19 +73,27 @@ gum_choose() {
     while true; do
         IFS= read -rsn1 key < "$TTY_INPUT" || break
         if [[ $key == $'\x1b' ]]; then
-            read -rsn2 -t 0.1 rest < "$TTY_INPUT" || true
+            read -rsn2 -t 0.2 rest < "$TTY_INPUT" || true
             case "$rest" in
-                "[A"|"k")
+                "[A"|"OA")
                     selected=$(( (selected - 1 + count) % count ))
-                    printf "${ESC}[%dA" "$count"
+                    printf "\r${ESC}[%dA" "$count"
                     draw_items
                     ;;
-                "[B"|"j")
+                "[B"|"OB")
                     selected=$(( (selected + 1) % count ))
-                    printf "${ESC}[%dA" "$count"
+                    printf "\r${ESC}[%dA" "$count"
                     draw_items
                     ;;
             esac
+        elif [[ $key == "k" ]]; then
+            selected=$(( (selected - 1 + count) % count ))
+            printf "\r${ESC}[%dA" "$count"
+            draw_items
+        elif [[ $key == "j" ]]; then
+            selected=$(( (selected + 1) % count ))
+            printf "\r${ESC}[%dA" "$count"
+            draw_items
         elif [[ $key == "" ]]; then
             break
         elif [[ $key =~ ^[1-9]$ ]] && [ "$key" -le "$count" ]; then

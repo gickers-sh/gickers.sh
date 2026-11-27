@@ -5,7 +5,11 @@
 # ==============================================================================
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -n "${BASH_SOURCE[0]:-}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+else
+    SCRIPT_DIR="$PWD"
+fi
 cd "$SCRIPT_DIR"
 
 if [ -f "$SCRIPT_DIR/bin/console" ]; then
