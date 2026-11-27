@@ -175,5 +175,4 @@ final class SignupCommand extends AbstractSshCommand
 
         return Command::SUCCESS;
     }
-    }
 }
