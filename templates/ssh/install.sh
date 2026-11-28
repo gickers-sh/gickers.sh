@@ -1430,10 +1430,10 @@ if [ "${SKIP_APP_DEPLOY:-0}" -eq 0 ]; then
             cp .env.docker .env.docker.bak 2>/dev/null || true
             EXISTING_SECRET=$(grep -E '^APP_SECRET=' .env.docker 2>/dev/null | cut -d '=' -f2- || true)
             EXISTING_PG_PASS=$(grep -E '^POSTGRES_PASSWORD=' .env.docker 2>/dev/null | cut -d '=' -f2- || true)
-            if [ -n "$EXISTING_SECRET" ] && [ "$EXISTING_SECRET" != "change-me" ]; then
+            if [ -n "$EXISTING_SECRET" ]; then
                 APP_SECRET="$EXISTING_SECRET"
             fi
-            if [ -n "$EXISTING_PG_PASS" ] && [ "$EXISTING_PG_PASS" != "gickers" ]; then
+            if [ -n "$EXISTING_PG_PASS" ]; then
                 POSTGRES_PASSWORD="$EXISTING_PG_PASS"
             fi
         fi
