@@ -120,6 +120,193 @@ gum_choose() {
     return "$selected"
 }
 
+# ==============================================================================
+#  Syntax Highlighting & Command Formatter (Borderless & High-Contrast)
+# ==============================================================================
+
+# Token colorizer for bash commands syntax highlighting
+colorize_token() {
+    local token="$1"
+    local is_cmd="$2"
+
+    if [ "$token" = "&&" ] || [ "$token" = "||" ] || [ "$token" = "|" ] || [ "$token" = ";" ] || [ "$token" = "\\" ] || [ "$token" = ">" ] || [ "$token" = ">>" ] || [ "$token" = "<" ] || [ "$token" = "<<" ]; then
+        printf "%s%s%s" "$C_PINK" "$token" "$C_RESET"
+    elif [ "$token" = "sudo" ]; then
+        printf "%s%s%s" "$C_PINK" "$token" "$C_RESET"
+    elif [ "$is_cmd" -eq 1 ]; then
+        printf "%s%s%s" "$C_GREEN" "$token" "$C_RESET"
+    elif [[ "$token" =~ ^-[a-zA-Z0-9_-] ]] || [[ "$token" =~ ^-- ]]; then
+        printf "%s%s%s" "$C_MUTED" "$token" "$C_RESET"
+    elif [[ "$token" =~ ^\" ]] || [[ "$token" =~ ^\' ]]; then
+        printf "%s%s%s" "$C_GOLD" "$token" "$C_RESET"
+    elif [[ "$token" =~ ^\$ ]] || [[ "$token" =~ = ]]; then
+        printf "%s%s%s" "$C_CYAN" "$token" "$C_RESET"
+    elif [[ "$token" =~ ^(update|install|allow|enable|restart|compose|config-manager|daemon-reload|add-repo|start|stop|down|up|run|build|clone|status|reload)$ ]]; then
+        printf "%s%s%s" "$C_CYAN" "$token" "$C_RESET"
+    elif [[ "$token" =~ ^https?:// ]] || [[ "$token" =~ ^/ ]]; then
+        printf "%s%s%s" "$C_WHITE" "$token" "$C_RESET"
+    else
+        printf "%s%s%s" "$C_WHITE" "$token" "$C_RESET"
+    fi
+}
+
+colorize_bash_line() {
+    local raw_line="$1"
+
+    # Comment line
+    if [[ "$raw_line" =~ ^[[:space:]]*# ]]; then
+        printf "%s%s%s" "$C_DIM" "$raw_line" "$C_RESET"
+        return
+    fi
+
+    local indent=""
+    if [[ "$raw_line" =~ ^([[:space:]]+) ]]; then
+        indent="${BASH_REMATCH[1]}"
+    fi
+    local trimmed="${raw_line#"${indent}"}"
+
+    local result="${indent}"
+    local first=1
+    local in_quote=""
+    local cur_token=""
+    local len=${#trimmed}
+
+    local i=0
+    while [ $i -lt $len ]; do
+        local ch="${trimmed:$i:1}"
+
+        if [ "$ch" = '"' ] || [ "$ch" = "'" ]; then
+            if [ -z "$in_quote" ]; then
+                in_quote="$ch"
+                cur_token+="$ch"
+            elif [ "$in_quote" = "$ch" ]; then
+                in_quote=""
+                cur_token+="$ch"
+            else
+                cur_token+="$ch"
+            fi
+            i=$((i + 1))
+            continue
+        fi
+
+        if [ -n "$in_quote" ]; then
+            cur_token+="$ch"
+            i=$((i + 1))
+            continue
+        fi
+
+        if [[ "$ch" =~ [[:space:]] ]]; then
+            if [ -n "$cur_token" ]; then
+                result+="$(colorize_token "$cur_token" "$first")"
+                if [ "$cur_token" = "&&" ] || [ "$cur_token" = "||" ] || [ "$cur_token" = "|" ] || [ "$cur_token" = ";" ] || [ "$cur_token" = "\\" ] || [ "$cur_token" = "sudo" ]; then
+                    first=1
+                elif [ "$first" -eq 1 ]; then
+                    first=0
+                fi
+                cur_token=""
+            fi
+            result+="$ch"
+            i=$((i + 1))
+            continue
+        fi
+
+        cur_token+="$ch"
+        i=$((i + 1))
+    done
+
+    if [ -n "$cur_token" ]; then
+        result+="$(colorize_token "$cur_token" "$first")"
+    fi
+
+    printf "%s" "$result"
+}
+
+format_bash_commands() {
+    local commands="$1"
+    local base_indent="${2:-    }"
+    local prev_continuation=0
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^[[:space:]]*$ ]]; then
+            printf "\n"
+            prev_continuation=0
+            continue
+        fi
+
+        if [[ "$line" =~ ^[[:space:]]*# ]]; then
+            printf "%s%s\n" "$base_indent" "$(colorize_bash_line "$line")"
+            prev_continuation=0
+            continue
+        fi
+
+        local line_indent=""
+        if [[ "$line" =~ ^([[:space:]]+) ]]; then
+            line_indent="${BASH_REMATCH[1]}"
+        fi
+
+        local effective_indent="$base_indent$line_indent"
+        if [ -z "$line_indent" ] && [ "$prev_continuation" -eq 1 ]; then
+            effective_indent="${base_indent}  "
+        fi
+
+        local trimmed="${line#"${line_indent}"}"
+        printf "%s%s\n" "$effective_indent" "$(colorize_bash_line "$trimmed")"
+
+        if [[ "$trimmed" =~ (\\|&&|\|\||\|)[[:space:]]*$ ]]; then
+            prev_continuation=1
+        else
+            prev_continuation=0
+        fi
+    done <<< "$commands"
+}
+
+# Helper to print annotated manual commands in terminal without framed box borders
+print_manual_commands() {
+    local title="$1"
+    local commands="$2"
+    local desc="${3:-}"
+
+    printf "\n"
+    printf "  %sℹ%s %s%s%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD$C_WHITE" "$title" "$C_RESET"
+    if [ -n "$desc" ]; then
+        local term_cols=""
+        if [ -n "$TTY_INPUT" ] && [ -r "$TTY_INPUT" ]; then
+            term_cols=$(stty size < "$TTY_INPUT" 2>/dev/null | awk '{print $2}')
+            [ -z "$term_cols" ] && term_cols=$(tput cols < "$TTY_INPUT" 2>/dev/null || true)
+        fi
+        [ -z "$term_cols" ] && term_cols=$(tput cols 2>/dev/null || echo 80)
+        [ -z "$term_cols" ] || [ "$term_cols" -le 0 ] && term_cols=80
+        local max_w=$(( term_cols - 8 ))
+        [ "$max_w" -lt 40 ] && max_w=40
+
+        local desc_clean
+        desc_clean=$(echo "$desc" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+        while IFS= read -r dline; do
+            [ -z "$dline" ] && continue
+            while [ "${#dline}" -gt "$max_w" ]; do
+                local split_idx="$max_w"
+                local prefix="${dline:0:$max_w}"
+                if [[ "$prefix" =~ ^(.*)[[:space:]]([^[:space:]]*)$ ]]; then
+                    split_idx="${#BASH_REMATCH[1]}"
+                fi
+                [ "$split_idx" -le 0 ] && split_idx="$max_w"
+                printf "    %s%s%s\n" "$C_MUTED" "${dline:0:$split_idx}" "$C_RESET"
+                dline="${dline:$split_idx}"
+                dline=$(echo "$dline" | sed -e 's/^[[:space:]]*//')
+            done
+            printf "    %s%s%s\n" "$C_MUTED" "$dline" "$C_RESET"
+        done <<< "$desc_clean"
+    fi
+    printf "\n"
+    format_bash_commands "$commands" "    "
+    printf "\n"
+}
+
+# Alias for backwards compatibility
+print_manual_commands_box() {
+    print_manual_commands "$@"
+}
+
 # Gum-styled checklist / multi-select component with checkboxes and preview info box
 # Usage: gum_checklist "Titre" out_var "Label:checked[:description[:commands]]" ...
 # Returns an array in $out_var containing 1 or 0 for each item.
@@ -176,41 +363,6 @@ gum_checklist() {
         "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$prompt_title" "$C_RESET" "$C_DIM" "$C_RESET"
 
     local last_rendered_lines=0
-
-    # Fonction pour coloriser syntaxiquement une ligne de commande bash
-    colorize_bash_line() {
-        local raw_line="$1"
-        if [[ "$raw_line" =~ ^[[:space:]]*# ]]; then
-            printf "%s" "$C_DIM$raw_line$C_RESET"
-            return
-        fi
-
-        # Mots-clés / utilitaires en vert/cyan, drapeaux en muted, connecteurs en rose, variables en or
-        local colored=""
-        local tokens=()
-        read -ra tokens <<< "$raw_line"
-        local first=1
-        for token in "${tokens[@]}"; do
-            local color="$C_GOLD"
-            if [ "$first" -eq 1 ] || [ "$token" = "&&" ] || [ "$token" = "||" ] || [ "$token" = "|" ] || [ "$token" = ";" ]; then
-                if [ "$token" = "&&" ] || [ "$token" = "||" ] || [ "$token" = "|" ] || [ "$token" = ";" ] || [ "$token" = "\\" ]; then
-                    color="$C_PINK"
-                    first=1
-                else
-                    color="$C_GREEN"
-                    first=0
-                fi
-            elif [[ "$token" =~ ^- ]]; then
-                color="$C_MUTED"
-            elif [[ "$token" =~ ^\$ ]] || [[ "$token" =~ = ]]; then
-                color="$C_CYAN"
-            elif [[ "$token" =~ ^\> ]] || [[ "$token" =~ ^\< ]]; then
-                color="$C_PINK"
-            fi
-            colored+="${color}${token}${C_RESET} "
-        done
-        printf "%s" "${colored% }"
-    }
 
     draw_checklist_and_box() {
         local rendered=0
@@ -282,29 +434,27 @@ gum_checklist() {
             if [ -n "$cur_cmd" ]; then
                 printf "\r${ESC}[2K\n"
                 rendered=$((rendered + 1))
+                local prev_continuation=0
                 while IFS= read -r cline; do
-                    local remaining="$cline"
-                    while [ "${#remaining}" -gt "$inner_width" ]; do
-                        local split_idx="$inner_width"
-                        local prefix="${remaining:0:$inner_width}"
-                        if [[ "$prefix" =~ ^(.*)[[:space:]]([^[:space:]]*)$ ]]; then
-                            split_idx="${#BASH_REMATCH[1]}"
-                        fi
-                        [ "$split_idx" -le 0 ] && split_idx="$inner_width"
-
-                        local part="${remaining:0:$split_idx}"
-                        local colored_part
-                        colored_part=$(colorize_bash_line "$part")
-                        printf "\r${ESC}[2K        %s\n" "$colored_part"
-                        rendered=$((rendered + 1))
-                        remaining="${remaining:$split_idx}"
-                        remaining=$(echo "$remaining" | sed -e 's/^[[:space:]]*//')
-                        [ -n "$remaining" ] && remaining="  $remaining"
-                    done
-                    local colored_rem
-                    colored_rem=$(colorize_bash_line "$remaining")
-                    printf "\r${ESC}[2K        %s\n" "$colored_rem"
+                    [ -z "$cline" ] && continue
+                    local line_indent=""
+                    if [[ "$cline" =~ ^([[:space:]]+) ]]; then
+                        line_indent="${BASH_REMATCH[1]}"
+                    fi
+                    local eff_indent="        $line_indent"
+                    if [ -z "$line_indent" ] && [ "$prev_continuation" -eq 1 ]; then
+                        eff_indent="          "
+                    fi
+                    local trimmed="${cline#"${line_indent}"}"
+                    local colored_line
+                    colored_line=$(colorize_bash_line "$trimmed")
+                    printf "\r${ESC}[2K%s%s\n" "$eff_indent" "$colored_line"
                     rendered=$((rendered + 1))
+                    if [[ "$trimmed" =~ (\\|&&|\|\||\|)[[:space:]]*$ ]]; then
+                        prev_continuation=1
+                    else
+                        prev_continuation=0
+                    fi
                 done <<< "$cur_cmd"
             fi
         fi

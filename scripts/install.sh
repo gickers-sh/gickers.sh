@@ -127,6 +127,193 @@ gum_choose() {
     return "$selected"
 }
 
+# ==============================================================================
+#  Syntax Highlighting & Command Formatter (Borderless & High-Contrast)
+# ==============================================================================
+
+# Token colorizer for bash commands syntax highlighting
+colorize_token() {
+    local token="$1"
+    local is_cmd="$2"
+
+    if [ "$token" = "&&" ] || [ "$token" = "||" ] || [ "$token" = "|" ] || [ "$token" = ";" ] || [ "$token" = "\\" ] || [ "$token" = ">" ] || [ "$token" = ">>" ] || [ "$token" = "<" ] || [ "$token" = "<<" ]; then
+        printf "%s%s%s" "$C_PINK" "$token" "$C_RESET"
+    elif [ "$token" = "sudo" ]; then
+        printf "%s%s%s" "$C_PINK" "$token" "$C_RESET"
+    elif [ "$is_cmd" -eq 1 ]; then
+        printf "%s%s%s" "$C_GREEN" "$token" "$C_RESET"
+    elif [[ "$token" =~ ^-[a-zA-Z0-9_-] ]] || [[ "$token" =~ ^-- ]]; then
+        printf "%s%s%s" "$C_MUTED" "$token" "$C_RESET"
+    elif [[ "$token" =~ ^\" ]] || [[ "$token" =~ ^\' ]]; then
+        printf "%s%s%s" "$C_GOLD" "$token" "$C_RESET"
+    elif [[ "$token" =~ ^\$ ]] || [[ "$token" =~ = ]]; then
+        printf "%s%s%s" "$C_CYAN" "$token" "$C_RESET"
+    elif [[ "$token" =~ ^(update|install|allow|enable|restart|compose|config-manager|daemon-reload|add-repo|start|stop|down|up|run|build|clone|status|reload)$ ]]; then
+        printf "%s%s%s" "$C_CYAN" "$token" "$C_RESET"
+    elif [[ "$token" =~ ^https?:// ]] || [[ "$token" =~ ^/ ]]; then
+        printf "%s%s%s" "$C_WHITE" "$token" "$C_RESET"
+    else
+        printf "%s%s%s" "$C_WHITE" "$token" "$C_RESET"
+    fi
+}
+
+colorize_bash_line() {
+    local raw_line="$1"
+
+    # Comment line
+    if [[ "$raw_line" =~ ^[[:space:]]*# ]]; then
+        printf "%s%s%s" "$C_DIM" "$raw_line" "$C_RESET"
+        return
+    fi
+
+    local indent=""
+    if [[ "$raw_line" =~ ^([[:space:]]+) ]]; then
+        indent="${BASH_REMATCH[1]}"
+    fi
+    local trimmed="${raw_line#"${indent}"}"
+
+    local result="${indent}"
+    local first=1
+    local in_quote=""
+    local cur_token=""
+    local len=${#trimmed}
+
+    local i=0
+    while [ $i -lt $len ]; do
+        local ch="${trimmed:$i:1}"
+
+        if [ "$ch" = '"' ] || [ "$ch" = "'" ]; then
+            if [ -z "$in_quote" ]; then
+                in_quote="$ch"
+                cur_token+="$ch"
+            elif [ "$in_quote" = "$ch" ]; then
+                in_quote=""
+                cur_token+="$ch"
+            else
+                cur_token+="$ch"
+            fi
+            i=$((i + 1))
+            continue
+        fi
+
+        if [ -n "$in_quote" ]; then
+            cur_token+="$ch"
+            i=$((i + 1))
+            continue
+        fi
+
+        if [[ "$ch" =~ [[:space:]] ]]; then
+            if [ -n "$cur_token" ]; then
+                result+="$(colorize_token "$cur_token" "$first")"
+                if [ "$cur_token" = "&&" ] || [ "$cur_token" = "||" ] || [ "$cur_token" = "|" ] || [ "$cur_token" = ";" ] || [ "$cur_token" = "\\" ] || [ "$cur_token" = "sudo" ]; then
+                    first=1
+                elif [ "$first" -eq 1 ]; then
+                    first=0
+                fi
+                cur_token=""
+            fi
+            result+="$ch"
+            i=$((i + 1))
+            continue
+        fi
+
+        cur_token+="$ch"
+        i=$((i + 1))
+    done
+
+    if [ -n "$cur_token" ]; then
+        result+="$(colorize_token "$cur_token" "$first")"
+    fi
+
+    printf "%s" "$result"
+}
+
+format_bash_commands() {
+    local commands="$1"
+    local base_indent="${2:-    }"
+    local prev_continuation=0
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^[[:space:]]*$ ]]; then
+            printf "\n"
+            prev_continuation=0
+            continue
+        fi
+
+        if [[ "$line" =~ ^[[:space:]]*# ]]; then
+            printf "%s%s\n" "$base_indent" "$(colorize_bash_line "$line")"
+            prev_continuation=0
+            continue
+        fi
+
+        local line_indent=""
+        if [[ "$line" =~ ^([[:space:]]+) ]]; then
+            line_indent="${BASH_REMATCH[1]}"
+        fi
+
+        local effective_indent="$base_indent$line_indent"
+        if [ -z "$line_indent" ] && [ "$prev_continuation" -eq 1 ]; then
+            effective_indent="${base_indent}  "
+        fi
+
+        local trimmed="${line#"${line_indent}"}"
+        printf "%s%s\n" "$effective_indent" "$(colorize_bash_line "$trimmed")"
+
+        if [[ "$trimmed" =~ (\\|&&|\|\||\|)[[:space:]]*$ ]]; then
+            prev_continuation=1
+        else
+            prev_continuation=0
+        fi
+    done <<< "$commands"
+}
+
+# Helper to print annotated manual commands in terminal without framed box borders
+print_manual_commands() {
+    local title="$1"
+    local commands="$2"
+    local desc="${3:-}"
+
+    printf "\n"
+    printf "  %sℹ%s %s%s%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD$C_WHITE" "$title" "$C_RESET"
+    if [ -n "$desc" ]; then
+        local term_cols=""
+        if [ -n "$TTY_INPUT" ] && [ -r "$TTY_INPUT" ]; then
+            term_cols=$(stty size < "$TTY_INPUT" 2>/dev/null | awk '{print $2}')
+            [ -z "$term_cols" ] && term_cols=$(tput cols < "$TTY_INPUT" 2>/dev/null || true)
+        fi
+        [ -z "$term_cols" ] && term_cols=$(tput cols 2>/dev/null || echo 80)
+        [ -z "$term_cols" ] || [ "$term_cols" -le 0 ] && term_cols=80
+        local max_w=$(( term_cols - 8 ))
+        [ "$max_w" -lt 40 ] && max_w=40
+
+        local desc_clean
+        desc_clean=$(echo "$desc" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+        while IFS= read -r dline; do
+            [ -z "$dline" ] && continue
+            while [ "${#dline}" -gt "$max_w" ]; do
+                local split_idx="$max_w"
+                local prefix="${dline:0:$max_w}"
+                if [[ "$prefix" =~ ^(.*)[[:space:]]([^[:space:]]*)$ ]]; then
+                    split_idx="${#BASH_REMATCH[1]}"
+                fi
+                [ "$split_idx" -le 0 ] && split_idx="$max_w"
+                printf "    %s%s%s\n" "$C_MUTED" "${dline:0:$split_idx}" "$C_RESET"
+                dline="${dline:$split_idx}"
+                dline=$(echo "$dline" | sed -e 's/^[[:space:]]*//')
+            done
+            printf "    %s%s%s\n" "$C_MUTED" "$dline" "$C_RESET"
+        done <<< "$desc_clean"
+    fi
+    printf "\n"
+    format_bash_commands "$commands" "    "
+    printf "\n"
+}
+
+# Alias for backwards compatibility
+print_manual_commands_box() {
+    print_manual_commands "$@"
+}
+
 # Gum-styled checklist / multi-select component with checkboxes and preview info box
 # Usage: gum_checklist "Titre" out_var "Label:checked[:description[:commands]]" ...
 # Returns an array in $out_var containing 1 or 0 for each item.
@@ -183,41 +370,6 @@ gum_checklist() {
         "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$prompt_title" "$C_RESET" "$C_DIM" "$C_RESET"
 
     local last_rendered_lines=0
-
-    # Fonction pour coloriser syntaxiquement une ligne de commande bash
-    colorize_bash_line() {
-        local raw_line="$1"
-        if [[ "$raw_line" =~ ^[[:space:]]*# ]]; then
-            printf "%s" "$C_DIM$raw_line$C_RESET"
-            return
-        fi
-
-        # Mots-clés / utilitaires en vert/cyan, drapeaux en muted, connecteurs en rose, variables en or
-        local colored=""
-        local tokens=()
-        read -ra tokens <<< "$raw_line"
-        local first=1
-        for token in "${tokens[@]}"; do
-            local color="$C_GOLD"
-            if [ "$first" -eq 1 ] || [ "$token" = "&&" ] || [ "$token" = "||" ] || [ "$token" = "|" ] || [ "$token" = ";" ]; then
-                if [ "$token" = "&&" ] || [ "$token" = "||" ] || [ "$token" = "|" ] || [ "$token" = ";" ] || [ "$token" = "\\" ]; then
-                    color="$C_PINK"
-                    first=1
-                else
-                    color="$C_GREEN"
-                    first=0
-                fi
-            elif [[ "$token" =~ ^- ]]; then
-                color="$C_MUTED"
-            elif [[ "$token" =~ ^\$ ]] || [[ "$token" =~ = ]]; then
-                color="$C_CYAN"
-            elif [[ "$token" =~ ^\> ]] || [[ "$token" =~ ^\< ]]; then
-                color="$C_PINK"
-            fi
-            colored+="${color}${token}${C_RESET} "
-        done
-        printf "%s" "${colored% }"
-    }
 
     draw_checklist_and_box() {
         local rendered=0
@@ -289,29 +441,27 @@ gum_checklist() {
             if [ -n "$cur_cmd" ]; then
                 printf "\r${ESC}[2K\n"
                 rendered=$((rendered + 1))
+                local prev_continuation=0
                 while IFS= read -r cline; do
-                    local remaining="$cline"
-                    while [ "${#remaining}" -gt "$inner_width" ]; do
-                        local split_idx="$inner_width"
-                        local prefix="${remaining:0:$inner_width}"
-                        if [[ "$prefix" =~ ^(.*)[[:space:]]([^[:space:]]*)$ ]]; then
-                            split_idx="${#BASH_REMATCH[1]}"
-                        fi
-                        [ "$split_idx" -le 0 ] && split_idx="$inner_width"
-
-                        local part="${remaining:0:$split_idx}"
-                        local colored_part
-                        colored_part=$(colorize_bash_line "$part")
-                        printf "\r${ESC}[2K        %s\n" "$colored_part"
-                        rendered=$((rendered + 1))
-                        remaining="${remaining:$split_idx}"
-                        remaining=$(echo "$remaining" | sed -e 's/^[[:space:]]*//')
-                        [ -n "$remaining" ] && remaining="  $remaining"
-                    done
-                    local colored_rem
-                    colored_rem=$(colorize_bash_line "$remaining")
-                    printf "\r${ESC}[2K        %s\n" "$colored_rem"
+                    [ -z "$cline" ] && continue
+                    local line_indent=""
+                    if [[ "$cline" =~ ^([[:space:]]+) ]]; then
+                        line_indent="${BASH_REMATCH[1]}"
+                    fi
+                    local eff_indent="        $line_indent"
+                    if [ -z "$line_indent" ] && [ "$prev_continuation" -eq 1 ]; then
+                        eff_indent="          "
+                    fi
+                    local trimmed="${cline#"${line_indent}"}"
+                    local colored_line
+                    colored_line=$(colorize_bash_line "$trimmed")
+                    printf "\r${ESC}[2K%s%s\n" "$eff_indent" "$colored_line"
                     rendered=$((rendered + 1))
+                    if [[ "$trimmed" =~ (\\|&&|\|\||\|)[[:space:]]*$ ]]; then
+                        prev_continuation=1
+                    else
+                        prev_continuation=0
+                    fi
                 done <<< "$cur_cmd"
             fi
         fi
@@ -950,23 +1100,6 @@ pkg_install_cmd() {
     esac
 }
 
-# Helper to print annotated manual commands in terminal
-print_manual_commands_box() {
-    local title="$1"
-    local commands="$2"
-    printf "\n"
-    printf "  %s%s╭────────────────────────────────────────────────────────────────────────╮%s\n" "$C_BOLD" "$C_CYAN" "$C_RESET"
-    printf "  %s│ %s%-70s%s %s│%s\n" "$C_BOLD$C_CYAN" "$C_WHITE" "$title" "$C_BOLD$C_CYAN" "$C_RESET" "$C_RESET"
-    printf "  %s├────────────────────────────────────────────────────────────────────────┤%s\n" "$C_BOLD$C_CYAN" "$C_RESET"
-    while IFS= read -r cmdline; do
-        if [[ "$cmdline" =~ ^[[:space:]]*# ]]; then
-            printf "  %s│ %s%-70s%s %s│%s\n" "$C_BOLD$C_CYAN" "$C_MUTED" "$cmdline" "$C_BOLD$C_CYAN" "$C_RESET" "$C_RESET"
-        else
-            printf "  %s│ %s%-70s%s %s│%s\n" "$C_BOLD$C_CYAN" "$C_GOLD" "$cmdline" "$C_BOLD$C_CYAN" "$C_RESET" "$C_RESET"
-        fi
-    done <<< "$commands"
-    printf "  %s╰────────────────────────────────────────────────────────────────────────╯%s\n\n" "$C_BOLD$C_CYAN" "$C_RESET"
-}
 
 # ------------------------------------------------------------------------------
 # 1. Détection automatique de l'état du serveur
@@ -1004,20 +1137,13 @@ fi
 # ------------------------------------------------------------------------------
 run_system_only() {
     printf "\n"
-    cat << 'EOF'
-  ╭────────────────────────────────────────────────────────────────────────╮
-  │ 🚀 Gickers.sh — Intégration Système Hôte & Sudoers                     │
-  ├────────────────────────────────────────────────────────────────────────┤
-  │ Configuration exclusive de l'infrastructure hôte (ports, Docker, OS) : │
-  │   • Dépendances & Docker CE officiel (si manquant)                     │
-  │   • Libération port 22 pour Git & bascule OpenSSH vers 2222            │
-  │   • Règles de pare-feu UFW (80, 443, 22, 2222)                         │
-  │   • Service systemd /etc/systemd/system/gickers.service au boot        │
-  │                                                                        │
-  │ ✔ Les conteneurs, base de données et données restent inchangés.        │
-  ╰────────────────────────────────────────────────────────────────────────╯
-EOF
-    printf "\n"
+    printf "  %s🚀 Gickers.sh — Intégration Système Hôte & Sudoers%s\n" "$C_BOLD$C_CYAN" "$C_RESET"
+    printf "  %sConfiguration exclusive de l'infrastructure hôte (ports, Docker, OS) :%s\n" "$C_MUTED" "$C_RESET"
+    printf "    %s•%s %sDépendances & Docker CE officiel (si manquant)%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sLibération port 22 pour Git & bascule OpenSSH vers 2222%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sRègles de pare-feu UFW (80, 443, 22, 2222)%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sService systemd /etc/systemd/system/gickers.service au boot%s\n\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "  %s✔ Les conteneurs, base de données et données restent inchangés.%s\n\n" "$C_GREEN" "$C_RESET"
 
     local EXEC_SUDO=""
     if [ "$IS_ROOT" -eq 1 ]; then
@@ -1245,21 +1371,14 @@ WantedBy=multi-user.target" | $EXEC_SUDO tee /etc/systemd/system/gickers.service
 
     # Bannière finale de succès
     printf "\n"
-    cat << EOF
-  ╭────────────────────────────────────────────────────────────────────────╮
-  │ ✔ Gickers.sh — Intégration Système Hôte & Sudoers Terminée             │
-  ├────────────────────────────────────────────────────────────────────────┤
-  │ Les privilèges et services hôte sont désormais configurés :            │
-  │   • Port Git SSH     : Port 22 réservé pour Git                        │
-  │   • OpenSSH Système  : Port 2222 (ssh -p 2222 user@host)               │
-  │   • Pare-feu UFW     : Ports 80, 443, 22 et 2222 autorisés             │
-  │   • Service systemd  : /etc/systemd/system/gickers.service au boot     │
-  │                                                                        │
-  │ Répertoire applicatif : $INSTALL_DIR
-  │ Vos données, base de données et utilisateurs sont restés intacts.      │
-  ╰────────────────────────────────────────────────────────────────────────╯
-EOF
-    printf "\n"
+    printf "  %s✔ Gickers.sh — Intégration Système Hôte & Sudoers Terminée%s\n" "$C_BOLD$C_GREEN" "$C_RESET"
+    printf "  %sLes privilèges et services hôte sont désormais configurés :%s\n" "$C_MUTED" "$C_RESET"
+    printf "    %s•%s %sPort Git SSH     : Port 22 réservé pour Git%s\n" "$C_GREEN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sOpenSSH Système  : Port 2222 (ssh -p 2222 user@host)%s\n" "$C_GREEN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sPare-feu UFW     : Ports 80, 443, 22 et 2222 autorisés%s\n" "$C_GREEN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sService systemd  : /etc/systemd/system/gickers.service au boot%s\n\n" "$C_GREEN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "  %sRépertoire applicatif : %s%s\n" "$C_MUTED" "$INSTALL_DIR" "$C_RESET"
+    printf "  %s✔ Vos données, base de données et utilisateurs sont restés intacts.%s\n\n" "$C_GREEN" "$C_RESET"
     exit 0
 }
 
@@ -1366,21 +1485,14 @@ fi
 # Si l'utilisateur est non-root et non-sudo, avertir sur les étapes ignorées
 if [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" != "1" ]; then
     printf "\n"
-    cat << 'EOF'
-  ╭────────────────────────────────────────────────────────────────────────╮
-  │ ℹ Mode Applicatif Utilisateur — Privilèges hôte non activés            │
-  ├────────────────────────────────────────────────────────────────────────┤
-  │ Sans privilèges root/sudo, les étapes système suivantes sont ignorées :│
-  │   • Installation de Docker CE hôte (apt-get)                           │
-  │   • Déplacement OpenSSH et réservation du port 22 pour Git             │
-  │   • Configuration du pare-feu UFW de l'hôte                            │
-  │   • Service systemd /etc/systemd/system/gickers.service au boot        │
-  │                                                                        │
-  │ ➜ Pour exécuter uniquement ces étapes plus tard en root ou sudo :      │
-  │   curl -fsSL https://.../install.sh | sudo bash -s -- --system-only    │
-  ╰────────────────────────────────────────────────────────────────────────╯
-EOF
-    printf "\n"
+    printf "  %sℹ%s %sMode Applicatif Utilisateur — Privilèges hôte non activés%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+    printf "  %sSans privilèges root/sudo, les étapes système suivantes sont ignorées :%s\n" "$C_MUTED" "$C_RESET"
+    printf "    %s•%s %sInstallation de Docker CE hôte (apt-get)%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sDéplacement OpenSSH et réservation du port 22 pour Git%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sConfiguration du pare-feu UFW de l'hôte%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sService systemd /etc/systemd/system/gickers.service au boot%s\n\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "  %s➜ Pour exécuter uniquement ces étapes plus tard en root ou sudo :%s\n" "$C_GOLD" "$C_RESET"
+    printf "    %scurl -fsSL https://raw.githubusercontent.com/gickerssh/gickers.sh/main/scripts/install.sh | sudo bash -s -- --system-only%s\n\n" "$C_CYAN" "$C_RESET"
 fi
 
 # Détection d'une installation existante et choix du mode
@@ -1437,15 +1549,12 @@ fi
 # Double confirmation stricte pour le Hard Reset (interactif)
 if [ "$HARD_RESET" -eq 1 ] && [ "$NON_INTERACTIVE" -eq 0 ]; then
     printf "\n"
-    printf "  %s╭────────────────────────────────────────────────────────────────────────╮%s\n" "$C_BOLD$C_PINK" "$C_RESET"
-    printf "  %s│%s %s⚠️  ATTENTION : DEMANDE DE RÉINITIALISATION COMPLÈTE (HARD RESET)       %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
-    printf "  %s├────────────────────────────────────────────────────────────────────────┤%s\n" "$C_BOLD$C_PINK" "$C_RESET"
-    printf "  %s│%s Cette action est %sIRRÉVERSIBLE%s et va détruire définitivement :          %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
-    printf "  %s│%s   • Tous les dépôts Git hébergés et objets Git LFS                      %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
-    printf "  %s│%s   • La base PostgreSQL (utilisateurs, comptes, clés SSH, tickets)       %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
-    printf "  %s│%s   • Les volumes Docker gickers-data, gickers-db et conteneurs           %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
-    printf "  %s│%s   • La configuration de production .env.docker actuelle                 %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
-    printf "  %s╰────────────────────────────────────────────────────────────────────────╯%s\n\n" "$C_BOLD$C_PINK" "$C_RESET"
+    printf "  %s⚠️  ATTENTION : DEMANDE DE RÉINITIALISATION COMPLÈTE (HARD RESET)%s\n" "$C_BOLD$C_PINK" "$C_RESET"
+    printf "  %sCette action est %sIRRÉVERSIBLE%s%s et va détruire définitivement :%s\n" "$C_WHITE" "$C_BOLD$C_PINK" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sTous les dépôts Git hébergés et objets Git LFS%s\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
+    printf "    %s•%s %sLa base PostgreSQL (utilisateurs, comptes, clés SSH, tickets)%s\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
+    printf "    %s•%s %sLes volumes Docker gickers-data, gickers-db et conteneurs%s\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
+    printf "    %s•%s %sLa configuration de production .env.docker actuelle%s\n\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
 
     CONFIRM_OPTS=(
         "Non, annuler et conserver mes données intactes (Recommandé)"
@@ -1732,7 +1841,7 @@ sudo systemctl enable --now docker
 sudo usermod -aG docker $USER
 EOF
 )
-        print_manual_commands_box "Commandes d'installation Docker CE & Compose" "$DOCKER_CMDS"
+        print_manual_commands_box "Commandes d'installation Docker CE & Compose" "$DOCKER_CMDS" "${DESC_DOCKER:-}"
         DOCKER_NO_SUDO_MENU=(
             "[Ignorer cette étape] Poursuivre (je configure Docker moi-même)"
             "[Afficher les commandes] Revoir les commandes d'installation"
@@ -1741,7 +1850,7 @@ EOF
         STEP_DOCKER="skip"
     elif [ "$STEP_DOCKER" = "auto" ]; then
         DOCKER_CMDS="$CMDS_DOCKER"
-        print_manual_commands_box "Commandes prévues : Installation Docker & Compose" "$DOCKER_CMDS"
+        print_manual_commands_box "Commandes prévues : Installation Docker & Compose" "$DOCKER_CMDS" "${DESC_DOCKER:-}"
         DOCKER_MENU=(
             "[Auto] Exécuter ces commandes pour installer Docker & Compose (Recommandé)"
             "[Ignorer] Je gère l'installation de Docker moi-même"
@@ -1764,7 +1873,7 @@ EOF
     elif [ "$SSHD_ON_PORT_22" -eq 1 ]; then
         printf "\n  %s!%s %sLe port 22 est actuellement occupé par le serveur OpenSSH hôte (sshd).%s\n" "$C_GOLD" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
         SSHD_CMDS="$CMDS_SSHD"
-        print_manual_commands_box "Commandes prévues : Migration OpenSSH vers port 2222" "$SSHD_CMDS"
+        print_manual_commands_box "Commandes prévues : Migration OpenSSH vers port 2222" "$SSHD_CMDS" "${DESC_SSHD:-}"
         SSHD_MENU=(
             "[Auto] Basculer OpenSSH hôte sur le port 2222 (Port 22 pour Git)"
             "[Port alternatif] Garder OpenSSH sur 22 et utiliser 2223 pour Git"
@@ -1824,7 +1933,7 @@ ufw --force enable
 EOF
 )
         if [ "$UFW_INSTALLED" -eq 1 ]; then
-            print_manual_commands_box "Commandes prévues : Règles de pare-feu UFW" "$UFW_CMDS"
+            print_manual_commands_box "Commandes prévues : Règles de pare-feu UFW" "$UFW_CMDS" "${DESC_UFW:-}"
             UFW_MENU=(
                 "[Auto] Appliquer les règles UFW (Ports 80, 443, ${SSH_PORT:-22}, 2222)"
                 "[Ignorer] Je gère mes règles de pare-feu moi-même"
@@ -1836,7 +1945,7 @@ EOF
             esac
         else
             printf "\n  %s!%s %sLe pare-feu UFW n'est pas installé sur cette machine.%s\n" "$C_GOLD" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
-            print_manual_commands_box "Commandes prévues : Installation et configuration UFW" "$UFW_CMDS"
+            print_manual_commands_box "Commandes prévues : Installation et configuration UFW" "$UFW_CMDS" "${DESC_UFW:-}"
             UFW_MENU=(
                 "[Auto] Installer UFW et appliquer les règles de sécurité (Recommandé)"
                 "[Ignorer] Ne pas installer de pare-feu pour le moment"
@@ -1862,7 +1971,7 @@ EOF
         STEP_SYSTEMD="skip"
     elif [ "$STEP_SYSTEMD" = "auto" ]; then
         SYSTEMD_CMDS="$CMDS_SYSTEMD"
-        print_manual_commands_box "Commandes prévues : Création du service de démarrage" "$SYSTEMD_CMDS"
+        print_manual_commands_box "Commandes prévues : Création du service de démarrage" "$SYSTEMD_CMDS" "${DESC_SYSTEMD:-}"
         SYSTEMD_MENU=(
             "[Auto] Créer et activer le service de démarrage (au boot)"
             "[Ignorer] Gérer les conteneurs manuellement via compose"
@@ -2038,19 +2147,16 @@ EOF
         [ -z "${POSTGRES_PASSWORD:-}" ] && POSTGRES_PASSWORD=$(openssl rand -base64 24 2>/dev/null | tr -dc 'a-zA-Z0-9' | head -c 24 || echo "gickers_db_pass_$(date +%s)")
 
         printf "\n"
-        printf "  %s╭────────────────────────────────────────────────────────────────────────╮%s\n" "$C_BOLD$C_CYAN" "$C_RESET"
-        printf "  %s│%s %s⚙️  Variables d'environnement & Secrets (Valeurs intelligentes)           %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
-        printf "  %s├────────────────────────────────────────────────────────────────────────┤%s\n" "$C_BOLD$C_CYAN" "$C_RESET"
+        printf "  %s⚙️  Variables d'environnement & Secrets (Valeurs recommandées)%s\n" "$C_BOLD$C_CYAN" "$C_RESET"
         if [ "$MODE" = "native" ]; then
-            printf "  %s│%s  • APP_SECRET : %s%s...%s (Clé secrète Symfony)               %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_BOLD$C_GOLD" "${APP_SECRET:0:12}" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
-            printf "  %s│%s  • Base de données : %ssqlite:///%s/.data/gickers-sh.db%s              %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_GREEN" "%kernel.project_dir%" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
-            printf "  %s│%s  • Git LFS : %s%s%s • Inscriptions : %s%s%s                           %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_CYAN" "$LFS_ENABLED" "$C_RESET" "$C_CYAN" "$ALLOW_SIGNUP" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
+            printf "    %s•%s %sAPP_SECRET      :%s %s%s...%s (Clé secrète Symfony)\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET" "$C_BOLD$C_GOLD" "${APP_SECRET:0:12}" "$C_RESET"
+            printf "    %s•%s %sBase de données :%s %ssqlite:///%s/.data/gickers-sh.db%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET" "$C_GREEN" "%kernel.project_dir%" "$C_RESET"
+            printf "    %s•%s %sOptions         :%s Git LFS: %s%s%s • Inscriptions: %s%s%s\n\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET" "$C_CYAN" "$LFS_ENABLED" "$C_RESET" "$C_CYAN" "$ALLOW_SIGNUP" "$C_RESET"
         else
-            printf "  %s│%s  • APP_SECRET : %s%s...%s (Clé secrète Symfony)               %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_BOLD$C_GOLD" "${APP_SECRET:0:12}" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
-            printf "  %s│%s  • Base PostgreSQL : %s%s@postgres:5432/%s%s (Pass auto fort)       %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_GREEN" "$POSTGRES_USER" "$POSTGRES_DB" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
-            printf "  %s│%s  • Git LFS : %s%s%s • Inscriptions : %s%s%s                           %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_CYAN" "$LFS_ENABLED" "$C_RESET" "$C_CYAN" "$ALLOW_SIGNUP" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
+            printf "    %s•%s %sAPP_SECRET      :%s %s%s...%s (Clé secrète Symfony)\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET" "$C_BOLD$C_GOLD" "${APP_SECRET:0:12}" "$C_RESET"
+            printf "    %s•%s %sBase de données :%s %s%s@postgres:5432/%s%s (Mot de passe fort généré)\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET" "$C_GREEN" "$POSTGRES_USER" "$POSTGRES_DB" "$C_RESET"
+            printf "    %s•%s %sOptions         :%s Git LFS: %s%s%s • Inscriptions: %s%s%s\n\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET" "$C_CYAN" "$LFS_ENABLED" "$C_RESET" "$C_CYAN" "$ALLOW_SIGNUP" "$C_RESET"
         fi
-        printf "  %s╰────────────────────────────────────────────────────────────────────────╯%s\n\n" "$C_BOLD$C_CYAN" "$C_RESET"
 
         ENV_MENU=(
             "Conserver ces valeurs recommandées (Automatique & Sécurisé - Entrée rapide)"
@@ -2705,14 +2811,9 @@ if [ -n "$ADMIN_CLAIM_TOKEN" ]; then
     if [ "$SSH_PORT" != "22" ] && [ -n "$SSH_PORT" ]; then
         SSH_PORT_CMD_OPT="-p ${SSH_PORT} "
     fi
-    printf "  %s╭────────────────────────────────────────────────────────────────────────╮%s\n" "$C_BOLD$C_GREEN" "$C_RESET"
-    printf "  %s│%s %s🔑 Initialisation Administrateur (Token sécurisé à usage unique)       %s│%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
-    printf "  %s├────────────────────────────────────────────────────────────────────────┤%s\n" "$C_BOLD$C_GREEN" "$C_RESET"
-    printf "  %s│%s Initialisez votre compte administrateur depuis votre poste client :     %s│%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
-    printf "  %s│%s                                                                        %s│%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
-    printf "  %s│%s   %s%sssh %s%s signup --token %s | bash%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD" "$C_CYAN" "$SSH_PORT_CMD_OPT" "$DOMAIN" "$ADMIN_CLAIM_TOKEN" "$C_RESET"
-    printf "  %s│%s                                                                        %s│%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
-    printf "  %s│%s Sur Windows (PowerShell) :                                             %s│%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
-    printf "  %s│%s   %s%sssh %s%s signup --token %s | iex%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD" "$C_CYAN" "$SSH_PORT_CMD_OPT" "$DOMAIN" "$ADMIN_CLAIM_TOKEN" "$C_RESET"
-    printf "  %s╰────────────────────────────────────────────────────────────────────────╯%s\n\n" "$C_BOLD$C_GREEN" "$C_RESET"
+    printf "  %s🔑 Initialisation Administrateur (Token sécurisé à usage unique)%s\n" "$C_BOLD$C_GREEN" "$C_RESET"
+    printf "  %sInitialisez votre compte administrateur depuis votre poste client :%s\n\n" "$C_MUTED" "$C_RESET"
+    printf "    %s%sssh %s%s signup --token %s | bash%s\n\n" "$C_BOLD" "$C_CYAN" "$SSH_PORT_CMD_OPT" "$DOMAIN" "$ADMIN_CLAIM_TOKEN" "$C_RESET"
+    printf "  %sSur Windows (PowerShell) :%s\n" "$C_MUTED" "$C_RESET"
+    printf "    %s%sssh %s%s signup --token %s | iex%s\n\n" "$C_BOLD" "$C_CYAN" "$SSH_PORT_CMD_OPT" "$DOMAIN" "$ADMIN_CLAIM_TOKEN" "$C_RESET"
 fi

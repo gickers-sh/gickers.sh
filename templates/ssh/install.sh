@@ -259,23 +259,6 @@ pkg_install_cmd() {
     esac
 }
 
-# Helper to print annotated manual commands in terminal
-print_manual_commands_box() {
-    local title="$1"
-    local commands="$2"
-    printf "\n"
-    printf "  %s%s╭────────────────────────────────────────────────────────────────────────╮%s\n" "$C_BOLD" "$C_CYAN" "$C_RESET"
-    printf "  %s│ %s%-70s%s %s│%s\n" "$C_BOLD$C_CYAN" "$C_WHITE" "$title" "$C_BOLD$C_CYAN" "$C_RESET" "$C_RESET"
-    printf "  %s├────────────────────────────────────────────────────────────────────────┤%s\n" "$C_BOLD$C_CYAN" "$C_RESET"
-    while IFS= read -r cmdline; do
-        if [[ "$cmdline" =~ ^[[:space:]]*# ]]; then
-            printf "  %s│ %s%-70s%s %s│%s\n" "$C_BOLD$C_CYAN" "$C_MUTED" "$cmdline" "$C_BOLD$C_CYAN" "$C_RESET" "$C_RESET"
-        else
-            printf "  %s│ %s%-70s%s %s│%s\n" "$C_BOLD$C_CYAN" "$C_GOLD" "$cmdline" "$C_BOLD$C_CYAN" "$C_RESET" "$C_RESET"
-        fi
-    done <<< "$commands"
-    printf "  %s╰────────────────────────────────────────────────────────────────────────╯%s\n\n" "$C_BOLD$C_CYAN" "$C_RESET"
-}
 
 # ------------------------------------------------------------------------------
 # 1. Détection automatique de l'état du serveur
@@ -313,20 +296,13 @@ fi
 # ------------------------------------------------------------------------------
 run_system_only() {
     printf "\n"
-    cat << 'EOF'
-  ╭────────────────────────────────────────────────────────────────────────╮
-  │ 🚀 Gickers.sh — Intégration Système Hôte & Sudoers                     │
-  ├────────────────────────────────────────────────────────────────────────┤
-  │ Configuration exclusive de l'infrastructure hôte (ports, Docker, OS) : │
-  │   • Dépendances & Docker CE officiel (si manquant)                     │
-  │   • Libération port 22 pour Git & bascule OpenSSH vers 2222            │
-  │   • Règles de pare-feu UFW (80, 443, 22, 2222)                         │
-  │   • Service systemd /etc/systemd/system/gickers.service au boot        │
-  │                                                                        │
-  │ ✔ Les conteneurs, base de données et données restent inchangés.        │
-  ╰────────────────────────────────────────────────────────────────────────╯
-EOF
-    printf "\n"
+    printf "  %s🚀 Gickers.sh — Intégration Système Hôte & Sudoers%s\n" "$C_BOLD$C_CYAN" "$C_RESET"
+    printf "  %sConfiguration exclusive de l'infrastructure hôte (ports, Docker, OS) :%s\n" "$C_MUTED" "$C_RESET"
+    printf "    %s•%s %sDépendances & Docker CE officiel (si manquant)%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sLibération port 22 pour Git & bascule OpenSSH vers 2222%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sRègles de pare-feu UFW (80, 443, 22, 2222)%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sService systemd /etc/systemd/system/gickers.service au boot%s\n\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "  %s✔ Les conteneurs, base de données et données restent inchangés.%s\n\n" "$C_GREEN" "$C_RESET"
 
     local EXEC_SUDO=""
     if [ "$IS_ROOT" -eq 1 ]; then
@@ -554,21 +530,14 @@ WantedBy=multi-user.target" | $EXEC_SUDO tee /etc/systemd/system/gickers.service
 
     # Bannière finale de succès
     printf "\n"
-    cat << EOF
-  ╭────────────────────────────────────────────────────────────────────────╮
-  │ ✔ Gickers.sh — Intégration Système Hôte & Sudoers Terminée             │
-  ├────────────────────────────────────────────────────────────────────────┤
-  │ Les privilèges et services hôte sont désormais configurés :            │
-  │   • Port Git SSH     : Port 22 réservé pour Git                        │
-  │   • OpenSSH Système  : Port 2222 (ssh -p 2222 user@host)               │
-  │   • Pare-feu UFW     : Ports 80, 443, 22 et 2222 autorisés             │
-  │   • Service systemd  : /etc/systemd/system/gickers.service au boot     │
-  │                                                                        │
-  │ Répertoire applicatif : $INSTALL_DIR
-  │ Vos données, base de données et utilisateurs sont restés intacts.      │
-  ╰────────────────────────────────────────────────────────────────────────╯
-EOF
-    printf "\n"
+    printf "  %s✔ Gickers.sh — Intégration Système Hôte & Sudoers Terminée%s\n" "$C_BOLD$C_GREEN" "$C_RESET"
+    printf "  %sLes privilèges et services hôte sont désormais configurés :%s\n" "$C_MUTED" "$C_RESET"
+    printf "    %s•%s %sPort Git SSH     : Port 22 réservé pour Git%s\n" "$C_GREEN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sOpenSSH Système  : Port 2222 (ssh -p 2222 user@host)%s\n" "$C_GREEN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sPare-feu UFW     : Ports 80, 443, 22 et 2222 autorisés%s\n" "$C_GREEN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sService systemd  : /etc/systemd/system/gickers.service au boot%s\n\n" "$C_GREEN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "  %sRépertoire applicatif : %s%s\n" "$C_MUTED" "$INSTALL_DIR" "$C_RESET"
+    printf "  %s✔ Vos données, base de données et utilisateurs sont restés intacts.%s\n\n" "$C_GREEN" "$C_RESET"
     exit 0
 }
 
@@ -675,21 +644,14 @@ fi
 # Si l'utilisateur est non-root et non-sudo, avertir sur les étapes ignorées
 if [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" != "1" ]; then
     printf "\n"
-    cat << 'EOF'
-  ╭────────────────────────────────────────────────────────────────────────╮
-  │ ℹ Mode Applicatif Utilisateur — Privilèges hôte non activés            │
-  ├────────────────────────────────────────────────────────────────────────┤
-  │ Sans privilèges root/sudo, les étapes système suivantes sont ignorées :│
-  │   • Installation de Docker CE hôte (apt-get)                           │
-  │   • Déplacement OpenSSH et réservation du port 22 pour Git             │
-  │   • Configuration du pare-feu UFW de l'hôte                            │
-  │   • Service systemd /etc/systemd/system/gickers.service au boot        │
-  │                                                                        │
-  │ ➜ Pour exécuter uniquement ces étapes plus tard en root ou sudo :      │
-  │   curl -fsSL https://.../install.sh | sudo bash -s -- --system-only    │
-  ╰────────────────────────────────────────────────────────────────────────╯
-EOF
-    printf "\n"
+    printf "  %sℹ%s %sMode Applicatif Utilisateur — Privilèges hôte non activés%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+    printf "  %sSans privilèges root/sudo, les étapes système suivantes sont ignorées :%s\n" "$C_MUTED" "$C_RESET"
+    printf "    %s•%s %sInstallation de Docker CE hôte (apt-get)%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sDéplacement OpenSSH et réservation du port 22 pour Git%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sConfiguration du pare-feu UFW de l'hôte%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sService systemd /etc/systemd/system/gickers.service au boot%s\n\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "  %s➜ Pour exécuter uniquement ces étapes plus tard en root ou sudo :%s\n" "$C_GOLD" "$C_RESET"
+    printf "    %scurl -fsSL https://raw.githubusercontent.com/gickerssh/gickers.sh/main/scripts/install.sh | sudo bash -s -- --system-only%s\n\n" "$C_CYAN" "$C_RESET"
 fi
 
 # Détection d'une installation existante et choix du mode
@@ -746,15 +708,12 @@ fi
 # Double confirmation stricte pour le Hard Reset (interactif)
 if [ "$HARD_RESET" -eq 1 ] && [ "$NON_INTERACTIVE" -eq 0 ]; then
     printf "\n"
-    printf "  %s╭────────────────────────────────────────────────────────────────────────╮%s\n" "$C_BOLD$C_PINK" "$C_RESET"
-    printf "  %s│%s %s⚠️  ATTENTION : DEMANDE DE RÉINITIALISATION COMPLÈTE (HARD RESET)       %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
-    printf "  %s├────────────────────────────────────────────────────────────────────────┤%s\n" "$C_BOLD$C_PINK" "$C_RESET"
-    printf "  %s│%s Cette action est %sIRRÉVERSIBLE%s et va détruire définitivement :          %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
-    printf "  %s│%s   • Tous les dépôts Git hébergés et objets Git LFS                      %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
-    printf "  %s│%s   • La base PostgreSQL (utilisateurs, comptes, clés SSH, tickets)       %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
-    printf "  %s│%s   • Les volumes Docker gickers-data, gickers-db et conteneurs           %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
-    printf "  %s│%s   • La configuration de production .env.docker actuelle                 %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
-    printf "  %s╰────────────────────────────────────────────────────────────────────────╯%s\n\n" "$C_BOLD$C_PINK" "$C_RESET"
+    printf "  %s⚠️  ATTENTION : DEMANDE DE RÉINITIALISATION COMPLÈTE (HARD RESET)%s\n" "$C_BOLD$C_PINK" "$C_RESET"
+    printf "  %sCette action est %sIRRÉVERSIBLE%s%s et va détruire définitivement :%s\n" "$C_WHITE" "$C_BOLD$C_PINK" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sTous les dépôts Git hébergés et objets Git LFS%s\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
+    printf "    %s•%s %sLa base PostgreSQL (utilisateurs, comptes, clés SSH, tickets)%s\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
+    printf "    %s•%s %sLes volumes Docker gickers-data, gickers-db et conteneurs%s\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
+    printf "    %s•%s %sLa configuration de production .env.docker actuelle%s\n\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
 
     CONFIRM_OPTS=(
         "Non, annuler et conserver mes données intactes (Recommandé)"
@@ -1041,7 +1000,7 @@ sudo systemctl enable --now docker
 sudo usermod -aG docker $USER
 EOF
 )
-        print_manual_commands_box "Commandes d'installation Docker CE & Compose" "$DOCKER_CMDS"
+        print_manual_commands_box "Commandes d'installation Docker CE & Compose" "$DOCKER_CMDS" "${DESC_DOCKER:-}"
         DOCKER_NO_SUDO_MENU=(
             "[Ignorer cette étape] Poursuivre (je configure Docker moi-même)"
             "[Afficher les commandes] Revoir les commandes d'installation"
@@ -1050,7 +1009,7 @@ EOF
         STEP_DOCKER="skip"
     elif [ "$STEP_DOCKER" = "auto" ]; then
         DOCKER_CMDS="$CMDS_DOCKER"
-        print_manual_commands_box "Commandes prévues : Installation Docker & Compose" "$DOCKER_CMDS"
+        print_manual_commands_box "Commandes prévues : Installation Docker & Compose" "$DOCKER_CMDS" "${DESC_DOCKER:-}"
         DOCKER_MENU=(
             "[Auto] Exécuter ces commandes pour installer Docker & Compose (Recommandé)"
             "[Ignorer] Je gère l'installation de Docker moi-même"
@@ -1073,7 +1032,7 @@ EOF
     elif [ "$SSHD_ON_PORT_22" -eq 1 ]; then
         printf "\n  %s!%s %sLe port 22 est actuellement occupé par le serveur OpenSSH hôte (sshd).%s\n" "$C_GOLD" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
         SSHD_CMDS="$CMDS_SSHD"
-        print_manual_commands_box "Commandes prévues : Migration OpenSSH vers port 2222" "$SSHD_CMDS"
+        print_manual_commands_box "Commandes prévues : Migration OpenSSH vers port 2222" "$SSHD_CMDS" "${DESC_SSHD:-}"
         SSHD_MENU=(
             "[Auto] Basculer OpenSSH hôte sur le port 2222 (Port 22 pour Git)"
             "[Port alternatif] Garder OpenSSH sur 22 et utiliser 2223 pour Git"
@@ -1133,7 +1092,7 @@ ufw --force enable
 EOF
 )
         if [ "$UFW_INSTALLED" -eq 1 ]; then
-            print_manual_commands_box "Commandes prévues : Règles de pare-feu UFW" "$UFW_CMDS"
+            print_manual_commands_box "Commandes prévues : Règles de pare-feu UFW" "$UFW_CMDS" "${DESC_UFW:-}"
             UFW_MENU=(
                 "[Auto] Appliquer les règles UFW (Ports 80, 443, ${SSH_PORT:-22}, 2222)"
                 "[Ignorer] Je gère mes règles de pare-feu moi-même"
@@ -1145,7 +1104,7 @@ EOF
             esac
         else
             printf "\n  %s!%s %sLe pare-feu UFW n'est pas installé sur cette machine.%s\n" "$C_GOLD" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
-            print_manual_commands_box "Commandes prévues : Installation et configuration UFW" "$UFW_CMDS"
+            print_manual_commands_box "Commandes prévues : Installation et configuration UFW" "$UFW_CMDS" "${DESC_UFW:-}"
             UFW_MENU=(
                 "[Auto] Installer UFW et appliquer les règles de sécurité (Recommandé)"
                 "[Ignorer] Ne pas installer de pare-feu pour le moment"
@@ -1171,7 +1130,7 @@ EOF
         STEP_SYSTEMD="skip"
     elif [ "$STEP_SYSTEMD" = "auto" ]; then
         SYSTEMD_CMDS="$CMDS_SYSTEMD"
-        print_manual_commands_box "Commandes prévues : Création du service de démarrage" "$SYSTEMD_CMDS"
+        print_manual_commands_box "Commandes prévues : Création du service de démarrage" "$SYSTEMD_CMDS" "${DESC_SYSTEMD:-}"
         SYSTEMD_MENU=(
             "[Auto] Créer et activer le service de démarrage (au boot)"
             "[Ignorer] Gérer les conteneurs manuellement via compose"
@@ -1347,19 +1306,16 @@ EOF
         [ -z "${POSTGRES_PASSWORD:-}" ] && POSTGRES_PASSWORD=$(openssl rand -base64 24 2>/dev/null | tr -dc 'a-zA-Z0-9' | head -c 24 || echo "gickers_db_pass_$(date +%s)")
 
         printf "\n"
-        printf "  %s╭────────────────────────────────────────────────────────────────────────╮%s\n" "$C_BOLD$C_CYAN" "$C_RESET"
-        printf "  %s│%s %s⚙️  Variables d'environnement & Secrets (Valeurs intelligentes)           %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
-        printf "  %s├────────────────────────────────────────────────────────────────────────┤%s\n" "$C_BOLD$C_CYAN" "$C_RESET"
+        printf "  %s⚙️  Variables d'environnement & Secrets (Valeurs recommandées)%s\n" "$C_BOLD$C_CYAN" "$C_RESET"
         if [ "$MODE" = "native" ]; then
-            printf "  %s│%s  • APP_SECRET : %s%s...%s (Clé secrète Symfony)               %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_BOLD$C_GOLD" "${APP_SECRET:0:12}" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
-            printf "  %s│%s  • Base de données : %ssqlite:///%s/.data/gickers-sh.db%s              %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_GREEN" "%kernel.project_dir%" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
-            printf "  %s│%s  • Git LFS : %s%s%s • Inscriptions : %s%s%s                           %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_CYAN" "$LFS_ENABLED" "$C_RESET" "$C_CYAN" "$ALLOW_SIGNUP" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
+            printf "    %s•%s %sAPP_SECRET      :%s %s%s...%s (Clé secrète Symfony)\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET" "$C_BOLD$C_GOLD" "${APP_SECRET:0:12}" "$C_RESET"
+            printf "    %s•%s %sBase de données :%s %ssqlite:///%s/.data/gickers-sh.db%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET" "$C_GREEN" "%kernel.project_dir%" "$C_RESET"
+            printf "    %s•%s %sOptions         :%s Git LFS: %s%s%s • Inscriptions: %s%s%s\n\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET" "$C_CYAN" "$LFS_ENABLED" "$C_RESET" "$C_CYAN" "$ALLOW_SIGNUP" "$C_RESET"
         else
-            printf "  %s│%s  • APP_SECRET : %s%s...%s (Clé secrète Symfony)               %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_BOLD$C_GOLD" "${APP_SECRET:0:12}" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
-            printf "  %s│%s  • Base PostgreSQL : %s%s@postgres:5432/%s%s (Pass auto fort)       %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_GREEN" "$POSTGRES_USER" "$POSTGRES_DB" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
-            printf "  %s│%s  • Git LFS : %s%s%s • Inscriptions : %s%s%s                           %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_CYAN" "$LFS_ENABLED" "$C_RESET" "$C_CYAN" "$ALLOW_SIGNUP" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
+            printf "    %s•%s %sAPP_SECRET      :%s %s%s...%s (Clé secrète Symfony)\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET" "$C_BOLD$C_GOLD" "${APP_SECRET:0:12}" "$C_RESET"
+            printf "    %s•%s %sBase de données :%s %s%s@postgres:5432/%s%s (Mot de passe fort généré)\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET" "$C_GREEN" "$POSTGRES_USER" "$POSTGRES_DB" "$C_RESET"
+            printf "    %s•%s %sOptions         :%s Git LFS: %s%s%s • Inscriptions: %s%s%s\n\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET" "$C_CYAN" "$LFS_ENABLED" "$C_RESET" "$C_CYAN" "$ALLOW_SIGNUP" "$C_RESET"
         fi
-        printf "  %s╰────────────────────────────────────────────────────────────────────────╯%s\n\n" "$C_BOLD$C_CYAN" "$C_RESET"
 
         ENV_MENU=(
             "Conserver ces valeurs recommandées (Automatique & Sécurisé - Entrée rapide)"
@@ -2006,14 +1962,9 @@ if [ -n "$ADMIN_CLAIM_TOKEN" ]; then
     if [ "$SSH_PORT" != "22" ] && [ -n "$SSH_PORT" ]; then
         SSH_PORT_CMD_OPT="-p ${SSH_PORT} "
     fi
-    printf "  %s╭────────────────────────────────────────────────────────────────────────╮%s\n" "$C_BOLD$C_GREEN" "$C_RESET"
-    printf "  %s│%s %s🔑 Initialisation Administrateur (Token sécurisé à usage unique)       %s│%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
-    printf "  %s├────────────────────────────────────────────────────────────────────────┤%s\n" "$C_BOLD$C_GREEN" "$C_RESET"
-    printf "  %s│%s Initialisez votre compte administrateur depuis votre poste client :     %s│%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
-    printf "  %s│%s                                                                        %s│%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
-    printf "  %s│%s   %s%sssh %s%s signup --token %s | bash%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD" "$C_CYAN" "$SSH_PORT_CMD_OPT" "$DOMAIN" "$ADMIN_CLAIM_TOKEN" "$C_RESET"
-    printf "  %s│%s                                                                        %s│%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
-    printf "  %s│%s Sur Windows (PowerShell) :                                             %s│%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
-    printf "  %s│%s   %s%sssh %s%s signup --token %s | iex%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD" "$C_CYAN" "$SSH_PORT_CMD_OPT" "$DOMAIN" "$ADMIN_CLAIM_TOKEN" "$C_RESET"
-    printf "  %s╰────────────────────────────────────────────────────────────────────────╯%s\n\n" "$C_BOLD$C_GREEN" "$C_RESET"
+    printf "  %s🔑 Initialisation Administrateur (Token sécurisé à usage unique)%s\n" "$C_BOLD$C_GREEN" "$C_RESET"
+    printf "  %sInitialisez votre compte administrateur depuis votre poste client :%s\n\n" "$C_MUTED" "$C_RESET"
+    printf "    %s%sssh %s%s signup --token %s | bash%s\n\n" "$C_BOLD" "$C_CYAN" "$SSH_PORT_CMD_OPT" "$DOMAIN" "$ADMIN_CLAIM_TOKEN" "$C_RESET"
+    printf "  %sSur Windows (PowerShell) :%s\n" "$C_MUTED" "$C_RESET"
+    printf "    %s%sssh %s%s signup --token %s | iex%s\n\n" "$C_BOLD" "$C_CYAN" "$SSH_PORT_CMD_OPT" "$DOMAIN" "$ADMIN_CLAIM_TOKEN" "$C_RESET"
 fi

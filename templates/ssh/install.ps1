@@ -325,14 +325,9 @@ Write-Host ""
 
 if (-not [string]::IsNullOrEmpty($adminClaimToken)) {
     $sshPortOpt = if ($sshPort -ne "22") { "-p $sshPort " } else { "" }
-    Write-Host "  $escGreen╭────────────────────────────────────────────────────────────────────────╮$escReset"
-    Write-Host "  $escGreen│$escReset $escBold$escWhite🔑 Initialisation Administrateur (Token sécurisé à usage unique)       $escGreen│$escReset"
-    Write-Host "  $escGreen├────────────────────────────────────────────────────────────────────────┤$escReset"
-    Write-Host "  $escGreen│$escReset Initialisez votre compte administrateur depuis votre poste client :     $escGreen│$escReset"
-    Write-Host "  $escGreen│$escReset                                                                        $escGreen│$escReset"
-    Write-Host "  $escGreen│$escReset   $escCyan${escBold}ssh $sshPortOpt$domain signup --token $adminClaimToken | iex$escReset"
-    Write-Host "  $escGreen│$escReset                                                                        $escGreen│$escReset"
-    Write-Host "  $escGreen│$escReset Sur Linux / macOS (Bash) :                                              $escGreen│$escReset"
-    Write-Host "  $escGreen│$escReset   $escCyan${escBold}ssh $sshPortOpt$domain signup --token $adminClaimToken | bash$escReset"
-    Write-Host "  $escGreen╰────────────────────────────────────────────────────────────────────────╯$escReset`n"
+    Write-Host "  $escBold${escGreen}🔑 Initialisation Administrateur (Token sécurisé à usage unique)$escReset"
+    Write-Host "  ${escMuted}Initialisez votre compte administrateur depuis votre poste client :$escReset`n"
+    Write-Host "    $escCyan${escBold}ssh $sshPortOpt$domain signup --token $adminClaimToken | iex$escReset`n"
+    Write-Host "  ${escMuted}Sur Linux / macOS (Bash) :$escReset"
+    Write-Host "    $escCyan${escBold}ssh $sshPortOpt$domain signup --token $adminClaimToken | bash$escReset`n"
 }
