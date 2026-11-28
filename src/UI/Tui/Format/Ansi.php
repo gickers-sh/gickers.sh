@@ -12,6 +12,7 @@ final class Ansi
 {
     /** Matches CSI (colour/SGR, cursor) and OSC escape sequences. */
     private const ANSI_RE = '/\e\[[0-9;?]*[ -\/]*[@-~]|\e\][^\a\e]*(?:\a|\e\\\\)/';
+    private const ANSI_AT_OFFSET_RE = '/\G(?:\e\[[0-9;?]*[ -\/]*[@-~]|\e\][^\a\e]*(?:\a|\e\\\\))/';
 
     public const RESET = "\e[0m";
 
@@ -64,7 +65,7 @@ final class Ansi
         $len = \strlen($s);
         $i = 0;
         while ($i < $len) {
-            if ("\e" === $s[$i] && preg_match(self::ANSI_RE, $s, $m, 0, $i) && 0 === strpos($s, $m[0], $i)) {
+            if ("\e" === $s[$i] && 1 === preg_match(self::ANSI_AT_OFFSET_RE, $s, $m, 0, $i)) {
                 $out .= $m[0];
                 $i += \strlen($m[0]);
                 continue;

@@ -11,6 +11,7 @@ use App\UI\Tui\View\Repo\Profile\ProfilePane;
 use App\UI\Tui\View\Repo\Readme\ReadmePane;
 use App\UI\Tui\View\Repo\Refs\RefsPane;
 use App\UI\Tui\View\Repo\Settings\SettingsPane;
+use App\UI\Tui\View\Selection\WikiPageView;
 use App\UI\Tui\View\View;
 use App\UI\Tui\Widget\ChromeWidget;
 use Symfony\Component\Tui\Input\Key;
@@ -67,6 +68,7 @@ final class RepoView extends RepoScreen
         return [
             'next_tab' => [Key::TAB],
             'prev_tab' => ['shift+tab'],
+            'wiki' => ['w'],
             'back' => ['q', Key::ESCAPE],
             'tab_1' => ['1'],
             'tab_2' => ['2'],
@@ -84,6 +86,7 @@ final class RepoView extends RepoScreen
         return match ($action) {
             'next_tab' => $this->cycleTab(1),
             'prev_tab' => $this->cycleTab(-1),
+            'wiki' => $this->openContextualWiki(),
             'back' => $this->back(),
             'tab_1' => $this->jumpTab(0),
             'tab_2' => $this->jumpTab(1),
@@ -125,23 +128,38 @@ final class RepoView extends RepoScreen
 
     public function helpColumns(): array
     {
-        $columns = [
-            [['esc', 'back to menu'], ['tab', 'switch tab'], ['1–8', 'jump to tab']],
-            [['↑/k', 'up'], ['↓/j', 'down'], ['g/G', 'top / bottom']],
-            [['enter', 'open'], ['f/b', 'page down / up'], ['?', 'toggle help']],
-        ];
-
-        $actions = match ($this->activeTab) {
+        $extra = [['w', 'wiki guide']];
+        $tabActions = match ($this->activeTab) {
             1, 2, 3, 4 => [['/', 'fuzzy search']],
             5 => [['/', 'fuzzy search'], ['r', 'refresh']],
             default => [],
         };
 
-        if ([] !== $actions) {
-            $columns[] = $actions;
-        }
+        return [
+            [['esc', 'back to menu'], ['tab', 'switch tab'], ['1–8', 'jump to tab']],
+            [['↑/k', 'up'], ['↓/j', 'down'], ['g/G', 'top / bottom']],
+            [['enter', 'open'], ['f/b', 'page down / up'], ['?', 'toggle help']],
+            array_merge($extra, $tabActions),
+        ];
+    }
 
-        return $columns;
+    public function contextualWikiSlug(): string
+    {
+        return match ($this->activeTab) {
+            3, 4 => 'branch-governance',
+            5 => 'deploy-guide',
+            7 => 'collaboration',
+            default => 'repo-management',
+        };
+    }
+
+    private function openContextualWiki(): bool
+    {
+        $this->repo->views->navigator()->push(
+            new WikiPageView($this->repo->views, $this->contextualWikiSlug()),
+        );
+
+        return true;
     }
 
     public function statusValue(): string

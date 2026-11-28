@@ -90,6 +90,7 @@ final class SelectionView extends View
         return [
             'next_tab' => [Key::TAB],
             'prev_tab' => ['shift+tab'],
+            'wiki' => ['w'],
             'back' => ['q', Key::ESCAPE],
         ];
     }
@@ -99,6 +100,7 @@ final class SelectionView extends View
         return match ($action) {
             'next_tab' => $this->cycleTab(1),
             'prev_tab' => $this->cycleTab(-1),
+            'wiki' => $this->openWikiTab(),
             'back' => $this->back(),
             default => false,
         };
@@ -120,11 +122,18 @@ final class SelectionView extends View
     {
         return [
             [['tab', 'section'], ['/', 'search']],
-            [['→/l', 'select']],
+            [['→/l', 'select'], ['w', 'wiki']],
             [['↑/k', 'up'], ['↓/j', 'down']],
             [['g/home', 'go to start'], ['G/end', 'go to end']],
             [['r', 'refresh'], ['?', 'toggle help'], ['q', 'quit']],
         ];
+    }
+
+    private function openWikiTab(): bool
+    {
+        $this->selectTab(4);
+
+        return true;
     }
 
     public function keyHints(): array

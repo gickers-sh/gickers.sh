@@ -801,4 +801,42 @@ final class TuiFunctionalTest extends KernelTestCase
 
         $tui->stop();
     }
+
+    public function testWikiShortcutsNavigateToWikiTabAndContextualGuides(): void
+    {
+        $user = new User('tui-wiki-' . bin2hex(random_bytes(3)), false, new \DateTimeImmutable());
+        $this->userStore->save($user);
+
+        $repo = ($this->createRepo)($user, $user->username() . '/wiki-nav-demo');
+        GitTestHelper::writeFile($this->gitReader->openRepository($this->repoDirectory->pathFor($repo->name())), 'main', 'README.md', "# Demo\n", 'init');
+
+        // 1. Pressing 'w' on SelectionView jumps straight to the Wiki tab (index 4)
+        $vt = new VirtualTerminal(80, 24);
+        $app = $this->apps->create($vt, $user, true);
+        $selection = $app->views()->selection();
+        $app->start($selection);
+        $tui = $app->tui();
+        $tui->start();
+        $this->tickUntilSettled($tui, $vt);
+
+        $vt->simulateInput('w');
+        $this->tickUntilSettled($tui, $vt);
+        $this->assertSame(4, $selection->activeTab());
+
+        // 2. Opening RepoView on Deployments tab (key '6') and pressing 'w' opens WikiPageView('deploy-guide')
+        $repoView = $app->views()->repoByName($repo->nameString());
+        $app->navigator()->push($repoView);
+        $this->tickUntilSettled($tui, $vt);
+
+        $vt->simulateInput('6');
+        $this->tickUntilSettled($tui, $vt);
+        $this->assertSame('deploy-guide', $repoView->contextualWikiSlug());
+
+        $vt->simulateInput('w');
+        $this->tickUntilSettled($tui, $vt);
+        $top = $app->navigator()->top();
+        $this->assertInstanceOf(\App\UI\Tui\View\Selection\WikiPageView::class, $top);
+
+        $tui->stop();
+    }
 }

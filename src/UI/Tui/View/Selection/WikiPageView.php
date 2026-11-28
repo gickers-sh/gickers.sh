@@ -54,6 +54,15 @@ final class WikiPageView extends View
         $this->doc = new DocumentWidget($this->views->renderer, $this->views->async());
         $this->doc->expandVertically(true);
         $this->doc->onLink(function (string $url): void {
+            if (str_starts_with($url, '/wiki/')) {
+                $targetSlug = trim(substr($url, 6), '/');
+                if ('' !== $targetSlug) {
+                    $this->views->navigator()->push(new self($this->views, $targetSlug));
+
+                    return;
+                }
+            }
+
             $this->flash = '🔗 '.$url;
             $this->chrome->refresh();
         });
