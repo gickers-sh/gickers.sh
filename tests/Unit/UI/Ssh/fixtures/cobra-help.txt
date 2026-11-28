@@ -4,21 +4,6 @@ Gickers.sh is a self-hostable Git server (inspired by Soft Serve) for the comman
 Usage:
   ssh -p 2223 localhost [command]
 
-Examples:
-  # Clone a repository over SSH
-  git clone ssh -p 2223 localhost/my-repo.git
-
-  # Inspect your user identity and registered SSH keys
-  ssh -p 2223 localhost info
-
-  # Browse and manage repositories
-  ssh -p 2223 localhost repo list
-  ssh -p 2223 localhost repo create my-project --private
-
-  # Manage personal access tokens and public keys
-  ssh -p 2223 localhost pubkey list
-  ssh -p 2223 localhost token create "ci-pipeline" --expires-in 30d
-
 Available Commands:
   about                Show the server README (About)
   help                 Help about any command
@@ -39,9 +24,31 @@ Available Commands:
 Flags:
   -h, --help   help for this command
 
+Examples:
+  # Clone a repository over SSH
+  git clone ssh -p 2223 localhost/my-repo.git
+
+  # Inspect your user identity and registered SSH keys
+  ssh -p 2223 localhost info
+
+  # Browse and manage repositories
+  ssh -p 2223 localhost repo list
+  ssh -p 2223 localhost repo create my-project --private
+
+  # Manage personal access tokens and public keys
+  ssh -p 2223 localhost pubkey list
+  ssh -p 2223 localhost token create "ci-pipeline" --expires-in 30d
+
 Use "ssh -p 2223 localhost [command] --help" for more information about a command.
 ########## help about
 Displays the server about / README document (from the .soft-serve repository) rendered in the terminal using Termstrap.
+
+Usage:
+   about [flags]
+
+Flags:
+  -h, --help        help for about
+  -w, --width int   terminal width in columns (0 = auto-detect)
 
 Scope:
   Public (accessible to all authenticated and anonymous callers).
@@ -49,18 +56,17 @@ Scope:
 Output:
   Renders Markdown to ANSI using the Termstrap terminal engine.
 
-Usage:
-   about [flags]
-
 Examples:
   # Display server about page
   ssh -p 2223 localhost about
-
-Flags:
-  -h, --help        help for about
-  -w, --width int   terminal width in columns (0 = auto-detect)
 ########## help info
 Displays identity information for the currently connected SSH session: username, global server administrator status, and all registered OpenSSH public keys.
+
+Usage:
+   info [flags]
+
+Flags:
+  -h, --help   help for info
 
 Scope:
   Any authenticated user (requires a registered SSH key).
@@ -68,58 +74,19 @@ Scope:
 Output:
   Outputs key-value pairs and authorized keys list to stdout.
 
-Usage:
-   info [flags]
-
 Examples:
   # Check your account profile and keys
   ssh -p 2223 localhost info
-
-Flags:
-  -h, --help   help for info
 ########## help install
 Generates a self-contained one-shot installer & deployment wizard for gickers.sh on your local machine or remote VPS.
 
 Configures domain, Docker CE & Compose stack, OpenSSH transition to port 2222, UFW firewall, systemd service, and PostgreSQL.
-
-Scope:
-  Public (all SSH keys and callers).
-
-Flags:
-      --admin-key string    initial admin SSH public key
-      --admin-user string   initial admin username
-      --allow-keyless bool  allow keyless SSH connections (true/false)
-      --allow-signup bool   allow public self-service signup (true/false)
-      --anon-access string  anonymous access policy (read-only, no-access, public)
-      --app-name string     application branding name
-      --bash                force Bash installer script
-      --db-name string      Postgres database name
-      --db-password string  Postgres database password
-      --db-user string      Postgres database user
-      --dir string          installation directory
-      --domain string       target public domain name (FQDN)
-      --dry-run             simulate deployment without modifying system
-      --http-port int       public HTTP port (default: 80)
-      --https-port int      public HTTPS port (default: 443)
-      --lfs bool            enable Git LFS (true/false)
-      --ps1                 force PowerShell installer script
-      --skip-docker         skip Docker CE installation
-      --skip-sshd-switch    do not switch host OpenSSH port from 22
-  -y, --yes                 non-interactive mode with defaults
 
 Usage:
    install [flags]
 
 Aliases:
   install, installer
-
-Examples:
-  # One-shot installation & deployment (interactive wizard)
-  ssh -p 2223 localhost install | bash            # Linux / macOS
-  ssh -p 2223 localhost install | iex             # Windows (PowerShell)
-
-  # Automated non-interactive deployment
-  ssh -p 2223 localhost install --domain code.example.com --yes | bash
 
 Flags:
       --admin-key string        initial admin SSH public key
@@ -143,17 +110,36 @@ Flags:
       --skip-docker bool        skip Docker CE installation
       --skip-sshd-switch bool   do not switch host OpenSSH port from 22
   -y, --yes bool                non-interactive mode with defaults
-########## help pubkey
-Manage OpenSSH public keys linked to your user account. Registered keys authenticate SSH CLI commands, interactive TUI browsing, and Git push/pull operations.
 
 Scope:
-  Any authenticated user (affects your own account only).
+  Public (all SSH keys and callers).
+
+Examples:
+  # One-shot installation & deployment (interactive wizard)
+  ssh -p 2223 localhost install | bash            # Linux / macOS
+  ssh -p 2223 localhost install | iex             # Windows (PowerShell)
+
+  # Automated non-interactive deployment
+  ssh -p 2223 localhost install --domain code.example.com --yes | bash
+########## help pubkey
+Manage OpenSSH public keys linked to your user account. Registered keys authenticate SSH CLI commands, interactive TUI browsing, and Git push/pull operations.
 
 Usage:
   ssh -p 2223 localhost pubkey [command]
 
 Aliases:
   pubkey, pubkeys, publickey, publickeys
+
+Available Commands:
+  add         Add a public key
+  list        List public keys
+  remove      Remove a public key
+
+Flags:
+  -h, --help   help for pubkey
+
+Scope:
+  Any authenticated user (affects your own account only).
 
 Examples:
   # List all keys registered to your account
@@ -165,29 +151,24 @@ Examples:
   # Remove an obsolete SSH public key
   ssh -p 2223 localhost pubkey remove "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... old-key"
 
-Available Commands:
-  add         Add a public key
-  list        List public keys
-  remove      Remove a public key
-
-Flags:
-  -h, --help   help for pubkey
-
 Use "ssh -p 2223 localhost pubkey [command] --help" for more information about a command.
 ########## help pubkey add
 Associates an additional OpenSSH public key with your user account.
 
-Scope:
-  Authenticated user.
+Usage:
+   pubkey add AUTHORIZED_KEY [flags]
 
 Arguments:
   AUTHORIZED_KEY    OpenSSH public key string (e.g. "ssh-ed25519 AAAAC... comment" or "ssh-rsa AAAAB...").
 
+Flags:
+  -h, --help   help for add
+
+Scope:
+  Authenticated user.
+
 Notes:
   Idempotent; if the key is already linked to your account, the command succeeds silently. Rejects keys already claimed by other accounts.
-
-Usage:
-   pubkey add AUTHORIZED_KEY [flags]
 
 Examples:
   # Add an Ed25519 public key
@@ -195,14 +176,8 @@ Examples:
 
   # Add an RSA public key
   ssh -p 2223 localhost pubkey add "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ... laptop"
-
-Flags:
-  -h, --help   help for add
 ########## help pubkey list
 Displays all OpenSSH public keys registered under your user account, including key algorithm, base64 payload, and optional comment.
-
-Scope:
-  Authenticated user.
 
 Usage:
    pubkey list [flags]
@@ -210,57 +185,44 @@ Usage:
 Aliases:
   list, ls
 
-Examples:
-  # List all your authorized keys
-  ssh -p 2223 localhost pubkey list
-
 Flags:
   -h, --help   help for list
-########## help pubkey remove
-Unlinks an existing OpenSSH public key from your account.
 
 Scope:
   Authenticated user.
 
-Arguments:
-  AUTHORIZED_KEY    Public key string or key material to remove.
-
-Notes:
-  Revokes immediate SSH access for the matching key pair. Ensure you retain at least one valid key on your account to prevent lockout. Silent on success.
+Examples:
+  # List all your authorized keys
+  ssh -p 2223 localhost pubkey list
+########## help pubkey remove
+Unlinks an existing OpenSSH public key from your account.
 
 Usage:
    pubkey remove AUTHORIZED_KEY [flags]
 
-Examples:
-  # Remove a key by its full public key line
-  ssh -p 2223 localhost pubkey remove "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG... user@desktop"
+Arguments:
+  AUTHORIZED_KEY    Public key string or key material to remove.
 
 Flags:
   -h, --help   help for remove
-########## help repo
-Create, configure, inspect, and administer Git repositories hosted on gickers.sh.
 
 Scope:
-  Permissions vary by command (from public read-only to repository admin / server admin).
+  Authenticated user.
+
+Notes:
+  Revokes immediate SSH access for the matching key pair. Ensure you retain at least one valid key on your account to prevent lockout. Silent on success.
+
+Examples:
+  # Remove a key by its full public key line
+  ssh -p 2223 localhost pubkey remove "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG... user@desktop"
+########## help repo
+Create, configure, inspect, and administer Git repositories hosted on gickers.sh.
 
 Usage:
   ssh -p 2223 localhost repo [command]
 
 Aliases:
   repo, repos, repository, repositories
-
-Examples:
-  # List accessible repositories
-  ssh -p 2223 localhost repo list
-
-  # Create a new private repository
-  ssh -p 2223 localhost repo create my-app --private -d "Core backend service"
-
-  # View repository metadata and clone URLs
-  ssh -p 2223 localhost repo info my-app
-
-  # Read a file directly from the repository
-  ssh -p 2223 localhost repo blob my-app main composer.json
 
 Available Commands:
   blob         Print out the contents of file at path
@@ -278,7 +240,7 @@ Available Commands:
   import       Import a new repository from remote
   info         Get information about a repository
   list         List repositories
-  mirror       Set or get a repository mirror property
+  mirror       Set or get a repository mirror property, or create a mirror
   private      Set or get a repository private property
   project-name Set or get the project name for a repository
   readme       Print the repository README
@@ -291,22 +253,25 @@ Available Commands:
 Flags:
   -h, --help   help for repo
 
+Scope:
+  Permissions vary by command (from public read-only to repository admin / server admin).
+
+Examples:
+  # List accessible repositories
+  ssh -p 2223 localhost repo list
+
+  # Create a new private repository
+  ssh -p 2223 localhost repo create my-app --private -d "Core backend service"
+
+  # View repository metadata and clone URLs
+  ssh -p 2223 localhost repo info my-app
+
+  # Read a file directly from the repository
+  ssh -p 2223 localhost repo blob my-app main composer.json
+
 Use "ssh -p 2223 localhost repo [command] --help" for more information about a command.
 ########## help repo blob
 Displays the content of a file at a specific Git reference. Supports syntax highlighting, line numbers, or raw verbatim bytes.
-
-Scope:
-  Read access to REPOSITORY required.
-
-Arguments:
-  REPOSITORY    Repository name.
-  REFERENCE     Git reference (branch, tag, or commit SHA).
-  PATH          Relative file path within the repository tree.
-
-Flags:
-  -c, --color         Colorize file content with syntax highlighting.
-  -l, --linenumber    Display 1-based line numbers along the left margin.
-  -r, --raw           Print verbatim raw file bytes without decoration or paging.
 
 Usage:
    repo blob REPOSITORY [REFERENCE] [PATH] [flags]
@@ -314,36 +279,31 @@ Usage:
 Aliases:
   blob, cat, show
 
-Examples:
-  # View a file with syntax highlighting and line numbers
-  ssh -p 2223 localhost repo blob my-app main src/Kernel.php -c -l
-
-  # Extract raw file content for piping into a local file
-  ssh -p 2223 localhost repo blob my-app main composer.json -r > composer.json
+Arguments:
+  REPOSITORY    Repository name.
+  REFERENCE     Git reference (branch, tag, or commit SHA).
+  PATH          Relative file path within the repository tree.
 
 Flags:
   -c, --color        Colorize output
   -h, --help         help for blob
   -l, --linenumber   Print line numbers
   -r, --raw          Print raw contents
+
+Scope:
+  Read access to REPOSITORY required.
+
+Examples:
+  # View a file with syntax highlighting and line numbers
+  ssh -p 2223 localhost repo blob my-app main src/Kernel.php -c -l
+
+  # Extract raw file content for piping into a local file
+  ssh -p 2223 localhost repo blob my-app main composer.json -r > composer.json
 ########## help repo branch
 List, delete, configure the default branch, and enforce branch protection rules in a repository.
 
-Scope:
-  Read access for list; Collaborator (RW) for default/delete; Repository Admin for protection rules.
-
 Usage:
   ssh -p 2223 localhost repo branch [command]
-
-Examples:
-  # List branches
-  ssh -p 2223 localhost repo branch list my-app
-
-  # Change default branch to main
-  ssh -p 2223 localhost repo branch default my-app main
-
-  # Protect the main branch against force pushes
-  ssh -p 2223 localhost repo branch protect my-app main --no-force --no-delete
 
 Available Commands:
   default     Set or get the default branch
@@ -355,19 +315,35 @@ Available Commands:
 Flags:
   -h, --help   help for branch
 
+Scope:
+  Read access for list; Collaborator (RW) for default/delete; Repository Admin for protection rules.
+
+Examples:
+  # List branches
+  ssh -p 2223 localhost repo branch list my-app
+
+  # Change default branch to main
+  ssh -p 2223 localhost repo branch default my-app main
+
+  # Protect the main branch against force pushes
+  ssh -p 2223 localhost repo branch protect my-app main --no-force --no-delete
+
 Use "ssh -p 2223 localhost repo branch [command] --help" for more information about a command.
 ########## help repo branch default
 Gets the current default branch (symbolic HEAD), or updates it to BRANCH if provided. The default branch is checked out by default when users clone without specifying a branch.
 
-Scope:
-  Read access to inspect; Collaborator (RW) or Repository Admin to update.
+Usage:
+   repo branch default REPOSITORY [BRANCH] [flags]
 
 Arguments:
   REPOSITORY    Repository name.
   BRANCH        Optional new default branch name (e.g. "main", "master").
 
-Usage:
-   repo branch default REPOSITORY [BRANCH] [flags]
+Flags:
+  -h, --help   help for default
+
+Scope:
+  Read access to inspect; Collaborator (RW) or Repository Admin to update.
 
 Examples:
   # View current default branch
@@ -375,18 +351,8 @@ Examples:
 
   # Set default branch to main
   ssh -p 2223 localhost repo branch default my-app main
-
-Flags:
-  -h, --help   help for default
 ########## help repo branch delete
 Deletes a remote branch ref. Rejects deletion if the branch is currently the default branch or if a branch protection rule prohibits deletion.
-
-Scope:
-  Collaborator (RW) or Repository Admin.
-
-Arguments:
-  REPOSITORY    Repository name.
-  BRANCH        Branch name to delete (e.g. "feature-old").
 
 Usage:
    repo branch delete REPOSITORY BRANCH [flags]
@@ -394,47 +360,55 @@ Usage:
 Aliases:
   delete, remove, rm, del
 
-Examples:
-  # Delete a merged feature branch
-  ssh -p 2223 localhost repo branch delete my-app feature-old
+Arguments:
+  REPOSITORY    Repository name.
+  BRANCH        Branch name to delete (e.g. "feature-old").
 
 Flags:
   -h, --help   help for delete
-########## help repo branch list
-Displays all branch refs in the repository, marking the current default branch (HEAD).
 
 Scope:
-  Read access to REPOSITORY required.
+  Collaborator (RW) or Repository Admin.
 
-Arguments:
-  REPOSITORY    Repository name.
+Examples:
+  # Delete a merged feature branch
+  ssh -p 2223 localhost repo branch delete my-app feature-old
+########## help repo branch list
+Displays all branch refs in the repository, marking the current default branch (HEAD).
 
 Usage:
    repo branch list REPOSITORY [flags]
 
-Examples:
-  # List all branches in a repository
-  ssh -p 2223 localhost repo branch list my-app
+Arguments:
+  REPOSITORY    Repository name.
 
 Flags:
   -h, --help   help for list
+
+Scope:
+  Read access to REPOSITORY required.
+
+Examples:
+  # List all branches in a repository
+  ssh -p 2223 localhost repo branch list my-app
 ########## help repo branch protect
 Enforces push safeguards on branches matching a glob pattern via the server pre-receive hook. Protects production branches against accidental force-pushes or deletion.
 
-Scope:
-  Repository Admin or Server Admin.
+Usage:
+   repo branch protect REPOSITORY PATTERN [flags]
 
 Arguments:
   REPOSITORY    Repository name.
   PATTERN       Branch glob pattern (e.g. "main", "release/*", "v*").
 
 Flags:
-  --admins-only    Only repository administrators and server admins may push to matching branches.
-  --no-delete      Reject deletion of matching branches (git push origin :branch).
-  --no-force       Reject force pushes and non-fast-forward updates (git push --force).
+      --admins-only   only administrators may update matching refs
+  -h, --help          help for protect
+      --no-delete     reject deletion of matching refs
+      --no-force      reject non-fast-forward (force) updates
 
-Usage:
-   repo branch protect REPOSITORY PATTERN [flags]
+Scope:
+  Repository Admin or Server Admin.
 
 Examples:
   # Protect main branch against force-pushes and deletion
@@ -445,42 +419,44 @@ Examples:
 
   # Restrict pushes on all branches to administrators only
   ssh -p 2223 localhost repo branch protect my-app "*" --admins-only
-
-Flags:
-      --admins-only   only administrators may update matching refs
-  -h, --help          help for protect
-      --no-delete     reject deletion of matching refs
-      --no-force      reject non-fast-forward (force) updates
 ########## help repo branch unprotect
 Removes a previously configured branch protection rule matching PATTERN.
 
-Scope:
-  Repository Admin or Server Admin.
+Usage:
+   repo branch unprotect REPOSITORY PATTERN [flags]
 
 Arguments:
   REPOSITORY    Repository name.
   PATTERN       Existing glob pattern to remove (e.g. "main", "release/*").
 
-Usage:
-   repo branch unprotect REPOSITORY PATTERN [flags]
+Flags:
+  -h, --help   help for unprotect
+
+Scope:
+  Repository Admin or Server Admin.
 
 Examples:
   # Remove protection from release branches
   ssh -p 2223 localhost repo branch unprotect my-app "release/*"
-
-Flags:
-  -h, --help   help for unprotect
 ########## help repo collab
 Grant, inspect, or revoke access permissions for users on a specific repository.
-
-Scope:
-  Repository Admin or Server Admin.
 
 Usage:
   ssh -p 2223 localhost repo collab [command]
 
 Aliases:
   collab, collabs, collaborator, collaborators
+
+Available Commands:
+  add         Add a collaborator to a repo
+  list        List collaborators for a repo
+  remove      Remove a collaborator from a repo
+
+Flags:
+  -h, --help   help for collab
+
+Scope:
+  Repository Admin or Server Admin.
 
 Examples:
   # List collaborators
@@ -492,34 +468,29 @@ Examples:
   # Remove a collaborator
   ssh -p 2223 localhost repo collab remove my-app bob
 
-Available Commands:
-  add         Add a collaborator to a repo
-  list        List collaborators for a repo
-  remove      Remove a collaborator from a repo
-
-Flags:
-  -h, --help   help for collab
-
 Use "ssh -p 2223 localhost repo collab [command] --help" for more information about a command.
 ########## help repo collab add
 Add a collaborator to a repo. LEVEL can be one of: no-access, read-only, read-write, or admin-access. Defaults to read-write.
 
-Scope:
-  Repository Admin or Server Admin.
+Usage:
+   repo collab add REPOSITORY USERNAME [LEVEL] [flags]
 
 Arguments:
   REPOSITORY    Repository name.
   USERNAME      Username of the collaborator.
   LEVEL         Access level: 'read-only', 'read-write', 'admin-access', or 'no-access' (default: read-write).
 
+Flags:
+  -h, --help   help for add
+
+Scope:
+  Repository Admin or Server Admin.
+
 Notes:
   - read-only: clone, pull, and inspect repository.
   - read-write: push commits and non-protected branches.
   - admin-access: manage collaborators, branch protection, webhooks, and settings.
   - no-access: revokes all access on private repositories.
-
-Usage:
-   repo collab add REPOSITORY USERNAME [LEVEL] [flags]
 
 Examples:
   # Add a collaborator with default read-write access
@@ -530,62 +501,60 @@ Examples:
 
   # Add a co-maintainer with admin access
   ssh -p 2223 localhost repo collab add my-app lead-dev admin-access
-
-Flags:
-  -h, --help   help for add
 ########## help repo collab list
 Displays all collaborators explicitly assigned to the repository alongside their active access level.
-
-Scope:
-  Read access to REPOSITORY required.
-
-Arguments:
-  REPOSITORY    Repository name.
 
 Usage:
    repo collab list REPOSITORY [flags]
 
-Examples:
-  # List all collaborators on a repository
-  ssh -p 2223 localhost repo collab list my-app
+Arguments:
+  REPOSITORY    Repository name.
 
 Flags:
   -h, --help   help for list
+
+Scope:
+  Read access to REPOSITORY required.
+
+Examples:
+  # List all collaborators on a repository
+  ssh -p 2223 localhost repo collab list my-app
 ########## help repo collab remove
 Removes explicit collaboration permissions for a user from the repository.
 
-Scope:
-  Repository Admin or Server Admin.
+Usage:
+   repo collab remove REPOSITORY USERNAME [flags]
 
 Arguments:
   REPOSITORY    Repository name.
   USERNAME      Collaborator username to remove.
 
-Usage:
-   repo collab remove REPOSITORY USERNAME [flags]
+Flags:
+  -h, --help   help for remove
+
+Scope:
+  Repository Admin or Server Admin.
 
 Examples:
   # Remove a collaborator
   ssh -p 2223 localhost repo collab remove my-app bob
-
-Flags:
-  -h, --help   help for remove
 ########## help repo commit
 Displays commit details: author, committer, dates, commit message, and changed files. Can output full unified diff or colorized changes.
 
-Scope:
-  Read access to repo required.
+Usage:
+   repo commit repo SHA [flags]
 
 Arguments:
   repo    Repository name.
   SHA     Full or abbreviated Git commit SHA hash.
 
 Flags:
-  -c, --color    Colorize commit diff output.
-  -p, --patch    Output unified patch only (suitable for 'git apply').
+  -c, --color   Colorize output
+  -h, --help    help for commit
+  -p, --patch   Output patch only
 
-Usage:
-   repo commit repo SHA [flags]
+Scope:
+  Read access to repo required.
 
 Examples:
   # View commit details and diff
@@ -596,31 +565,27 @@ Examples:
 
   # Export commit as patch file
   ssh -p 2223 localhost repo commit my-app 8a3f12c -p > fix.patch
-
-Flags:
-  -c, --color   Colorize output
-  -h, --help    help for commit
-  -p, --patch   Output patch only
 ########## help repo create
 Initializes a new bare Git repository on gickers.sh. The authenticated creator automatically becomes the repository owner with full admin permissions.
 
-Scope:
-  Authenticated user.
+Usage:
+   repo create REPOSITORY [flags]
 
 Arguments:
   REPOSITORY    Repository name (e.g. "my-project").
 
 Flags:
-  -d, --description string    Set the repository description shown in listings and TUI.
-  -H, --hidden                Hide the repository from public listings in TUI and web browser.
-  -n, --name string           Set a human-readable display title for the project.
-  -p, --private               Make the repository private (accessible only to collaborators and admins).
+  -d, --description string   set the repository description
+  -h, --help                 help for create
+  -H, --hidden               hide the repository from the UI
+  -n, --name string          set the project name
+  -p, --private              make the repository private
+
+Scope:
+  Authenticated user.
 
 Notes:
   Outputs creation confirmation notice to stderr and the SSH clone URL to stdout.
-
-Usage:
-   repo create REPOSITORY [flags]
 
 Examples:
   # Create a public repository
@@ -631,21 +596,8 @@ Examples:
 
   # Create a hidden repository
   ssh -p 2223 localhost repo create secret-tool --private --hidden
-
-Flags:
-  -d, --description string   set the repository description
-  -h, --help                 help for create
-  -H, --hidden               hide the repository from the UI
-  -n, --name string          set the project name
-  -p, --private              make the repository private
 ########## help repo delete
 Permanently deletes a bare Git repository from disk, including all branches, tags, collaborator permissions, branch protection rules, and webhooks. Irreversible.
-
-Scope:
-  Repository Owner or Server Admin.
-
-Arguments:
-  REPOSITORY    Repository name to permanently delete.
 
 Usage:
    repo delete REPOSITORY [flags]
@@ -653,21 +605,20 @@ Usage:
 Aliases:
   delete, del, remove, rm
 
-Examples:
-  # Delete a repository
-  ssh -p 2223 localhost repo delete obsolete-project
+Arguments:
+  REPOSITORY    Repository name to permanently delete.
 
 Flags:
   -h, --help   help for delete
-########## help repo description
-Gets the repository description, or updates it if DESCRIPTION is provided.
 
 Scope:
-  Read access to inspect; Repository Admin to update.
+  Repository Owner or Server Admin.
 
-Arguments:
-  REPOSITORY     Repository name.
-  DESCRIPTION    Optional new description text. If omitted, prints the current description.
+Examples:
+  # Delete a repository
+  ssh -p 2223 localhost repo delete obsolete-project
+########## help repo description
+Gets the repository description, or updates it if DESCRIPTION is provided.
 
 Usage:
    repo description REPOSITORY [DESCRIPTION] [flags]
@@ -675,28 +626,38 @@ Usage:
 Aliases:
   description, desc
 
+Arguments:
+  REPOSITORY     Repository name.
+  DESCRIPTION    Optional new description text. If omitted, prints the current description.
+
+Flags:
+  -h, --help   help for description
+
+Scope:
+  Read access to inspect; Repository Admin to update.
+
 Examples:
   # View current description
   ssh -p 2223 localhost repo description my-app
 
   # Set new description
   ssh -p 2223 localhost repo description my-app "High-performance distributed storage engine"
-
-Flags:
-  -h, --help   help for description
 ########## help repo diff
 Generates a unified diff comparing two Git commits, branches, or tags. If TO is omitted, displays the changeset introduced by commit FROM relative to its parent.
 
-Scope:
-  Read access to REPOSITORY required.
+Usage:
+   repo diff REPOSITORY FROM [TO] [flags]
 
 Arguments:
   REPOSITORY    Repository name.
   FROM          Base reference or commit SHA.
   TO            Optional target reference or commit SHA to compare against.
 
-Usage:
-   repo diff REPOSITORY FROM [TO] [flags]
+Flags:
+  -h, --help   help for diff
+
+Scope:
+  Read access to REPOSITORY required.
 
 Examples:
   # View diff between two branches
@@ -707,34 +668,15 @@ Examples:
 
   # View changes introduced by a specific commit
   ssh -p 2223 localhost repo diff my-app HEAD~1
-
-Flags:
-  -h, --help   help for diff
 ########## help repo fork
-Creates a server-side fork of an existing Git repository. You become the owner and administrator of the newly created fork.
-
-Scope:
-  Read access to SOURCE required; authenticated user.
-
-Arguments:
-  SOURCE      Source repository name to fork from.
-  NEW_NAME    Optional destination repository name (defaults to 'SOURCE-fork').
-
-Flags:
-  -d, --description string    Set custom description for the fork.
-  -H, --hidden                Hide fork from public listings.
-  -n, --name string           Set display name for the fork.
-  -p, --private               Make the fork private.
+Creates a server-side fork of an existing Git repository or external Git URL. You become the owner and administrator of the newly created fork.
 
 Usage:
    repo fork SOURCE [NEW_NAME] [flags]
 
-Examples:
-  # Fork a repository with default destination name
-  ssh -p 2223 localhost repo fork upstream-project
-
-  # Fork into a custom repository name and make it private
-  ssh -p 2223 localhost repo fork upstream-project my-custom-fork --private
+Arguments:
+  SOURCE      Source repository name or external Git URL to fork from.
+  NEW_NAME    Optional destination repository name (defaults to '<username>/<repo_name_source>').
 
 Flags:
   -d, --description string   set the repository description
@@ -742,22 +684,38 @@ Flags:
   -H, --hidden               hide the repository from the UI
   -n, --name string          set the project name
   -p, --private              make the repository private
-########## help repo grep
-Searches tracked repository files using Git regular expressions at the specified Git reference.
 
 Scope:
-  Read access to REPOSITORY required.
+  Read access to SOURCE required (or public remote URL); authenticated user.
 
-Arguments:
-  REPOSITORY    Repository name.
-  PATTERN       Search pattern or regular expression.
-  REFERENCE     Optional Git reference (branch, tag, or commit SHA; default: HEAD).
+Examples:
+  # Fork a repository with default destination name
+  ssh -p 2223 localhost repo fork upstream-project
+
+  # Fork from an external URL
+  ssh -p 2223 localhost repo fork https://github.com/charmbracelet/soft-serve.git
+
+  # Fork into a custom repository name and make it private
+  ssh -p 2223 localhost repo fork upstream-project my-custom-fork --private
+########## help repo grep
+Searches tracked repository files using Git regular expressions at the specified Git reference.
 
 Usage:
    repo grep REPOSITORY PATTERN [REFERENCE] [flags]
 
 Aliases:
   grep, search
+
+Arguments:
+  REPOSITORY    Repository name.
+  PATTERN       Search pattern or regular expression.
+  REFERENCE     Optional Git reference (branch, tag, or commit SHA; default: HEAD).
+
+Flags:
+  -h, --help   help for grep
+
+Scope:
+  Read access to REPOSITORY required.
 
 Examples:
   # Search for a function name across the default branch
@@ -768,24 +726,24 @@ Examples:
 
   # Search using a regex pattern on a release tag
   ssh -p 2223 localhost repo grep my-app "class [A-Z][a-zA-Z]+" v2.0.0
-
-Flags:
-  -h, --help   help for grep
 ########## help repo hidden
 Gets or sets whether the repository is hidden from the interactive TUI repository list and public web catalog. Does not alter Git clone or push permissions.
-
-Scope:
-  Read access to inspect; Repository Admin to update.
-
-Arguments:
-  REPOSITORY    Repository name.
-  value         Optional boolean ('true' or 'false'). If omitted, prints current state.
 
 Usage:
    repo hidden REPOSITORY [TRUE|FALSE] [flags]
 
 Aliases:
   hidden, hide
+
+Arguments:
+  REPOSITORY    Repository name.
+  value         Optional boolean ('true' or 'false'). If omitted, prints current state.
+
+Flags:
+  -h, --help   help for hidden
+
+Scope:
+  Read access to inspect; Repository Admin to update.
 
 Examples:
   # Check if repository is hidden
@@ -796,40 +754,15 @@ Examples:
 
   # Unhide repository
   ssh -p 2223 localhost repo hidden my-app false
-
-Flags:
-  -h, --help   help for hidden
 ########## help repo import
 Imports an external Git repository from a remote URL over HTTP, HTTPS, or Git protocols. Can configure full mirror synchronization and download Git LFS objects.
-
-Scope:
-  Authenticated user.
-
-Arguments:
-  REPOSITORY    Target repository name on gickers.sh.
-  REMOTE        Remote Git repository URL (https://... or git://...).
-
-Flags:
-  -d, --description string     Set the repository description.
-  -H, --hidden                 Hide repository from UI listings.
-      --lfs                    Download and store Git LFS objects from remote.
-      --lfs-endpoint string    Custom Git LFS server endpoint URL.
-  -m, --mirror                 Set up as a mirror (fetches all branches, tags, and refs).
-  -n, --name string            Set display name for the repository.
-  -p, --private                Make the imported repository private.
 
 Usage:
    repo import REPOSITORY REMOTE [flags]
 
-Examples:
-  # Import a repository from GitHub
-  ssh -p 2223 localhost repo import my-lib https://github.com/org/my-lib.git
-
-  # Mirror an upstream repository with all branches and tags
-  ssh -p 2223 localhost repo import upstream-mirror https://gitlab.com/group/repo.git --mirror
-
-  # Import with Git LFS assets and make private
-  ssh -p 2223 localhost repo import game-assets https://github.com/org/game.git --lfs --private
+Arguments:
+  REPOSITORY    Target repository name on gickers.sh.
+  REMOTE        Remote Git repository URL (https://... or git://...).
 
 Flags:
   -d, --description string    set the repository description
@@ -840,32 +773,39 @@ Flags:
   -m, --mirror                mirror the repository
   -n, --name string           set the project name
   -p, --private               make the repository private
-########## help repo info
-Displays detailed metadata and statistics for a repository: visibility (public/private), hidden state, default branch, commit count, branch count, tag count, and clone URLs.
 
 Scope:
-  Read access to REPOSITORY required.
+  Authenticated user.
 
-Arguments:
-  REPOSITORY    Repository name to inspect.
+Examples:
+  # Import a repository from GitHub
+  ssh -p 2223 localhost repo import my-lib https://github.com/org/my-lib.git
+
+  # Mirror an upstream repository with all branches and tags
+  ssh -p 2223 localhost repo import upstream-mirror https://gitlab.com/group/repo.git --mirror
+
+  # Import with Git LFS assets and make private
+  ssh -p 2223 localhost repo import game-assets https://github.com/org/game.git --lfs --private
+########## help repo info
+Displays detailed metadata and statistics for a repository: visibility (public/private), hidden state, default branch, commit count, branch count, tag count, and clone URLs.
 
 Usage:
    repo info REPOSITORY [flags]
 
-Examples:
-  # Show metadata for a repository
-  ssh -p 2223 localhost repo info my-app
+Arguments:
+  REPOSITORY    Repository name to inspect.
 
 Flags:
   -h, --help   help for info
-########## help repo list
-Lists repositories available on the server. Non-admin users see public repositories and private repositories where they are collaborators. Server administrators with --all see all repositories.
 
 Scope:
-  Public / Authenticated.
+  Read access to REPOSITORY required.
 
-Flags:
-  -a, --all    List all repositories including private and hidden ones (admins only).
+Examples:
+  # Show metadata for a repository
+  ssh -p 2223 localhost repo info my-app
+########## help repo list
+Lists repositories available on the server. Non-admin users see public repositories and private repositories where they are collaborators. Server administrators with --all see all repositories.
 
 Usage:
    repo list [flags]
@@ -873,50 +813,69 @@ Usage:
 Aliases:
   list, ls
 
+Flags:
+  -a, --all    List all repositories
+  -h, --help   help for list
+
+Scope:
+  Public / Authenticated.
+
 Examples:
   # List all accessible repositories
   ssh -p 2223 localhost repo list
 
   # List all server repositories including hidden/private (admins only)
   ssh -p 2223 localhost repo list -a
-
-Flags:
-  -a, --all    List all repositories
-  -h, --help   help for list
 ########## help repo mirror
-Gets or sets whether the repository acts as an exact Git mirror of an upstream remote.
-
-Scope:
-  Read access to inspect; Repository Admin to update.
-
-Arguments:
-  REPOSITORY    Repository name.
-  value         Optional boolean ('true' or 'false'). If omitted, prints current state.
+Creates an exact Git mirror of a repository (external Git URL or another gickers.sh repository), or gets/sets whether an existing repository acts as a mirror.
 
 Usage:
-   repo mirror REPOSITORY [true|false] [flags]
+   repo mirror SOURCE [DESTINATION] [flags]
 
-Examples:
-  # Check mirror status
-  ssh -p 2223 localhost repo mirror my-app
-
-  # Enable mirror property
-  ssh -p 2223 localhost repo mirror my-app true
+Arguments:
+  SOURCE        Remote Git repository URL or gickers.sh repository name to mirror or inspect.
+  DESTINATION   Optional destination repository name (defaults to '<username>/<repo_name_source>'), or boolean value ('true' or 'false') to set mirror property.
 
 Flags:
-  -h, --help   help for mirror
+  -d, --description string   set the repository description
+  -h, --help                 help for mirror
+  -H, --hidden               hide the repository from the UI
+  -n, --name string          set the project name
+  -p, --private              make the repository private
+
+Scope:
+  Read access to inspect; Repository Admin to update; authenticated user to create a mirror.
+
+Examples:
+  # Mirror an external repository
+  ssh -p 2223 localhost repo mirror https://github.com/charmbracelet/soft-serve.git
+
+  # Mirror another gickers.sh repository into your namespace
+  ssh -p 2223 localhost repo mirror alice/project
+
+  # Mirror into a custom repository name
+  ssh -p 2223 localhost repo mirror https://github.com/charmbracelet/soft-serve.git my-mirror
+
+  # Check mirror status of an existing repository
+  ssh -p 2223 localhost repo mirror my-app
+
+  # Enable mirror property on an existing repository
+  ssh -p 2223 localhost repo mirror my-app true
 ########## help repo private
 Gets or sets whether the repository is private. Private repositories are hidden from public listings and can only be cloned or pushed by collaborators and server admins.
 
-Scope:
-  Read access to inspect; Repository Admin to update.
+Usage:
+   repo private REPOSITORY [true|false] [flags]
 
 Arguments:
   REPOSITORY    Repository name.
   value         Optional boolean ('true' or 'false'). If omitted, prints current state.
 
-Usage:
-   repo private REPOSITORY [true|false] [flags]
+Flags:
+  -h, --help   help for private
+
+Scope:
+  Read access to inspect; Repository Admin to update.
 
 Examples:
   # Check if repository is private
@@ -927,18 +886,8 @@ Examples:
 
   # Make repository public
   ssh -p 2223 localhost repo private my-app false
-
-Flags:
-  -h, --help   help for private
 ########## help repo project-name
 Gets the human-readable project title, or updates it if NAME is provided. Displayed in TUI and web interface headers.
-
-Scope:
-  Read access to inspect; Repository Admin to update.
-
-Arguments:
-  REPOSITORY    Repository name.
-  NAME          Optional project title. If omitted, prints current title.
 
 Usage:
    repo project-name REPOSITORY [NAME] [flags]
@@ -946,27 +895,37 @@ Usage:
 Aliases:
   project-name, project
 
+Arguments:
+  REPOSITORY    Repository name.
+  NAME          Optional project title. If omitted, prints current title.
+
+Flags:
+  -h, --help   help for project-name
+
+Scope:
+  Read access to inspect; Repository Admin to update.
+
 Examples:
   # View current project name
   ssh -p 2223 localhost repo project-name my-app
 
   # Set display title
   ssh -p 2223 localhost repo project-name my-app "Storage Engine"
-
-Flags:
-  -h, --help   help for project-name
 ########## help repo readme
 Locates and prints the repository README file (e.g. README.md, README.org, README.txt) at the specified Git reference.
 
-Scope:
-  Read access to REPOSITORY required.
+Usage:
+   repo readme REPOSITORY [REFERENCE] [flags]
 
 Arguments:
   REPOSITORY    Repository name.
   REFERENCE     Optional Git branch, tag, or commit SHA (default: HEAD).
 
-Usage:
-   repo readme REPOSITORY [REFERENCE] [flags]
+Flags:
+  -h, --help   help for readme
+
+Scope:
+  Read access to REPOSITORY required.
 
 Examples:
   # Print README from default branch (HEAD)
@@ -977,21 +936,8 @@ Examples:
 
   # Print README from a release tag
   ssh -p 2223 localhost repo readme my-app v1.0.0
-
-Flags:
-  -h, --help   help for readme
 ########## help repo rename
 Renames a repository and moves its bare Git directory on disk. SSH and HTTP clone URLs are immediately updated to the new name.
-
-Scope:
-  Repository Owner or Server Admin.
-
-Arguments:
-  REPOSITORY    Current repository name.
-  NEW_NAME      New repository name.
-
-Notes:
-  Silent on success (exit code 0).
 
 Usage:
    repo rename REPOSITORY NEW_NAME [flags]
@@ -999,24 +945,37 @@ Usage:
 Aliases:
   rename, mv, move
 
-Examples:
-  # Rename a repository
-  ssh -p 2223 localhost repo rename old-project new-project
+Arguments:
+  REPOSITORY    Current repository name.
+  NEW_NAME      New repository name.
 
 Flags:
   -h, --help   help for rename
+
+Scope:
+  Repository Owner or Server Admin.
+
+Notes:
+  Silent on success (exit code 0).
+
+Examples:
+  # Rename a repository
+  ssh -p 2223 localhost repo rename old-project new-project
 ########## help repo signatures
 Enforces that all commits pushed to the repository must carry valid, cryptographically verified GPG or SSH signatures. Non-signed commits are rejected by the pre-receive server hook.
 
-Scope:
-  Read access to inspect; Repository Admin to update.
+Usage:
+   repo signatures REPOSITORY [true|false] [flags]
 
 Arguments:
   REPOSITORY    Repository name.
   value         Optional boolean ('true' or 'false'). If omitted, prints current requirement state.
 
-Usage:
-   repo signatures REPOSITORY [true|false] [flags]
+Flags:
+  -h, --help   help for signatures
+
+Scope:
+  Read access to inspect; Repository Admin to update.
 
 Examples:
   # Check signature requirement
@@ -1027,24 +986,11 @@ Examples:
 
   # Allow unsigned commits
   ssh -p 2223 localhost repo signatures my-app false
-
-Flags:
-  -h, --help   help for signatures
 ########## help repo tag
 List and delete Git release and annotated tags in a repository.
 
-Scope:
-  Read access to list; Collaborator (RW) or Admin to delete.
-
 Usage:
   ssh -p 2223 localhost repo tag [command]
-
-Examples:
-  # List all tags in a repository
-  ssh -p 2223 localhost repo tag list my-app
-
-  # Delete an obsolete tag
-  ssh -p 2223 localhost repo tag delete my-app v1.0.0-rc1
 
 Available Commands:
   delete      Delete a tag
@@ -1053,16 +999,19 @@ Available Commands:
 Flags:
   -h, --help   help for tag
 
+Scope:
+  Read access to list; Collaborator (RW) or Admin to delete.
+
+Examples:
+  # List all tags in a repository
+  ssh -p 2223 localhost repo tag list my-app
+
+  # Delete an obsolete tag
+  ssh -p 2223 localhost repo tag delete my-app v1.0.0-rc1
+
 Use "ssh -p 2223 localhost repo tag [command] --help" for more information about a command.
 ########## help repo tag delete
 Deletes a Git tag ref from the repository.
-
-Scope:
-  Collaborator (RW) or Repository Admin.
-
-Arguments:
-  REPOSITORY    Repository name.
-  TAG           Tag name to delete (e.g. "v1.0.0-rc1").
 
 Usage:
    repo tag delete REPOSITORY TAG [flags]
@@ -1070,20 +1019,21 @@ Usage:
 Aliases:
   delete, remove, rm, del
 
-Examples:
-  # Delete a tag
-  ssh -p 2223 localhost repo tag delete my-app v1.0.0-rc1
+Arguments:
+  REPOSITORY    Repository name.
+  TAG           Tag name to delete (e.g. "v1.0.0-rc1").
 
 Flags:
   -h, --help   help for delete
-########## help repo tag list
-Displays all Git tags (lightweight and annotated) existing in the repository.
 
 Scope:
-  Read access to REPOSITORY required.
+  Collaborator (RW) or Repository Admin.
 
-Arguments:
-  REPOSITORY    Repository name.
+Examples:
+  # Delete a tag
+  ssh -p 2223 localhost repo tag delete my-app v1.0.0-rc1
+########## help repo tag list
+Displays all Git tags (lightweight and annotated) existing in the repository.
 
 Usage:
    repo tag list REPOSITORY [flags]
@@ -1091,25 +1041,34 @@ Usage:
 Aliases:
   list, ls
 
-Examples:
-  # List all tags
-  ssh -p 2223 localhost repo tag list my-app
+Arguments:
+  REPOSITORY    Repository name.
 
 Flags:
   -h, --help   help for list
-########## help repo tree
-Lists files, directories, and symlinks at a given path and Git reference, displaying file mode, object type, SHA, and filename.
 
 Scope:
   Read access to REPOSITORY required.
+
+Examples:
+  # List all tags
+  ssh -p 2223 localhost repo tag list my-app
+########## help repo tree
+Lists files, directories, and symlinks at a given path and Git reference, displaying file mode, object type, SHA, and filename.
+
+Usage:
+   repo tree REPOSITORY [REFERENCE] [PATH] [flags]
 
 Arguments:
   REPOSITORY    Repository name.
   REFERENCE     Optional Git reference (branch, tag, or commit SHA; default: HEAD).
   PATH          Optional subdirectory path within the tree (default: root).
 
-Usage:
-   repo tree REPOSITORY [REFERENCE] [PATH] [flags]
+Flags:
+  -h, --help   help for tree
+
+Scope:
+  Read access to REPOSITORY required.
 
 Examples:
   # List root tree at default branch
@@ -1120,20 +1079,25 @@ Examples:
 
   # List tree at specific commit
   ssh -p 2223 localhost repo tree my-app 8a3f12c config/
-
-Flags:
-  -h, --help   help for tree
 ########## help repo webhook
 Configure HTTP POST webhooks dispatched automatically upon repository events (push, branch creation, tag updates, collaborator changes).
-
-Scope:
-  Repository Admin or Server Admin.
 
 Usage:
   ssh -p 2223 localhost repo webhook [command]
 
 Aliases:
   webhook, webhooks
+
+Available Commands:
+  create      Create a repository webhook
+  delete      Delete a repository webhook
+  list        List repository webhooks
+
+Flags:
+  -h, --help   help for webhook
+
+Scope:
+  Repository Admin or Server Admin.
 
 Examples:
   # List webhooks
@@ -1145,33 +1109,26 @@ Examples:
   # Delete a webhook by ID
   ssh -p 2223 localhost repo webhook delete my-app 2
 
-Available Commands:
-  create      Create a repository webhook
-  delete      Delete a repository webhook
-  list        List repository webhooks
-
-Flags:
-  -h, --help   help for webhook
-
 Use "ssh -p 2223 localhost repo webhook [command] --help" for more information about a command.
 ########## help repo webhook create
 Registers a new webhook endpoint. When subscribed Git events occur, gickers.sh sends an HTTP POST request with a signed payload to the target URL.
 
-Scope:
-  Repository Admin or Server Admin.
+Usage:
+   repo webhook create REPOSITORY URL [flags]
 
 Arguments:
   REPOSITORY    Repository name.
   URL           HTTP/HTTPS endpoint URL to receive webhook payloads.
 
 Flags:
-  -a, --active              Whether the webhook is active (default: true).
-  -c, --content-type json   Content type of the webhook payload, can be either json or `form` (default: "json").
-  -e, --events strings      Events to trigger the webhook. If omitted, all events are subscribed.
-  -s, --secret string       Secret token used to sign the webhook payload via HMAC-SHA256.
+  -a, --active              whether the webhook is active (default true)
+  -c, --content-type json   content type of the webhook payload, can be either json or `form` (default "json")
+  -e, --events strings      events to trigger the webhook, available events are (branch_tag_create, branch_tag_delete, collaborator, push, repository, repository_visibility_change)
+  -h, --help                help for create
+  -s, --secret string       secret to sign the webhook payload
 
-Usage:
-   repo webhook create REPOSITORY URL [flags]
+Scope:
+  Repository Admin or Server Admin.
 
 Examples:
   # Create a webhook for all events
@@ -1182,76 +1139,66 @@ Examples:
 
   # Create a webhook for branch and tag creation
   ssh -p 2223 localhost repo webhook create my-app https://deploy.example.com/hook -e branch_tag_create,push -c json
-
-Flags:
-  -a, --active              whether the webhook is active (default true)
-  -c, --content-type json   content type of the webhook payload, can be either json or `form` (default "json")
-  -e, --events strings      events to trigger the webhook, available events are (branch_tag_create, branch_tag_delete, collaborator, push, repository, repository_visibility_change)
-  -h, --help                help for create
-  -s, --secret string       secret to sign the webhook payload
 ########## help repo webhook delete
 Permanently deletes a repository webhook by its numeric identifier.
 
-Scope:
-  Repository Admin or Server Admin.
+Usage:
+   repo webhook delete REPOSITORY WEBHOOK_ID [flags]
 
 Arguments:
   REPOSITORY    Repository name.
   WEBHOOK_ID    Numeric identifier of the webhook (see 'repo webhook list').
 
-Usage:
-   repo webhook delete REPOSITORY WEBHOOK_ID [flags]
-
-Examples:
-  # Delete webhook #2
-  ssh -p 2223 localhost repo webhook delete my-app 2
-
 Flags:
   -h, --help   help for delete
-########## help repo webhook list
-Displays all configured webhooks for a repository, including webhook ID, target URL, subscribed events, payload format, and active status.
 
 Scope:
   Repository Admin or Server Admin.
 
-Arguments:
-  REPOSITORY    Repository name.
+Examples:
+  # Delete webhook #2
+  ssh -p 2223 localhost repo webhook delete my-app 2
+########## help repo webhook list
+Displays all configured webhooks for a repository, including webhook ID, target URL, subscribed events, payload format, and active status.
 
 Usage:
    repo webhook list REPOSITORY [flags]
 
-Examples:
-  # List all webhooks for a repository
-  ssh -p 2223 localhost repo webhook list my-app
+Arguments:
+  REPOSITORY    Repository name.
 
 Flags:
   -h, --help   help for list
-########## help set-username
-Updates the username of your authenticated account.
 
 Scope:
-  Any authenticated user.
+  Repository Admin or Server Admin.
 
-Arguments:
-  USERNAME    New unique username (alphanumeric, hyphens, and underscores).
-
-Notes:
-  Renaming your account updates ownership on personal repositories and alters SSH clone URLs. Operation is silent on success (exit code 0).
+Examples:
+  # List all webhooks for a repository
+  ssh -p 2223 localhost repo webhook list my-app
+########## help set-username
+Updates the username of your authenticated account.
 
 Usage:
    set-username USERNAME [flags]
 
-Examples:
-  # Change your account username
-  ssh -p 2223 localhost set-username alice
+Arguments:
+  USERNAME    New unique username (alphanumeric, hyphens, and underscores).
 
 Flags:
   -h, --help   help for set-username
-########## help settings
-Manage global gickers.sh server configuration, anonymous access permissions, keyless cloning, and self-registration policies.
 
 Scope:
-  Server Admin only (hidden from non-admin users in command listings).
+  Any authenticated user.
+
+Notes:
+  Renaming your account updates ownership on personal repositories and alters SSH clone URLs. Operation is silent on success (exit code 0).
+
+Examples:
+  # Change your account username
+  ssh -p 2223 localhost set-username alice
+########## help settings
+Manage global gickers.sh server configuration, anonymous access permissions, keyless cloning, and self-registration policies.
 
 Usage:
   ssh -p 2223 localhost settings [command]
@@ -1265,18 +1212,24 @@ Available Commands:
 Flags:
   -h, --help   help for settings
 
+Scope:
+  Server Admin only (hidden from non-admin users in command listings).
+
 Use "ssh -p 2223 localhost settings [command] --help" for more information about a command.
 ########## help settings allow-keyless
 Gets or sets whether users without an SSH key can clone or read public repositories.
 
-Scope:
-  Server Admin.
+Usage:
+   settings allow-keyless [true|false] [flags]
 
 Arguments:
   value    Optional boolean ('true' or 'false'). If omitted, prints current setting.
 
-Usage:
-   settings allow-keyless [true|false] [flags]
+Flags:
+  -h, --help   help for allow-keyless
+
+Scope:
+  Server Admin.
 
 Examples:
   # Inspect current keyless access setting
@@ -1287,20 +1240,20 @@ Examples:
 
   # Disable keyless access
   ssh -p 2223 localhost settings allow-keyless false
-
-Flags:
-  -h, --help   help for allow-keyless
 ########## help settings anon-access
 Gets or sets the default access level granted to anonymous (unauthenticated) users on public repositories.
 
-Scope:
-  Server Admin.
+Usage:
+   settings anon-access [ACCESS_LEVEL] [flags]
 
 Arguments:
   ACCESS_LEVEL    Access level: 'no-access', 'read-only', 'read-write', or 'admin-access'. If omitted, prints current level.
 
-Usage:
-   settings anon-access [ACCESS_LEVEL] [flags]
+Flags:
+  -h, --help   help for anon-access
+
+Scope:
+  Server Admin.
 
 Examples:
   # Inspect current anonymous access level
@@ -1311,14 +1264,8 @@ Examples:
 
   # Completely forbid anonymous access
   ssh -p 2223 localhost settings anon-access no-access
-
-Flags:
-  -h, --help   help for anon-access
 ########## help token
 Manage personal access tokens (PAT). Tokens can be used for automated scripts, CI/CD runners, and HTTP authentication.
-
-Scope:
-  Authenticated user.
 
 Usage:
   ssh -p 2223 localhost token [command]
@@ -1334,24 +1281,28 @@ Available Commands:
 Flags:
   -h, --help   help for token
 
+Scope:
+  Authenticated user.
+
 Use "ssh -p 2223 localhost token [command] --help" for more information about a command.
 ########## help token create
 Generates a new personal access token with optional lifetime expiration.
 
-Scope:
-  Authenticated user.
+Usage:
+   token create NAME [flags]
 
 Arguments:
   NAME    Descriptive label identifying the token purpose (e.g. "ci-runner", "automation").
 
 Flags:
-  --expires-in string    Token lifetime duration (e.g. 1y, 3mo, 2w, 5d4h, 1h30m). Defaults to no expiration.
+      --expires-in string   Token expiration time (e.g. 1y, 3mo, 2w, 5d4h, 1h30m)
+  -h, --help                help for create
+
+Scope:
+  Authenticated user.
 
 Notes:
   The secret token string is printed to stdout once upon creation. It is not stored in plaintext and cannot be retrieved again; store it securely. Status confirmation is written to stderr.
-
-Usage:
-   token create NAME [flags]
 
 Examples:
   # Create a permanent access token
@@ -1362,18 +1313,8 @@ Examples:
 
   # Create a short-lived token expiring in 2 hours
   ssh -p 2223 localhost token create "deploy-job" --expires-in 2h
-
-Flags:
-      --expires-in string   Token expiration time (e.g. 1y, 3mo, 2w, 5d4h, 1h30m)
-  -h, --help                help for create
 ########## help token delete
 Permanently revokes a personal access token by its numeric identifier. Any future request using this token is denied immediately.
-
-Scope:
-  Authenticated user (token owner).
-
-Arguments:
-  ID    Numeric token identifier (see 'token list').
 
 Usage:
    token delete ID [flags]
@@ -1381,17 +1322,20 @@ Usage:
 Aliases:
   delete, rm, remove
 
-Examples:
-  # Revoke access token #42
-  ssh -p 2223 localhost token delete 42
+Arguments:
+  ID    Numeric token identifier (see 'token list').
 
 Flags:
   -h, --help   help for delete
-########## help token list
-Displays all active personal access tokens for your account, listing numeric token ID, label name, creation timestamp, and expiration date.
 
 Scope:
-  Authenticated user.
+  Authenticated user (token owner).
+
+Examples:
+  # Revoke access token #42
+  ssh -p 2223 localhost token delete 42
+########## help token list
+Displays all active personal access tokens for your account, listing numeric token ID, label name, creation timestamp, and expiration date.
 
 Usage:
    token list [flags]
@@ -1399,17 +1343,17 @@ Usage:
 Aliases:
   list, ls
 
+Flags:
+  -h, --help   help for list
+
+Scope:
+  Authenticated user.
+
 Examples:
   # List all your access tokens
   ssh -p 2223 localhost token list
-
-Flags:
-  -h, --help   help for list
 ########## help user
 Manage user accounts, assign server administrator privileges, and add or remove public keys for any user.
-
-Scope:
-  Server Admin only (hidden from non-admin users in command listings).
 
 Usage:
   ssh -p 2223 localhost user [command]
@@ -1432,41 +1376,45 @@ Available Commands:
 Flags:
   -h, --help   help for user
 
+Scope:
+  Server Admin only (hidden from non-admin users in command listings).
+
 Use "ssh -p 2223 localhost user [command] --help" for more information about a command.
 ########## help user add-pubkey
 Adds an OpenSSH public key to a specified user account.
 
-Scope:
-  Server Admin.
+Usage:
+   user add-pubkey USERNAME AUTHORIZED_KEY [flags]
 
 Arguments:
   USERNAME          Target username.
   AUTHORIZED_KEY    OpenSSH public key string.
 
-Usage:
-   user add-pubkey USERNAME AUTHORIZED_KEY [flags]
+Flags:
+  -h, --help   help for add-pubkey
+
+Scope:
+  Server Admin.
 
 Examples:
   # Add a public key to alice's account
   ssh -p 2223 localhost user add-pubkey alice "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... alice@laptop"
-
-Flags:
-  -h, --help   help for add-pubkey
 ########## help user create
 Creates a new user account with optional server administrator status and an initial SSH public key.
 
-Scope:
-  Server Admin.
+Usage:
+   user create USERNAME [flags]
 
 Arguments:
   USERNAME    Unique username for the new account.
 
 Flags:
-  -a, --admin         Grant global server administrator privileges to the user.
-  -k, --key string    Add an initial OpenSSH public key for the user.
+  -a, --admin        make the user an admin
+  -h, --help         help for create
+  -k, --key string   add a public key to the user
 
-Usage:
-   user create USERNAME [flags]
+Scope:
+  Server Admin.
 
 Examples:
   # Create a standard user
@@ -1474,52 +1422,44 @@ Examples:
 
   # Create an administrator with an initial public key
   ssh -p 2223 localhost user create bob --admin -k "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... bob@work"
-
-Flags:
-  -a, --admin        make the user an admin
-  -h, --help         help for create
-  -k, --key string   add a public key to the user
 ########## help user delete
 Permanently deletes a user account, along with their registered public keys and access tokens.
-
-Scope:
-  Server Admin.
-
-Arguments:
-  USERNAME    Username to permanently delete.
 
 Usage:
    user delete USERNAME [flags]
 
-Examples:
-  # Delete a user account
-  ssh -p 2223 localhost user delete alice
+Arguments:
+  USERNAME    Username to permanently delete.
 
 Flags:
   -h, --help   help for delete
-########## help user info
-Displays detailed information about a user: username, administrator status, and all registered public keys.
 
 Scope:
   Server Admin.
 
-Arguments:
-  USERNAME    Target username to inspect.
+Examples:
+  # Delete a user account
+  ssh -p 2223 localhost user delete alice
+########## help user info
+Displays detailed information about a user: username, administrator status, and all registered public keys.
 
 Usage:
    user info USERNAME [flags]
 
-Examples:
-  # Inspect account details for user alice
-  ssh -p 2223 localhost user info alice
+Arguments:
+  USERNAME    Target username to inspect.
 
 Flags:
   -h, --help   help for info
-########## help user list
-Displays all registered user accounts on the server, showing administrator status and count of registered public keys.
 
 Scope:
   Server Admin.
+
+Examples:
+  # Inspect account details for user alice
+  ssh -p 2223 localhost user info alice
+########## help user list
+Displays all registered user accounts on the server, showing administrator status and count of registered public keys.
 
 Usage:
    user list [flags]
@@ -1527,43 +1467,49 @@ Usage:
 Aliases:
   list, ls
 
-Examples:
-  # List all server users
-  ssh -p 2223 localhost user list
-
 Flags:
   -h, --help   help for list
-########## help user remove-pubkey
-Removes a registered OpenSSH public key from a specified user account.
 
 Scope:
   Server Admin.
+
+Examples:
+  # List all server users
+  ssh -p 2223 localhost user list
+########## help user remove-pubkey
+Removes a registered OpenSSH public key from a specified user account.
+
+Usage:
+   user remove-pubkey USERNAME AUTHORIZED_KEY [flags]
 
 Arguments:
   USERNAME          Target username.
   AUTHORIZED_KEY    Public key string or material to unlink.
 
-Usage:
-   user remove-pubkey USERNAME AUTHORIZED_KEY [flags]
+Flags:
+  -h, --help   help for remove-pubkey
+
+Scope:
+  Server Admin.
 
 Examples:
   # Remove a public key from alice's account
   ssh -p 2223 localhost user remove-pubkey alice "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... alice@laptop"
-
-Flags:
-  -h, --help   help for remove-pubkey
 ########## help user set-admin
 Promotes a user to server administrator, or revokes administrator privileges.
 
-Scope:
-  Server Admin.
+Usage:
+   user set-admin USERNAME [true|false] [flags]
 
 Arguments:
   USERNAME    Target username.
   value       Optional boolean ('true' or 'false'). If omitted, toggles admin status.
 
-Usage:
-   user set-admin USERNAME [true|false] [flags]
+Flags:
+  -h, --help   help for set-admin
+
+Scope:
+  Server Admin.
 
 Examples:
   # Promote user to administrator
@@ -1571,45 +1517,30 @@ Examples:
 
   # Demote user to standard account
   ssh -p 2223 localhost user set-admin alice false
-
-Flags:
-  -h, --help   help for set-admin
 ########## help user set-username
 Changes the username of an existing user account. Updates personal repository namespaces and paths.
 
-Scope:
-  Server Admin.
+Usage:
+   user set-username USERNAME NEW_USERNAME [flags]
 
 Arguments:
   USERNAME        Current username.
   NEW_USERNAME    New unique username.
 
-Usage:
-   user set-username USERNAME NEW_USERNAME [flags]
+Flags:
+  -h, --help   help for set-username
+
+Scope:
+  Server Admin.
 
 Examples:
   # Rename a user account
   ssh -p 2223 localhost user set-username alice alice-new
-
-Flags:
-  -h, --help   help for set-username
 ########## help web
 Authenticate your browser against the web interface using your SSH key.
 
-Scope:
-  Any authenticated user.
-
-Because your SSH key already proves who you are, `web login` prints a short-lived magic link. Opening it in your browser sets a session cookie, after which repository pages reveal the full command palette you are authorized for (admin-only actions appear on repositories you administer). `web logout` revokes every active browser session.
-
 Usage:
   ssh -p 2223 localhost web [command]
-
-Examples:
-  # Print a magic link to sign your browser in
-  ssh -p 2223 localhost web login
-
-  # Revoke every active browser session
-  ssh -p 2223 localhost web logout
 
 Available Commands:
   login       Log your browser in and open the web interface
@@ -1617,6 +1548,18 @@ Available Commands:
 
 Flags:
   -h, --help   help for web
+
+Scope:
+  Any authenticated user.
+
+Because your SSH key already proves who you are, `web login` prints a short-lived magic link. Opening it in your browser sets a session cookie, after which repository pages reveal the full command palette you are authorized for (admin-only actions appear on repositories you administer). `web logout` revokes every active browser session.
+
+Examples:
+  # Print a magic link to sign your browser in
+  ssh -p 2223 localhost web login
+
+  # Revoke every active browser session
+  ssh -p 2223 localhost web logout
 
 Use "ssh -p 2223 localhost web [command] --help" for more information about a command.
 ########## help web login

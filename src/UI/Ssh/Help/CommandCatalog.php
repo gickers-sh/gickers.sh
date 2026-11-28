@@ -1857,24 +1857,21 @@ EX;
         ));
 
         $forkLong = <<<'DESC'
-Creates a server-side fork of an existing Git repository. You become the owner and administrator of the newly created fork.
+Creates a server-side fork of an existing Git repository or external Git URL. You become the owner and administrator of the newly created fork.
 
 Scope:
-  Read access to SOURCE required; authenticated user.
+  Read access to SOURCE required (or public remote URL); authenticated user.
 
 Arguments:
-  SOURCE      Source repository name to fork from.
-  NEW_NAME    Optional destination repository name (defaults to 'SOURCE-fork').
-
-Flags:
-  -d, --description string    Set custom description for the fork.
-  -H, --hidden                Hide fork from public listings.
-  -n, --name string           Set display name for the fork.
-  -p, --private               Make the fork private.
+  SOURCE      Source repository name or external Git URL to fork from.
+  NEW_NAME    Optional destination repository name (defaults to '<username>/<repo_name_source>').
 DESC;
         $forkExample = <<<'EX'
   # Fork a repository with default destination name
   {ssh} repo fork upstream-project
+
+  # Fork from an external URL
+  {ssh} repo fork https://github.com/charmbracelet/soft-serve.git
 
   # Fork into a custom repository name and make it private
   {ssh} repo fork upstream-project my-custom-fork --private
@@ -2058,23 +2055,32 @@ EX;
         ));
 
         $mirrorLong = <<<'DESC'
-Gets or sets whether the repository acts as an exact Git mirror of an upstream remote.
+Creates an exact Git mirror of a repository (external Git URL or another gickers.sh repository), or gets/sets whether an existing repository acts as a mirror.
 
 Scope:
-  Read access to inspect; Repository Admin to update.
+  Read access to inspect; Repository Admin to update; authenticated user to create a mirror.
 
 Arguments:
-  REPOSITORY    Repository name.
-  value         Optional boolean ('true' or 'false'). If omitted, prints current state.
+  SOURCE        Remote Git repository URL or gickers.sh repository name to mirror or inspect.
+  DESTINATION   Optional destination repository name (defaults to '<username>/<repo_name_source>'), or boolean value ('true' or 'false') to set mirror property.
 DESC;
         $mirrorExample = <<<'EX'
-  # Check mirror status
+  # Mirror an external repository
+  {ssh} repo mirror https://github.com/charmbracelet/soft-serve.git
+
+  # Mirror another gickers.sh repository into your namespace
+  {ssh} repo mirror alice/project
+
+  # Mirror into a custom repository name
+  {ssh} repo mirror https://github.com/charmbracelet/soft-serve.git my-mirror
+
+  # Check mirror status of an existing repository
   {ssh} repo mirror my-app
 
-  # Enable mirror property
+  # Enable mirror property on an existing repository
   {ssh} repo mirror my-app true
 EX;
-        $repo->addChild($this->leaf('mirror REPOSITORY [true|false]', 'Set or get a repository mirror property', $mirrorLong, [], [], $mirrorExample)->withUi(
+        $repo->addChild($this->leaf('mirror SOURCE [DESTINATION]', 'Set or get a repository mirror property, or create a mirror', $mirrorLong, [], $this->repoWriteFlags(), $mirrorExample)->withUi(
             category: 'admin',
             title: 'Mirror Toggle',
             tier: 'admin',

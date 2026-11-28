@@ -49,81 +49,152 @@ final class HelpRenderer
      */
     public function render(CommandSpec $command, string $sshCommand, bool $decorated = false): string
     {
-        $out = '';
         $desc = '' !== $command->long ? $command->long : $command->short;
+        $descriptionLines = [];
+        $sections = [];
+        $currentSection = null;
+
         if ('' !== $desc) {
-            $descText = rtrim($desc);
+            foreach (explode("\n", rtrim($desc)) as $line) {
+                if (1 === preg_match('/^(Scope|Arguments|Notes|Permissions|Output|Flags):\s*$/', $line, $m)) {
+                    $currentSection = $m[1];
+                    $sections[$currentSection] = [];
+                    continue;
+                }
+                if (null === $currentSection) {
+                    $descriptionLines[] = $line;
+                } else {
+                    $sections[$currentSection][] = $line;
+                }
+            }
+        }
+
+        $blocks = [];
+
+        // 1. Description
+        $descText = trim(implode("\n", $descriptionLines));
+        if ('' !== $descText) {
             if ($decorated) {
-                $styledLines = [];
-                $currentSection = null;
-                foreach (explode("\n", $descText) as $line) {
-                    if (1 === preg_match('/^(Scope|Arguments|Notes|Permissions|Output|Flags):\s*$/', $line, $m)) {
-                        $currentSection = $m[1];
-                        $styledLines[] = Theme::style($line, Theme::BLUE, bold: true);
-                    } elseif ('Arguments' === $currentSection && 1 === preg_match('/^  ([A-Za-z0-9_\-\[\]|<>\.]+)(\s{2,})(.*)$/', $line, $m)) {
-                        $styledLines[] = '  ' . Theme::style($m[1], Theme::TEAL, bold: true) . $m[2] . self::styleDescriptionText($m[3], Theme::FG_DIM);
-                    } elseif ('Flags' === $currentSection && 1 === preg_match('/^  (-[a-zA-Z], )?(--[a-z0-9-]+)(\s+[a-z]+)?(\s{2,})(.*)$/', $line, $m)) {
-                        $flagStr = '  ';
-                        if ('' !== $m[1]) {
-                            $flagStr .= Theme::style('-' . trim($m[1], " -,\t"), Theme::ORANGE, bold: true) . Theme::style(', ', Theme::MUTED);
-                        }
-                        $flagStr .= Theme::style($m[2], Theme::ORANGE, bold: true);
-                        if ('' !== $m[3]) {
-                            $flagStr .= ' ' . Theme::style(trim($m[3]), Theme::TEAL, italic: true);
-                        }
-                        $styledLines[] = $flagStr . $m[4] . self::styleDescriptionText($m[5], Theme::FG_DIM);
-                    } elseif ('Scope' === $currentSection && str_starts_with($line, '  ')) {
-                        $styledLines[] = self::styleScopeLine($line);
-                    } elseif ('' !== trim($line)) {
-                        $styledLines[] = self::styleDescriptionText($line, Theme::FG);
+                $styledDesc = [];
+                foreach (explode("\n", $descText) as $l) {
+                    $styledDesc[] = self::styleDescriptionText($l, Theme::FG);
+                }
+                $blocks[] = implode("\n", $styledDesc);
+            } else {
+                $blocks[] = $descText;
+            }
+        }
+
+        // 2. Usage
+        if ($command->runnable || $command->hasChildren()) {
+            $usageBlock = $decorated ? Theme::style('Usage:', Theme::BLUE, bold: true) : 'Usage:';
+            if ($command->runnable) {
+                $usageBlock .= "\n  " . $this->useLine($command, $decorated);
+            }
+            if ($command->hasChildren()) {
+                $cmdPath = $command->commandPath();
+                if ($decorated) {
+                    $usageBlock .= "\n  " . CliHighlighter::highlightLine($sshCommand . $cmdPath) . ' ' . Theme::style('[command]', Theme::MUTED, italic: true);
+                } else {
+                    $usageBlock .= "\n  " . $sshCommand . $cmdPath . ' [command]';
+                }
+            }
+            if ([] !== $command->aliases) {
+                $aliasesHeading = $decorated ? Theme::style('Aliases:', Theme::BLUE, bold: true) : 'Aliases:';
+                if ($decorated) {
+                    $styledAliases = implode(
+                        Theme::style(', ', Theme::MUTED),
+                        array_map(static fn(string $a): string => Theme::style($a, Theme::CYAN, italic: true), $command->aliases)
+                    );
+                    $usageBlock .= "\n\n" . $aliasesHeading . "\n  " . Theme::style($command->name, Theme::CYAN, bold: true) . Theme::style(', ', Theme::MUTED) . $styledAliases;
+                } else {
+                    $aliasList = implode(', ', $command->aliases);
+                    $usageBlock .= "\n\n" . $aliasesHeading . "\n  " . $command->name . ', ' . $aliasList;
+                }
+            }
+            $blocks[] = $usageBlock;
+        }
+
+        // Available Commands for group commands
+        if ($command->hasChildren()) {
+            $padding = $command->namePadding();
+            $children = $command->visibleChildren();
+            usort($children, static fn(CommandSpec $a, CommandSpec $b): int => strcmp($a->name, $b->name));
+
+            $commandsHeading = $decorated ? Theme::style('Available Commands:', Theme::BLUE, bold: true) : 'Available Commands:';
+            $cmdsBlock = $commandsHeading;
+            foreach ($children as $child) {
+                if ($decorated) {
+                    $cmdsBlock .= "\n  " . Theme::style($child->name, Theme::CYAN, bold: true)
+                        . str_repeat(' ', $padding - strlen($child->name)) . ' '
+                        . self::styleDescriptionText($child->short, Theme::FG_DIM);
+                } else {
+                    $cmdsBlock .= "\n  " . $this->rpad($child->name, $padding) . ' ' . $child->short;
+                }
+            }
+            $blocks[] = $cmdsBlock;
+        }
+
+        // 3. Arguments
+        if (isset($sections['Arguments']) && [] !== $sections['Arguments']) {
+            $argsLines = [];
+            foreach ($sections['Arguments'] as $line) {
+                if ($decorated && 1 === preg_match('/^  ([A-Za-z0-9_\-\[\]|<>\.]+)(\s{2,})(.*)$/', $line, $m)) {
+                    $argsLines[] = '  ' . Theme::style($m[1], Theme::TEAL, bold: true) . $m[2] . self::styleDescriptionText($m[3], Theme::FG_DIM);
+                } else {
+                    $argsLines[] = $line;
+                }
+            }
+            $trimmedArgs = rtrim(implode("\n", $argsLines));
+            if ('' !== $trimmedArgs) {
+                $argsHeading = $decorated ? Theme::style('Arguments:', Theme::BLUE, bold: true) : 'Arguments:';
+                $blocks[] = $argsHeading . "\n" . $trimmedArgs;
+            }
+        }
+
+        // 4. Flags (single block, flags from description discarded in favor of authoritative flags)
+        if ($command->runnable || $command->hasChildren()) {
+            $flagsHeading = $decorated ? Theme::style('Flags:', Theme::BLUE, bold: true) : 'Flags:';
+            $blocks[] = $flagsHeading . "\n" . $this->flagUsages($command, $decorated);
+        }
+
+        // 5. Scope
+        if (isset($sections['Scope']) && [] !== $sections['Scope']) {
+            $scopeLines = [];
+            foreach ($sections['Scope'] as $line) {
+                if ($decorated && str_starts_with($line, '  ')) {
+                    $scopeLines[] = self::styleScopeLine($line);
+                } else {
+                    $scopeLines[] = $line;
+                }
+            }
+            $trimmedScope = rtrim(implode("\n", $scopeLines));
+            if ('' !== $trimmedScope) {
+                $scopeHeading = $decorated ? Theme::style('Scope:', Theme::BLUE, bold: true) : 'Scope:';
+                $blocks[] = $scopeHeading . "\n" . $trimmedScope;
+            }
+        }
+
+        // Notes, Permissions, Output
+        foreach (['Notes', 'Permissions', 'Output'] as $extra) {
+            if (isset($sections[$extra]) && [] !== $sections[$extra]) {
+                $extraLines = [];
+                foreach ($sections[$extra] as $line) {
+                    if ($decorated) {
+                        $extraLines[] = self::styleDescriptionText($line, Theme::FG_DIM);
                     } else {
-                        $currentSection = null;
-                        $styledLines[] = $line;
+                        $extraLines[] = $line;
                     }
                 }
-                $out .= implode("\n", $styledLines) . "\n\n";
-            } else {
-                $out .= $descText . "\n\n";
+                $trimmedExtra = rtrim(implode("\n", $extraLines));
+                if ('' !== $trimmedExtra) {
+                    $heading = $decorated ? Theme::style($extra . ':', Theme::BLUE, bold: true) : $extra . ':';
+                    $blocks[] = $heading . "\n" . $trimmedExtra;
+                }
             }
         }
 
-        if ($command->runnable || $command->hasChildren()) {
-            $out .= $this->usageString($command, $sshCommand, $decorated);
-        }
-
-        return $out;
-    }
-
-    private function usageString(CommandSpec $command, string $sshCommand, bool $decorated): string
-    {
-        $out = $decorated ? Theme::style('Usage:', Theme::BLUE, bold: true) : 'Usage:';
-
-        if ($command->runnable) {
-            $out .= "\n  " . $this->useLine($command, $decorated);
-        }
-
-        if ($command->hasChildren()) {
-            $cmdPath = $command->commandPath();
-            if ($decorated) {
-                $out .= "\n  " . CliHighlighter::highlightLine($sshCommand . $cmdPath) . ' ' . Theme::style('[command]', Theme::MUTED, italic: true);
-            } else {
-                $out .= "\n  " . $sshCommand . $cmdPath . ' [command]';
-            }
-        }
-
-        if ([] !== $command->aliases) {
-            $aliasesHeading = $decorated ? Theme::style('Aliases:', Theme::BLUE, bold: true) : 'Aliases:';
-            if ($decorated) {
-                $styledAliases = implode(
-                    Theme::style(', ', Theme::MUTED),
-                    array_map(static fn(string $a): string => Theme::style($a, Theme::CYAN, italic: true), $command->aliases)
-                );
-                $out .= "\n\n" . $aliasesHeading . "\n  " . Theme::style($command->name, Theme::CYAN, bold: true) . Theme::style(', ', Theme::MUTED) . $styledAliases;
-            } else {
-                $aliasList = implode(', ', $command->aliases);
-                $out .= "\n\n" . $aliasesHeading . "\n  " . $command->name . ', ' . $aliasList;
-            }
-        }
+        // 6. Examples
         if ('' !== $command->example) {
             $examplesHeading = $decorated ? Theme::style('Examples:', Theme::BLUE, bold: true) : 'Examples:';
             $exampleBody = self::interpolateSsh($command->example, $sshCommand);
@@ -132,47 +203,27 @@ final class HelpRenderer
                 foreach (explode("\n", $exampleBody) as $line) {
                     $styledLines[] = CliHighlighter::highlightLine($line);
                 }
-                $out .= "\n\n" . $examplesHeading . "\n" . implode("\n", $styledLines);
+                $blocks[] = $examplesHeading . "\n" . implode("\n", $styledLines);
             } else {
-                $out .= "\n\n" . $examplesHeading . "\n" . $exampleBody;
+                $blocks[] = $examplesHeading . "\n" . $exampleBody;
             }
         }
 
-        if ($command->hasChildren()) {
-            $padding = $command->namePadding();
-            $children = $command->visibleChildren();
-            usort($children, static fn(CommandSpec $a, CommandSpec $b): int => strcmp($a->name, $b->name));
-
-            $commandsHeading = $decorated ? Theme::style('Available Commands:', Theme::BLUE, bold: true) : 'Available Commands:';
-            $out .= "\n\n" . $commandsHeading;
-            foreach ($children as $child) {
-                if ($decorated) {
-                    $out .= "\n  " . Theme::style($child->name, Theme::CYAN, bold: true)
-                        . str_repeat(' ', $padding - strlen($child->name)) . ' '
-                        . self::styleDescriptionText($child->short, Theme::FG_DIM);
-                } else {
-                    $out .= "\n  " . $this->rpad($child->name, $padding) . ' ' . $child->short;
-                }
-            }
-        }
-
-        $flagsHeading = $decorated ? Theme::style('Flags:', Theme::BLUE, bold: true) : 'Flags:';
-        $out .= "\n\n" . $flagsHeading . "\n" . $this->flagUsages($command, $decorated);
-
+        // Footer for group commands
         if ($command->hasChildren()) {
             $cmdPath = $command->commandPath();
             if ($decorated) {
-                $out .= "\n\n" . Theme::style('Use "', Theme::MUTED)
+                $blocks[] = Theme::style('Use "', Theme::MUTED)
                     . CliHighlighter::highlightLine($sshCommand . $cmdPath)
                     . ' ' . Theme::style('[command]', Theme::MUTED, italic: true)
                     . ' ' . Theme::style('--help', Theme::ORANGE, bold: true)
                     . Theme::style('" for more information about a command.', Theme::MUTED);
             } else {
-                $out .= "\n\nUse \"" . $sshCommand . $cmdPath . ' [command] --help" for more information about a command.';
+                $blocks[] = 'Use "' . $sshCommand . $cmdPath . ' [command] --help" for more information about a command.';
             }
         }
 
-        return $out . "\n";
+        return implode("\n\n", $blocks) . "\n";
     }
 
     private function useLine(CommandSpec $command, bool $decorated): string
