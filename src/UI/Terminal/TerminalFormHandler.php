@@ -62,7 +62,7 @@ final class TerminalFormHandler
         }
 
         $html = <<<HTML
-<div class="border rounded p-1 mb-1" style="background-color: #1f2335;">
+<div class="mb-1">
   <div class="text-cyan font-bold">{$safeTitle}{$badgeHtml}</div>
   <div class="text-muted">{$safeSubtitle}</div>
 </div>
@@ -97,7 +97,7 @@ HTML;
         }
 
         $html = <<<HTML
-<div class="border rounded p-1" style="background-color: #1f2335;">
+<div class="mb-1">
   <div class="text-success font-bold">&check; {$safeTitle}</div>
   <div class="text-muted">{$safeMsg}</div>
   {$itemsHtml}
