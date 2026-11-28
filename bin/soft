@@ -34,12 +34,34 @@ $mapped = match ($args[0] ?? null) {
 $_SERVER['argv'] = [$_SERVER['argv'][0], ...$mapped];
 $_SERVER['argc'] = count($_SERVER['argv']);
 
-if (!is_file(dirname(__DIR__).'/.env')) {
-    $_SERVER['APP_RUNTIME_OPTIONS'] ??= $_ENV['APP_RUNTIME_OPTIONS'] ?? [];
-    if (is_string($_SERVER['APP_RUNTIME_OPTIONS'])) {
-        $_SERVER['APP_RUNTIME_OPTIONS'] = json_decode($_SERVER['APP_RUNTIME_OPTIONS'], true, 512, JSON_THROW_ON_ERROR) ?? [];
-    }
+$projectDir = dirname(__DIR__);
+$_SERVER['APP_RUNTIME_OPTIONS'] ??= $_ENV['APP_RUNTIME_OPTIONS'] ?? [];
+if (is_string($_SERVER['APP_RUNTIME_OPTIONS'])) {
+    $_SERVER['APP_RUNTIME_OPTIONS'] = json_decode($_SERVER['APP_RUNTIME_OPTIONS'], true, 512, JSON_THROW_ON_ERROR) ?? [];
+}
+
+// Precedence hierarchy (least to most priority):
+// 1. .env (default baseline example)
+// 2. .env.local (custom symfony dev overrides)
+// 3. .env.docker (custom docker deployment overrides)
+if (!is_file($projectDir.'/.env')) {
     $_SERVER['APP_RUNTIME_OPTIONS']['disable_dotenv'] = true;
+}
+
+$hasExplicitEnvArg = false;
+foreach ($_SERVER['argv'] ?? [] as $arg) {
+    if (str_starts_with($arg, '--env=') || str_starts_with($arg, '-e=') || $arg === '--env' || $arg === '-e') {
+        $hasExplicitEnvArg = true;
+        break;
+    }
+}
+
+if (!$hasExplicitEnvArg && ('test' !== ($_SERVER['APP_ENV'] ?? $_ENV['APP_ENV'] ?? null)) && is_file($projectDir.'/.env.docker')) {
+    $_SERVER['APP_RUNTIME_OPTIONS']['dotenv_overload'] = true;
+    $_SERVER['APP_RUNTIME_OPTIONS']['dotenv_extra_paths'] ??= [];
+    if (!in_array('.env.docker', $_SERVER['APP_RUNTIME_OPTIONS']['dotenv_extra_paths'], true)) {
+        $_SERVER['APP_RUNTIME_OPTIONS']['dotenv_extra_paths'][] = '.env.docker';
+    }
 }
 
 require_once dirname(__DIR__).'/vendor/autoload_runtime.php';

@@ -12,12 +12,26 @@ if (false !== $frankenphpWorker && null !== $frankenphpWorker && '' !== $franken
     $_SERVER['FRANKENPHP_WORKER'] = $frankenphpWorker;
 }
 
-if (!is_file(dirname(__DIR__).'/.env')) {
-    $_SERVER['APP_RUNTIME_OPTIONS'] ??= $_ENV['APP_RUNTIME_OPTIONS'] ?? [];
-    if (is_string($_SERVER['APP_RUNTIME_OPTIONS'])) {
-        $_SERVER['APP_RUNTIME_OPTIONS'] = json_decode($_SERVER['APP_RUNTIME_OPTIONS'], true, 512, JSON_THROW_ON_ERROR) ?? [];
-    }
+$projectDir = dirname(__DIR__);
+$_SERVER['APP_RUNTIME_OPTIONS'] ??= $_ENV['APP_RUNTIME_OPTIONS'] ?? [];
+if (is_string($_SERVER['APP_RUNTIME_OPTIONS'])) {
+    $_SERVER['APP_RUNTIME_OPTIONS'] = json_decode($_SERVER['APP_RUNTIME_OPTIONS'], true, 512, JSON_THROW_ON_ERROR) ?? [];
+}
+
+// Precedence hierarchy (least to most priority):
+// 1. .env (default baseline example)
+// 2. .env.local (custom symfony dev overrides)
+// 3. .env.docker (custom docker deployment overrides)
+if (!is_file($projectDir.'/.env')) {
     $_SERVER['APP_RUNTIME_OPTIONS']['disable_dotenv'] = true;
+}
+
+if (('test' !== ($_SERVER['APP_ENV'] ?? $_ENV['APP_ENV'] ?? null)) && is_file($projectDir.'/.env.docker')) {
+    $_SERVER['APP_RUNTIME_OPTIONS']['dotenv_overload'] = true;
+    $_SERVER['APP_RUNTIME_OPTIONS']['dotenv_extra_paths'] ??= [];
+    if (!in_array('.env.docker', $_SERVER['APP_RUNTIME_OPTIONS']['dotenv_extra_paths'], true)) {
+        $_SERVER['APP_RUNTIME_OPTIONS']['dotenv_extra_paths'][] = '.env.docker';
+    }
 }
 
 require_once dirname(__DIR__).'/vendor/autoload_runtime.php';
