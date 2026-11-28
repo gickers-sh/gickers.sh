@@ -6,6 +6,7 @@ namespace App\UI\Ssh;
 
 use App\Identity\Domain\Model\AccessToken;
 use App\Identity\Domain\Model\User;
+use App\Repo\Application\ForkRepo;
 use App\Repo\Domain\RepoName;
 use App\Repo\Domain\RepoStore;
 use App\Shared\Domain\Exception\AccessDenied;
@@ -109,6 +110,21 @@ final readonly class SshTokenAuthorizer
         }
 
         // 4. Getter-or-write-setter repository commands
+        if ('repo:mirror' === $canonicalCommand) {
+            $repoArg = $this->stringArg($boundInput, 'repository');
+            if (ForkRepo::isExternalUrl($repoArg)) {
+                $this->assertScope($token, 'repo:write');
+                $target = $this->stringArg($boundInput, 'mirror');
+                if ('' === $target) {
+                    $base = ForkRepo::extractRepoNameSource($repoArg);
+                    $target = null !== $actor ? $actor->username().'/'.$base : $base;
+                }
+                $this->assertRepoAllowed($token, $target, $actor);
+
+                return;
+            }
+        }
+
         $getterWriteSetters = [
             'repo:description' => 'description',
             'repo:project-name' => 'name',
@@ -185,15 +201,14 @@ final readonly class SshTokenAuthorizer
         if ('repo:fork' === $canonicalCommand) {
             $source = $this->stringArg($boundInput, 'source');
             $this->assertScope($token, 'repo:read');
-            $this->assertRepoAllowed($token, $source, $actor);
+            if (!ForkRepo::isExternalUrl($source)) {
+                $this->assertRepoAllowed($token, $source, $actor);
+            }
 
             $this->assertScope($token, 'repo:write');
             $target = $this->stringArg($boundInput, 'new_name');
             if ('' === $target) {
-                $base = RepoName::sanitize($source);
-                if (false !== ($slash = strrpos($base, '/'))) {
-                    $base = substr($base, $slash + 1);
-                }
+                $base = ForkRepo::extractRepoNameSource($source);
                 $target = null !== $actor ? $actor->username().'/'.$base : $base;
             }
             $this->assertRepoAllowed($token, $target, $actor);
