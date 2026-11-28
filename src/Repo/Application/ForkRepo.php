@@ -98,7 +98,7 @@ final readonly class ForkRepo
 
         if (null !== $target && '' !== trim((string) ($target instanceof RepoName ? $target->value : $target))) {
             $rawTarget = trim((string) ($target instanceof RepoName ? $target->value : $target));
-            if (!str_contains($rawTarget, '/') && '' !== $actor->username()) {
+            if (!$actor->isAdmin() && !str_contains($rawTarget, '/') && '' !== $actor->username()) {
                 $rawTarget = $actor->username().'/'.$rawTarget;
             }
             $target = RepoName::fromInput($rawTarget);

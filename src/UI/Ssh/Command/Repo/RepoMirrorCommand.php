@@ -141,7 +141,7 @@ final class RepoMirrorCommand extends AbstractSshCommand
 
         if (null !== $destination && '' !== trim($destination)) {
             $dest = trim($destination);
-            if (!str_contains($dest, '/') && '' !== $actor->username()) {
+            if (!$actor->isAdmin() && !str_contains($dest, '/') && '' !== $actor->username()) {
                 $dest = $actor->username().'/'.$dest;
             }
         } else {
@@ -187,7 +187,7 @@ final class RepoMirrorCommand extends AbstractSshCommand
 
         if (null !== $destination && '' !== trim($destination)) {
             $dest = trim($destination);
-            if (!str_contains($dest, '/') && '' !== $actor->username()) {
+            if (!$actor->isAdmin() && !str_contains($dest, '/') && '' !== $actor->username()) {
                 $dest = $actor->username().'/'.$dest;
             }
         } else {
