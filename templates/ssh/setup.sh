@@ -31,157 +31,197 @@ IS_SIGNUP="__IS_SIGNUP__"
 ALREADY_REGISTERED="__ALREADY_REGISTERED__"
 CLAIM_TOKEN="__CLAIM_TOKEN__"
 
-if [ "$ALREADY_REGISTERED" = "0" ]; then
-    DEFAULT_USER="${USERNAME:-$(whoami 2>/dev/null || echo "user")}"
-    if [ -z "$USERNAME" ]; then
-        while true; do
-            gum_input "Choisissez votre nom d'utilisateur gickers.sh" USERNAME "$DEFAULT_USER"
-            USERNAME=$(echo "$USERNAME" | tr -d '[:space:]')
-            if [[ ! "$USERNAME" =~ ^[a-zA-Z0-9._-]{2,32}$ ]]; then
-                printf "  %s✖%s %sNom d'utilisateur invalide (2 à 32 caractères alphanumériques, '-' ou '_'). Réessayez :%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
+# State machine pour la configuration initiale (Username & Clé SSH avec retour ESC)
+SIGNUP_STEP=1
+ORIGINAL_USERNAME="${USERNAME:-}"
+
+while [ "$SIGNUP_STEP" -le 2 ]; do
+    case "$SIGNUP_STEP" in
+        1)
+            if [ "$ALREADY_REGISTERED" = "0" ]; then
+                DEFAULT_USER="${USERNAME:-$(whoami 2>/dev/null || echo "user")}"
+                if [ -z "$ORIGINAL_USERNAME" ]; then
+                    while true; do
+                        if ! gum_input "Choisissez votre nom d'utilisateur gickers.sh" USERNAME "$DEFAULT_USER"; then
+                            printf "\n  %sℹ Opération annulée par l'utilisateur.%s\n\n" "$C_CYAN" "$C_RESET"
+                            exit 0
+                        fi
+                        USERNAME=$(echo "$USERNAME" | tr -d '[:space:]')
+                        if [[ ! "$USERNAME" =~ ^[a-zA-Z0-9._-]{2,32}$ ]]; then
+                            printf "  %s✖%s %sNom d'utilisateur invalide (2 à 32 caractères alphanumériques, '-' ou '_'). Réessayez :%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
+                            continue
+                        fi
+                        break
+                    done
+                else
+                    printf "  %s✔%s %sNom d'utilisateur sélectionné%s : ${BG_BADGE} ${C_BOLD}${C_CYAN}@%s ${C_RESET}\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET" "$USERNAME"
+                fi
+                DEFAULT_KEY="$HOME/.ssh/gickers_sh_${USERNAME}"
+                KEY_PATH="$DEFAULT_KEY"
+            fi
+            SIGNUP_STEP=2
+            ;;
+        2)
+            # Local detection of public key matching this session
+            DETECTED_KEY_FILE=""
+            if [ -n "$CONNECTED_KEY_DATA" ] && [ -d "$HOME/.ssh" ]; then
+                for pub in "$HOME"/.ssh/*.pub; do
+                    [ -f "$pub" ] || continue
+                    if grep -F -q "$CONNECTED_KEY_DATA" "$pub" 2>/dev/null; then
+                        priv="${pub%.pub}"
+                        if [ -f "$priv" ]; then
+                            DETECTED_KEY_FILE="$priv"
+                            break
+                        fi
+                    fi
+                done
+            fi
+
+            if [ -n "$DETECTED_KEY_FILE" ]; then
+                OPT_ACTIVE="Utiliser la clé active de cette session (Recommandé: ${DETECTED_KEY_FILE})"
+            elif [ -n "$CONNECTED_FINGERPRINT" ]; then
+                OPT_ACTIVE="Utiliser la clé active de cette session (Empreinte: ${CONNECTED_FINGERPRINT})"
+            else
+                OPT_ACTIVE="Utiliser la clé active de cette session"
+            fi
+
+            KEY_OPTIONS=(
+                "$OPT_ACTIVE"
+                "Générer une nouvelle clé dédiée (${DEFAULT_KEY})"
+                "Coller le contenu d'une clé publique existante (.pub)"
+                "Conserver la clé par défaut du trousseau (agent global)"
+            )
+
+            if ! gum_choose "Gestion de votre clé SSH" "${KEY_OPTIONS[@]}"; then
+                # Touche ESC pressée : retour à l'étape 1 si nouveau compte et nom personnalisable
+                if [ "$ALREADY_REGISTERED" = "0" ] && [ -z "$ORIGINAL_USERNAME" ]; then
+                    printf "${ESC}[1A${ESC}[2K"
+                    SIGNUP_STEP=1
+                    continue
+                fi
                 continue
             fi
-            break
-        done
-    else
-        printf "  %s✔%s %sNom d'utilisateur sélectionné%s : ${BG_BADGE} ${C_BOLD}${C_CYAN}@%s ${C_RESET}\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET" "$USERNAME"
-    fi
-    DEFAULT_KEY="$HOME/.ssh/gickers_sh_${USERNAME}"
-    KEY_PATH="$DEFAULT_KEY"
-fi
+            CHOICE_IDX=$?
 
-# Local detection of public key matching this session
-DETECTED_KEY_FILE=""
-if [ -n "$CONNECTED_KEY_DATA" ] && [ -d "$HOME/.ssh" ]; then
-    for pub in "$HOME"/.ssh/*.pub; do
-        [ -f "$pub" ] || continue
-        if grep -F -q "$CONNECTED_KEY_DATA" "$pub" 2>/dev/null; then
-            priv="${pub%.pub}"
-            if [ -f "$priv" ]; then
-                DETECTED_KEY_FILE="$priv"
-                break
-            fi
-        fi
-    done
-fi
-
-if [ -n "$DETECTED_KEY_FILE" ]; then
-    OPT_ACTIVE="Utiliser la clé active de cette session (Recommandé: ${DETECTED_KEY_FILE})"
-elif [ -n "$CONNECTED_FINGERPRINT" ]; then
-    OPT_ACTIVE="Utiliser la clé active de cette session (Empreinte: ${CONNECTED_FINGERPRINT})"
-else
-    OPT_ACTIVE="Utiliser la clé active de cette session"
-fi
-
-KEY_OPTIONS=(
-    "$OPT_ACTIVE"
-    "Générer une nouvelle clé dédiée (${DEFAULT_KEY})"
-    "Coller le contenu d'une clé publique existante (.pub)"
-    "Conserver la clé par défaut du trousseau (agent global)"
-)
-
-gum_choose "Gestion de votre clé SSH" "${KEY_OPTIONS[@]}" && CHOICE_IDX=$? || CHOICE_IDX=$?
-
-case "$CHOICE_IDX" in
-    0)
-        if [ -n "$DETECTED_KEY_FILE" ]; then
-            KEY_PATH="$DETECTED_KEY_FILE"
-        else
-            gum_input "Chemin de votre clé privée active" KEY_PATH "$HOME/.ssh/id_ed25519"
-        fi
-        ;;
-    1)
-        ALGO_OPTIONS=(
-            "ed25519 (moderne, recommandé)"
-            "rsa (4096 bits, compatibilité entreprise)"
-            "ed25519-sk (clé physique YubiKey / FIDO2)"
-        )
-        gum_choose "Type d'algorithme" "${ALGO_OPTIONS[@]}" && ALGO_IDX=$? || ALGO_IDX=$?
-        case "$ALGO_IDX" in
-            1) ALGO="rsa"; EXTRA_ARGS="-b 4096" ;;
-            2) ALGO="ed25519-sk"; EXTRA_ARGS="" ;;
-            *) ALGO="ed25519"; EXTRA_ARGS="" ;;
-        esac
-
-        OVERWRITE_KEY=1
-        prompt_key_path_with_collision_check "$DEFAULT_KEY" KEY_PATH OVERWRITE_KEY
-
-        mkdir -p "$(dirname "$KEY_PATH")" && chmod 700 "$(dirname "$KEY_PATH")"
-
-        if [ "$OVERWRITE_KEY" -eq 1 ]; then
-            KEY_COMMENT="${USERNAME}@$(hostname -s 2>/dev/null || echo "$HOST")"
-            prompt_password_with_confirm "Passphrase" PASSPHRASE
-
-            ( ssh-keygen -t "$ALGO" $EXTRA_ARGS -f "$KEY_PATH" -C "$KEY_COMMENT" -N "$PASSPHRASE" >/dev/null 2>&1 ) &
-            gum_spin $! "Génération de la clé SSH $ALGO..."
-
-            if [ -z "$PASSPHRASE" ]; then
-                if [ "$(uname -s 2>/dev/null)" = "Darwin" ] && command -v ssh-add >/dev/null 2>&1; then
-                    ssh-add --apple-use-keychain "$KEY_PATH" < /dev/null 2>/dev/null || ssh-add "$KEY_PATH" < /dev/null 2>/dev/null || true
-                elif command -v ssh-add >/dev/null 2>&1; then
-                    ssh-add "$KEY_PATH" < /dev/null 2>/dev/null || true
-                fi
-            fi
-
-            # Register public key on gickers.sh if already registered
-            if [ -f "${KEY_PATH}.pub" ]; then
-                PUB_CONTENT=$(tr -d '\r\n' < "${KEY_PATH}.pub")
-                if [ "$ALREADY_REGISTERED" = "1" ]; then
+            case "$CHOICE_IDX" in
+                0)
                     if [ -n "$DETECTED_KEY_FILE" ]; then
-                        ( ssh${PORT_OPT} -i "$DETECTED_KEY_FILE" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "${USERNAME}@${HOST}" pubkey add "$PUB_CONTENT" >/dev/null 2>&1 ) &
+                        KEY_PATH="$DETECTED_KEY_FILE"
                     else
-                        ( ssh${PORT_OPT} -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new "${USERNAME}@${HOST}" pubkey add "$PUB_CONTENT" >/dev/null 2>&1 ) &
+                        if ! gum_input "Chemin de votre clé privée active" KEY_PATH "$HOME/.ssh/id_ed25519"; then
+                            printf "${ESC}[1A${ESC}[2K"
+                            continue
+                        fi
                     fi
-                    gum_spin $! "Autorisation de la clé publique sur votre compte ${HOST}..." || true
-                fi
-            fi
-        else
-            printf "  %sℹ%s %sClé existante réutilisée : %s%s%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_GOLD" "$KEY_PATH" "$C_RESET"
-        fi
-        ;;
-    2)
-        # Paste a public key
-        PASTED_KEY=""
-        gum_paste_pubkey PASTED_KEY
-
-        # Attempt to detect if private key already exists in ~/.ssh/
-        KEY_DATA=$(echo "$PASTED_KEY" | awk '{print $2}')
-        DETECTED_PRIV=""
-        if [ -n "$KEY_DATA" ] && [ -d "$HOME/.ssh" ]; then
-            for pub in "$HOME"/.ssh/*.pub; do
-                [ -f "$pub" ] || continue
-                if grep -F -q "$KEY_DATA" "$pub" 2>/dev/null; then
-                    priv="${pub%.pub}"
-                    if [ -f "$priv" ]; then
-                        DETECTED_PRIV="$priv"
-                        break
+                    ;;
+                1)
+                    ALGO_OPTIONS=(
+                        "ed25519 (moderne, recommandé)"
+                        "rsa (4096 bits, compatibilité entreprise)"
+                        "ed25519-sk (clé physique YubiKey / FIDO2)"
+                    )
+                    if ! gum_choose "Type d'algorithme" "${ALGO_OPTIONS[@]}"; then
+                        printf "${ESC}[1A${ESC}[2K"
+                        continue
                     fi
-                fi
-            done
-        fi
+                    ALGO_IDX=$?
+                    case "$ALGO_IDX" in
+                        1) ALGO="rsa"; EXTRA_ARGS="-b 4096" ;;
+                        2) ALGO="ed25519-sk"; EXTRA_ARGS="" ;;
+                        *) ALGO="ed25519"; EXTRA_ARGS="" ;;
+                    esac
 
-        if [ -n "$DETECTED_PRIV" ]; then
-            KEY_PATH="$DETECTED_PRIV"
-            printf "  %s✔%s %sClé privée locale associée%s : ${BG_BADGE} ${C_BOLD}${C_GOLD}%s ${C_RESET}\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET" "$KEY_PATH"
-        else
-            KEY_PATH=""
-            printf "  %sℹ%s %sAuthentification configurée via votre agent SSH global%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_RESET"
-        fi
+                    OVERWRITE_KEY=1
+                    prompt_key_path_with_collision_check "$DEFAULT_KEY" KEY_PATH OVERWRITE_KEY
 
-        # Authorize the pasted public key on gickers.sh if already registered
-        if [ "$ALREADY_REGISTERED" = "1" ]; then
-            if [ -n "$DETECTED_KEY_FILE" ]; then
-                ( ssh${PORT_OPT} -i "$DETECTED_KEY_FILE" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "${USERNAME}@${HOST}" pubkey add "$PASTED_KEY" >/dev/null 2>&1 ) &
-            else
-                ( ssh${PORT_OPT} -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new "${USERNAME}@${HOST}" pubkey add "$PASTED_KEY" >/dev/null 2>&1 ) &
-            fi
-            gum_spin $! "Autorisation de la clé collée sur votre compte ${HOST}..." || true
-        fi
-        ;;
-    3)
-        KEY_PATH=""
-        ;;
-esac
+                    mkdir -p "$(dirname "$KEY_PATH")" && chmod 700 "$(dirname "$KEY_PATH")"
+
+                    if [ "$OVERWRITE_KEY" -eq 1 ]; then
+                        KEY_COMMENT="${USERNAME}@$(hostname -s 2>/dev/null || echo "$HOST")"
+                        prompt_password_with_confirm "Passphrase" PASSPHRASE
+
+                        GEN_LOG=$(mktemp 2>/dev/null || echo "/tmp/gickers_keygen_$$")
+                        ( ssh-keygen -t "$ALGO" $EXTRA_ARGS -f "$KEY_PATH" -C "$KEY_COMMENT" -N "$PASSPHRASE" >"$GEN_LOG" 2>&1 ) &
+                        gum_stream_spin $! "Génération de la clé SSH $ALGO..." "$GEN_LOG"
+                        rm -f "$GEN_LOG" 2>/dev/null || true
+
+                        if [ -z "$PASSPHRASE" ]; then
+                            if [ "$(uname -s 2>/dev/null)" = "Darwin" ] && command -v ssh-add >/dev/null 2>&1; then
+                                ssh-add --apple-use-keychain "$KEY_PATH" < /dev/null 2>/dev/null || ssh-add "$KEY_PATH" < /dev/null 2>/dev/null || true
+                            elif command -v ssh-add >/dev/null 2>&1; then
+                                ssh-add "$KEY_PATH" < /dev/null 2>/dev/null || true
+                            fi
+                        fi
+
+                        # Register public key on gickers.sh if already registered
+                        if [ -f "${KEY_PATH}.pub" ]; then
+                            PUB_CONTENT=$(tr -d '\r\n' < "${KEY_PATH}.pub")
+                            PUB_CONTENT_ESCAPED=$(printf '%s' "$PUB_CONTENT" | sed 's/[\\"]/\\&/g')
+                            if [ "$ALREADY_REGISTERED" = "1" ]; then
+                                REG_PUB_LOG=$(mktemp 2>/dev/null || echo "/tmp/gickers_pubadd_$$")
+                                if [ -n "$DETECTED_KEY_FILE" ]; then
+                                    ( ssh${PORT_OPT} -i "$DETECTED_KEY_FILE" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "${USERNAME}@${HOST}" pubkey add "\"$PUB_CONTENT_ESCAPED\"" < /dev/null >"$REG_PUB_LOG" 2>&1 ) &
+                                else
+                                    ( ssh${PORT_OPT} -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new "${USERNAME}@${HOST}" pubkey add "\"$PUB_CONTENT_ESCAPED\"" < /dev/null >"$REG_PUB_LOG" 2>&1 ) &
+                                fi
+                                gum_stream_spin $! "Autorisation de la clé publique sur votre compte ${HOST}..." "$REG_PUB_LOG" || true
+                                rm -f "$REG_PUB_LOG" 2>/dev/null || true
+                            fi
+                        fi
+                    else
+                        printf "  %sℹ%s %sClé existante réutilisée : %s%s%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_GOLD" "$KEY_PATH" "$C_RESET"
+                    fi
+                    ;;
+                2)
+                    # Paste a public key
+                    PASTED_KEY=""
+                    gum_paste_pubkey PASTED_KEY
+
+                    # Attempt to detect if private key already exists in ~/.ssh/
+                    KEY_DATA=$(echo "$PASTED_KEY" | awk '{print $2}')
+                    DETECTED_PRIV=""
+                    if [ -n "$KEY_DATA" ] && [ -d "$HOME/.ssh" ]; then
+                        for pub in "$HOME"/.ssh/*.pub; do
+                            [ -f "$pub" ] || continue
+                            if grep -F -q "$KEY_DATA" "$pub" 2>/dev/null; then
+                                priv="${pub%.pub}"
+                                if [ -f "$priv" ]; then
+                                    DETECTED_PRIV="$priv"
+                                    break
+                                fi
+                            fi
+                        done
+                    fi
+
+                    if [ -n "$DETECTED_PRIV" ]; then
+                        KEY_PATH="$DETECTED_PRIV"
+                        printf "  %s✔%s %sClé privée locale associée%s : ${BG_BADGE} ${C_BOLD}${C_GOLD}%s ${C_RESET}\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET" "$KEY_PATH"
+                    else
+                        KEY_PATH=""
+                        printf "  %sℹ%s %sAuthentification configurée via votre agent SSH global%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_RESET"
+                    fi
+
+                    # Authorize the pasted public key on gickers.sh if already registered
+                    if [ "$ALREADY_REGISTERED" = "1" ]; then
+                        PASTED_KEY_ESCAPED=$(printf '%s' "$PASTED_KEY" | sed 's/[\\"]/\\&/g')
+                        REG_PASTE_LOG=$(mktemp 2>/dev/null || echo "/tmp/gickers_pasteadd_$$")
+                        if [ -n "$DETECTED_KEY_FILE" ]; then
+                            ( ssh${PORT_OPT} -i "$DETECTED_KEY_FILE" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "${USERNAME}@${HOST}" pubkey add "\"$PASTED_KEY_ESCAPED\"" < /dev/null >"$REG_PASTE_LOG" 2>&1 ) &
+                        else
+                            ( ssh${PORT_OPT} -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new "${USERNAME}@${HOST}" pubkey add "\"$PASTED_KEY_ESCAPED\"" < /dev/null >"$REG_PASTE_LOG" 2>&1 ) &
+                        fi
+                        gum_stream_spin $! "Autorisation de la clé collée sur votre compte ${HOST}..." "$REG_PASTE_LOG" || true
+                        rm -f "$REG_PASTE_LOG" 2>/dev/null || true
+                    fi
+                    ;;
+                3)
+                    KEY_PATH=""
+                    ;;
+            esac
+            break
+            ;;
+    esac
+done
 
 # Account registration on gickers.sh for new signups
 if [ "$ALREADY_REGISTERED" = "0" ]; then
@@ -189,9 +229,11 @@ if [ "$ALREADY_REGISTERED" = "0" ]; then
     REG_KEY_ARGS=()
     if [ "$CHOICE_IDX" -eq 1 ] && [ -f "${KEY_PATH}.pub" ]; then
         PUB_VAL=$(tr -d '\r\n' < "${KEY_PATH}.pub")
-        REG_KEY_ARGS=(-k "$PUB_VAL")
+        PUB_VAL_ESCAPED=$(printf '%s' "$PUB_VAL" | sed 's/[\\"]/\\&/g')
+        REG_KEY_ARGS=(-k "\"$PUB_VAL_ESCAPED\"")
     elif [ "$CHOICE_IDX" -eq 2 ] && [ -n "$PASTED_KEY" ]; then
-        REG_KEY_ARGS=(-k "$PASTED_KEY")
+        PASTED_KEY_ESCAPED=$(printf '%s' "$PASTED_KEY" | sed 's/[\\"]/\\&/g')
+        REG_KEY_ARGS=(-k "\"$PASTED_KEY_ESCAPED\"")
     fi
 
     while [ "$REG_SUCCESS" -eq 0 ]; do
@@ -209,19 +251,24 @@ if [ "$ALREADY_REGISTERED" = "0" ]; then
             REG_ARGS+=(-o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new "$HOST" signup "$USERNAME" --register "${EXTRA_TOKEN_ARGS[@]}")
         fi
 
-        ( ssh "${REG_ARGS[@]}" >"$TMP_ERR" 2>&1 ) &
-        gum_spin $! "Enregistrement de votre compte @${USERNAME} sur ${HOST}..."
-        wait $! && REG_STATUS=0 || REG_STATUS=$?
+        ( ssh "${REG_ARGS[@]}" < /dev/null >"$TMP_ERR" 2>&1 ) &
+        REG_STATUS=0
+        gum_stream_spin $! "Enregistrement de votre compte @${USERNAME} sur ${HOST}..." "$TMP_ERR" || REG_STATUS=$?
 
         if [ "$REG_STATUS" -eq 0 ]; then
             REG_SUCCESS=1
             printf "  %s✔%s %sCompte @%s créé avec succès sur %s !%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$USERNAME" "$HOST" "$C_RESET"
         else
             ERR_MSG=$(cat "$TMP_ERR" 2>/dev/null || echo "Erreur d'enregistrement")
-            printf "\n  %s✖%s %sÉchec de l'enregistrement : %s%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$ERR_MSG" "$C_RESET"
-            printf "  %s!%s %sLe nom d'utilisateur @%s est peut-être déjà pris.%s\n" "$C_GOLD" "$C_RESET" "$C_MUTED" "$USERNAME" "$C_RESET"
-            gum_input "Choisissez un autre nom d'utilisateur" USERNAME ""
-            USERNAME=$(echo "$USERNAME" | tr -d '[:space:]')
+            if echo "$ERR_MSG" | grep -qiE "already exists|déjà pris|already taken"; then
+                printf "\n  %s✖%s %sLe nom d'utilisateur @%s est déjà utilisé sur ce serveur.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$USERNAME" "$C_RESET"
+                if ! gum_input "Choisissez un autre nom d'utilisateur" USERNAME ""; then
+                    continue
+                fi
+                USERNAME=$(echo "$USERNAME" | tr -d '[:space:]')
+            else
+                handle_step_error "Enregistrement du compte @${USERNAME}" "$TMP_ERR" "$HOME" || true
+            fi
         fi
         rm -f "$TMP_ERR"
     done
@@ -499,24 +546,35 @@ export COLUMNS LINES 2>/dev/null || true
 ssh -O exit -o "ControlPath=~/.ssh/cm-%r@%h:%p" "$HOST" >/dev/null 2>&1 || true
 rm -f "$HOME/.ssh/cm-"*"-${HOST}:"* "$HOME/.ssh/cm-"*"@${HOST}:"* 2>/dev/null || true
 
-( ssh "${SSH_PORT_ARGS[@]}" "${USERNAME}@${HOST}" info >/dev/null 2>&1 ) &
-gum_spin $! "Vérification de la connexion vers ${HOST}..." || true
+VERIF_LOG=$(mktemp 2>/dev/null || echo "/tmp/gickers_ssh_verif_$$")
+while true; do
+    : > "$VERIF_LOG"
+    ( ssh "${SSH_PORT_ARGS[@]}" -v "${USERNAME}@${HOST}" info >> "$VERIF_LOG" 2>&1 ) < /dev/null &
+    if gum_stream_spin $! "Vérification de la connexion vers ${HOST}..." "$VERIF_LOG"; then
+        break
+    fi
+    if handle_step_error "Vérification de la connexion vers ${HOST}" "$VERIF_LOG" "$HOME"; then
+        break
+    fi
+done
+rm -f "$VERIF_LOG" 2>/dev/null || true
 
 # 5. [Facultatif] Initialisation du mot de passe de secours
 SETUP_PW_CHOICE=0
 gum_choose "Souhaitez-vous configurer un mot de passe de secours pour @$USERNAME ?" \
     "Ignorer pour le moment" \
-    "Oui (Recommandé pour récupérer l'accès si vous perdez votre clé SSH)" || SETUP_PW_CHOICE=$?
+    "Oui (Recommandé pour récupérer l'accès si vous perdez votre clé SSH)" && SETUP_PW_CHOICE=$? || SETUP_PW_CHOICE=$?
 
 if [ "$SETUP_PW_CHOICE" -eq 1 ]; then
     BACKUP_PW=""
-    prompt_backup_password_with_confirm "Mot de passe de secours" BACKUP_PW
-    if [ -n "$BACKUP_PW" ]; then
-        if ssh $PORT_OPT "$USERNAME@$HOST" user password --stdin <<< "$BACKUP_PW" >/dev/null 2>&1; then
-            printf "  %s✔%s %sMot de passe de secours configuré avec succès pour @%s%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$USERNAME" "$C_RESET"
-            printf "    %sEn cas de perte de clé, restaurez votre compte avec : %sssh%s %s@%s recover%s\n" "$C_MUTED" "$C_CYAN" "$PORT_OPT" "$USERNAME" "$HOST" "$C_RESET"
-        else
-            printf "  %s!%s %sImpossible d'enregistrer le mot de passe via SSH%s\n" "$C_GOLD" "$C_RESET" "$C_MUTED" "$C_RESET"
+    if prompt_backup_password_with_confirm "Mot de passe de secours" BACKUP_PW; then
+        if [ -n "$BACKUP_PW" ]; then
+            if ssh $PORT_OPT "$USERNAME@$HOST" user password --stdin <<< "$BACKUP_PW" >/dev/null 2>&1; then
+                printf "  %s✔%s %sMot de passe de secours configuré avec succès pour @%s%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$USERNAME" "$C_RESET"
+                printf "    %sEn cas de perte de clé, restaurez votre compte avec : %sssh%s %s@%s recover%s\n" "$C_MUTED" "$C_CYAN" "$PORT_OPT" "$USERNAME" "$HOST" "$C_RESET"
+            else
+                printf "  %s!%s %sImpossible d'enregistrer le mot de passe via SSH%s\n" "$C_GOLD" "$C_RESET" "$C_MUTED" "$C_RESET"
+            fi
         fi
     fi
 fi

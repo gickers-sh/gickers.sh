@@ -150,10 +150,11 @@ if ($choice -eq 0) {
             $pubContent = (Get-Content -Path $pubPath -Raw).Trim()
             Write-Host -NoNewline "  $escPink⠋$escReset $escBold$escWhite Autorisation de la clé publique sur $hostName...$escReset"
             try {
+                $escapedPub = $pubContent -replace '"', '\"'
                 if ($detectedKeyFile) {
-                    & ssh $portOpt -i "$detectedKeyFile" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "$username@$hostName" pubkey add "$pubContent" | Out-Null
+                    & ssh $portOpt -i "$detectedKeyFile" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "$username@$hostName" pubkey add "`"$escapedPub`"" | Out-Null
                 } else {
-                    & ssh $portOpt -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new "$username@$hostName" pubkey add "$pubContent" | Out-Null
+                    & ssh $portOpt -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new "$username@$hostName" pubkey add "`"$escapedPub`"" | Out-Null
                 }
                 Write-Host "`r$esc[2K  $escGreen✔$escReset $escBold$escWhite Clé autorisée sur votre compte $username@$hostName$escReset"
             } catch {
@@ -189,10 +190,11 @@ if ($choice -eq 0) {
     if ($alreadyRegistered -eq "1") {
         Write-Host -NoNewline "  $escPink⠋$escReset $escBold$escWhite Autorisation de la clé collée sur $hostName...$escReset"
         try {
+            $escapedKey = $pastedKey -replace '"', '\"'
             if ($detectedKeyFile) {
-                & ssh $portOpt -i "$detectedKeyFile" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "$username@$hostName" pubkey add "$pastedKey" | Out-Null
+                & ssh $portOpt -i "$detectedKeyFile" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "$username@$hostName" pubkey add "`"$escapedKey`"" | Out-Null
             } else {
-                & ssh $portOpt -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new "$username@$hostName" pubkey add "$pastedKey" | Out-Null
+                & ssh $portOpt -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new "$username@$hostName" pubkey add "`"$escapedKey`"" | Out-Null
             }
             Write-Host "`r$esc[2K  $escGreen✔$escReset $escBold$escWhite Clé autorisée sur votre compte $username@$hostName$escReset"
         } catch {
@@ -212,9 +214,11 @@ if ($alreadyRegistered -eq "0") {
             $tokenArgs = if ($claimToken) { @('--token', $claimToken) } else { @() }
             if ($choice -eq 1 -and (Test-Path "$keyPath.pub")) {
                 $pubContent = (Get-Content "$keyPath.pub" -Raw).Trim()
-                $out = & ssh $portOpt -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new $hostName signup $username --register @tokenArgs -k "$pubContent" 2>&1
+                $escapedPub = $pubContent -replace '"', '\"'
+                $out = & ssh $portOpt -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new $hostName signup $username --register @tokenArgs -k "`"$escapedPub`"" 2>&1
             } elseif ($choice -eq 2 -and $pastedKey) {
-                $out = & ssh $portOpt -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new $hostName signup $username --register @tokenArgs -k "$pastedKey" 2>&1
+                $escapedKey = $pastedKey -replace '"', '\"'
+                $out = & ssh $portOpt -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new $hostName signup $username --register @tokenArgs -k "`"$escapedKey`"" 2>&1
             } elseif ($keyPath -and (Test-Path $keyPath)) {
                 $out = & ssh $portOpt -i "$keyPath" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new $hostName signup $username --register @tokenArgs 2>&1
             } else {
