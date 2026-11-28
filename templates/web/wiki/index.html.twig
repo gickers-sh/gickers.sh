@@ -11,7 +11,9 @@
     'Login': '🔑',
     'Repo': '📦',
     'Deploy': '🚢',
-    'Collab': '👥'
+    'Collab': '👥',
+    'Admin': '⚙️',
+    'Workflows': '🔗'
 } %}
 
 {% block header_identity %}
@@ -41,6 +43,7 @@
                 <code class="clone-code">{{ sshPrefix }} wiki {% if activePage %}show {{ activePage.slugString }}{% else %}list{% endif %}</code>
                 {{ ui.copy_btn(sshPrefix ~ ' wiki ' ~ (activePage ? 'show ' ~ activePage.slugString : 'list'), null, 'copy-btn-sm', 'Copy SSH wiki command') }}
             </div>
+            <a href="/docs" class="home-btn home-btn-subtle" title="Browse SSH command reference">CLI Docs &rarr;</a>
             {% if isAdmin %}
                 <a href="/wiki/new" class="home-btn">+ New Page</a>
             {% endif %}

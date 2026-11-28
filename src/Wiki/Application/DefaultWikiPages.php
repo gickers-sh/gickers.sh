@@ -42,10 +42,17 @@ final class DefaultWikiPages
             ],
             [
                 'slug' => 'repo-management',
-                'title' => 'Git Repositories: Creation, Clone & Workflow',
+                'title' => 'Git Repositories: Creation, Fork, Mirror & Inspection',
                 'category' => 'Repo',
                 'position' => 30,
                 'content' => self::repoManagementMarkdown(),
+            ],
+            [
+                'slug' => 'branch-governance',
+                'title' => 'Branches, Tags, Protections, Signatures & Webhooks',
+                'category' => 'Repo',
+                'position' => 35,
+                'content' => self::branchGovernanceMarkdown(),
             ],
             [
                 'slug' => 'deploy-guide',
@@ -61,7 +68,40 @@ final class DefaultWikiPages
                 'position' => 50,
                 'content' => self::collaborationMarkdown(),
             ],
+            [
+                'slug' => 'server-admin',
+                'title' => 'Server Installation, Settings, Users & Wiki Administration',
+                'category' => 'Admin',
+                'position' => 60,
+                'content' => self::serverAdminMarkdown(),
+            ],
+            [
+                'slug' => 'workflows-pipes',
+                'title' => 'CLI Workflows, Pipes, APIs & Automations',
+                'category' => 'Workflows',
+                'position' => 70,
+                'content' => self::workflowsPipesMarkdown(),
+            ],
         ];
+    }
+
+    /**
+     * Lightweight title/category metadata index keyed by slug for linking
+     * commands in CLI, TUI, and Web docs without extra database queries.
+     *
+     * @return array<string, array{title: string, category: string}>
+     */
+    public static function metadata(): array
+    {
+        $map = [];
+        foreach (self::all() as $page) {
+            $map[$page['slug']] = [
+                'title' => $page['title'],
+                'category' => $page['category'],
+            ];
+        }
+
+        return $map;
     }
 
     public static function homeMarkdown(): string
@@ -83,9 +123,12 @@ Browse through the core sections of the platform:
 | :--- | :--- | :--- |
 | **🚀 Signup** | Self-service registration, cryptographic identity, SSH key generation, handle rules. | [SSH Signup & Registration](/wiki/signup) |
 | **🔑 Login** | Persistent agent storage, passwordless web magic links, Personal Access Tokens (PAT). | [SSH Keys & `ssh-add`](/wiki/ssh-keys)<br>[Passwordless Web Login](/wiki/web-login) |
-| **📦 Repo** | Creating repositories, SSH & Smart HTTP cloning, on-demand auto-creation, branching. | [Repositories & Workflow](/wiki/repo-management) |
-| **🚢 Deploy** | Docker Compose deployment engine, automatic Caddy HTTPS, custom domains, encrypted env vars. | [Deployments & Domains](/wiki/deploy-guide) |
-| **👥 Collab** | Collaborator permissions (read/write/admin), multi-key workflows, server governance. | [Collaboration & Keys](/wiki/collaboration) |
+| **📦 Repo** | Creating, forking, mirroring repositories, inspecting trees/blobs/diffs, search. | [Repositories & Workflow](/wiki/repo-management) |
+| **🛡️ Governance** | Branch protection rules, tags, signed commits verification, HTTP webhooks. | [Branches, Signatures & Webhooks](/wiki/branch-governance) |
+| **🚢 Deploy** | Docker Compose deployment engine, automatic Caddy HTTPS, quotas, encrypted env vars. | [Deployments & Domains](/wiki/deploy-guide) |
+| **👥 Collab** | Collaborator permissions (`read-only`/`read-write`/`admin-access`), key governance. | [Collaboration & Keys](/wiki/collaboration) |
+| **⚙️ Admin** | One-shot install/update, server health, global security policies, user & wiki admin. | [Server & User Administration](/wiki/server-admin) |
+| **🔗 Workflows** | Stdin/stdout pipes, CI/CD one-time tokens, HTTP raw endpoints, external integrations. | [CLI Workflows, Pipes & Automations](/wiki/workflows-pipes) |
 
 ---
 
@@ -508,88 +551,368 @@ MD;
     public static function repoManagementMarkdown(): string
     {
         return <<<'MD'
-# Git Repositories: Creation, Clone & Workflow
+# Git Repositories: Creation, Fork, Mirror & Inspection
 
-**gickers.sh** is a full-featured Git repository host with support for SSH pack transport (`git-upload-pack`, `git-receive-pack`), Smart HTTP, Git LFS, and on-demand repository creation.
+**gickers.sh** is a full-featured Git repository host supporting SSH pack transport (`git-upload-pack`, `git-receive-pack`), Smart HTTP, Git LFS, on-demand repository creation, local/remote forking, and scheduled pull mirrors.
 
 ---
 
-## 1. Creating a Repository
+## 1. Creating, Forking & Mirroring
 
-### Method A: Explicit Creation via SSH CLI
-
+### Method A: Explicit Creation (`repo create`)
 ```bash
-# Create a public repository:
 ssh gickers.sh repo create backend-api --description "Core REST API"
-
-# Create a private repository:
-ssh gickers.sh repo create secret-project --private --description "Confidential"
+ssh gickers.sh repo create secret-project --private --hidden
 ```
 
-### Method B: On-Demand Creation via `git push`
-
-You do not need to create a repository beforehand. Simply push any existing local Git repository to **gickers.sh**, and the server will provision the repository on the fly:
-
+### Method B: Push-to-Create (On-Demand)
+Push any local repository to **gickers.sh** and the server provisions it on the fly:
 ```bash
-cd my-local-app
 git remote add origin ssh://gickers.sh/my-local-app.git
 git push -u origin main
 ```
+
+### Method C: Forking (`repo fork`) — Local or External URL
+A fork creates an independent bare clone owned by you (`<username>/<repo_name_source>` by default) with its `origin` remote detached:
+```bash
+# Fork another user's gickers.sh repository into your namespace
+ssh gickers.sh repo fork alice/core-lib
+
+# Fork directly from an external GitHub/GitLab URL into a custom private repo
+ssh gickers.sh repo fork https://github.com/charmbracelet/soft-serve.git my-fork --private
+```
+
+### Method D: Mirroring & Importing (`repo mirror`, `repo import`)
+A **pull mirror** preserves the `origin` remote and automatically synchronizes refs (`git remote update --prune`) via the background scheduler:
+```bash
+# Create an auto-syncing mirror from an external URL or another gickers.sh repository
+ssh gickers.sh repo mirror https://github.com/org/upstream.git
+ssh gickers.sh repo mirror alice/project my-mirror
+
+# Inspect or toggle mirror sync on an existing repository
+ssh gickers.sh repo mirror my-app
+ssh gickers.sh repo mirror my-app true
+
+# One-shot import with optional Git LFS assets
+ssh gickers.sh repo import game-assets https://github.com/org/game.git --lfs --private
+```
+
+> **Security note:** External URLs passed to `repo fork`, `repo mirror`, and `repo import` are validated by `SsrfGuard` (blocking loopback/private networks and local `file://` URLs).
 
 ---
 
 ## 2. Cloning Repositories
 
-### Over SSH (Recommended)
-
 ```bash
-# If using the default SSH port (22):
+# Over SSH (recommended)
 git clone ssh://gickers.sh/alice/my-app.git
-# Or using the shorthand:
-git clone ssh://gickers.sh/my-app.git
-```
 
-### Over Smart HTTP
-
-```bash
-# Public repositories can be cloned anonymously:
+# Over Smart HTTP (public or with a Personal Access Token)
 git clone https://gickers.sh/alice/my-app.git
-
-# Private repositories require a Personal Access Token:
-git clone https://cst_token_secret@gickers.sh/alice/my-app.git
+git clone https://token:ss_your_token@gickers.sh/alice/my-app.git
 ```
 
 ---
 
-## 3. Managing Repository Settings
+## 3. Terminal Inspection & Code Search (Without Cloning)
+
+Inspect trees, files, commits, diffs, and grep patterns straight over SSH — ideal for piping into local tools:
 
 ```bash
-# Inspect repository metadata, branches, and commits
+# Repository metadata, default branch, stats & clone URLs
 ssh gickers.sh repo info my-app
 
-# Toggle private/public visibility
-ssh gickers.sh repo private my-app true
-ssh gickers.sh repo private my-app false
+# File tree and syntax-colored / raw file blob
+ssh gickers.sh repo tree my-app main src/
+ssh gickers.sh repo blob my-app main src/Kernel.php -c -l
+ssh gickers.sh repo blob my-app main compose.yaml --raw | yq '.services | keys'
 
-# Update description
-ssh gickers.sh repo description my-app "Next-generation API platform"
+# Commit details, unified diffs, and regex code search
+ssh gickers.sh repo commit my-app HEAD -p > last.patch
+ssh gickers.sh repo diff my-app v1.0.0 v1.1.0
+ssh gickers.sh repo grep my-app 'TODO|FIXME' main
 
-# List all repository branches
-ssh gickers.sh repo branch list my-app
+# Print README (pipe to glow or pandoc locally)
+ssh gickers.sh repo readme my-app | glow -
+```
 
-# Inspect file trees and blob contents via CLI
-ssh gickers.sh repo tree my-app main
-ssh gickers.sh repo blob my-app main README.md
+Raw files are also exposed over HTTP (`GET /{repo}/raw/{ref}/{path}`):
+```bash
+curl -fsSL https://gickers.sh/alice/my-app/raw/main/composer.json | jq .require
 ```
 
 ---
 
-## 4. Deleting a Repository
+## 4. Metadata, Renaming & Deletion
 
 ```bash
-ssh gickers.sh repo delete my-app
+ssh gickers.sh repo description my-app "Next-generation API platform"
+ssh gickers.sh repo project-name my-app "API Platform"
+ssh gickers.sh repo private my-app true
+ssh gickers.sh repo hidden my-app true
+ssh gickers.sh repo rename my-app new-name
+ssh gickers.sh repo delete obsolete-app
 ```
-> **Warning:** Repository deletion is irreversible. All branches, commit history, and associated deployment environments will be permanently removed.
+
+> **Warning:** `repo delete` permanently removes the bare Git repository, LFS objects, webhooks, branch rules, and deployment environments.
+
+See also: [Branches, Signatures & Webhooks](/wiki/branch-governance) · [CLI Workflows & Pipes](/wiki/workflows-pipes)
+MD;
+    }
+
+    public static function branchGovernanceMarkdown(): string
+    {
+        return <<<'MD'
+# Branches, Tags, Protections, Signatures & Webhooks
+
+Control how code enters your repositories using server-side `pre-receive` hooks (branch protection & GPG/SSH signature verification) and `post-receive` HTTP webhooks.
+
+---
+
+## 1. Branches & Tags (`repo branch`, `repo tag`)
+
+```bash
+# List branches / tags
+ssh gickers.sh repo branch list my-app
+ssh gickers.sh repo tag list my-app
+
+# Inspect or switch the default branch (symbolic HEAD)
+ssh gickers.sh repo branch default my-app
+ssh gickers.sh repo branch default my-app main
+
+# Delete merged branches or obsolete tags
+ssh gickers.sh repo branch delete my-app feature-old
+ssh gickers.sh repo tag delete my-app v0.1.0-rc1
+```
+
+---
+
+## 2. Branch Protection Rules (`repo branch protect`)
+
+Protection rules accept glob patterns (`main`, `release/*`, `v*`) and are enforced atomically in the `pre-receive` Git hook:
+
+```bash
+# Prevent force-pushes and branch deletion on main
+ssh gickers.sh repo branch protect my-app main --no-force --no-delete
+
+# Restrict release branches so only repository/server admins can push
+ssh gickers.sh repo branch protect my-app "release/*" --admins-only
+
+# Remove a protection rule
+ssh gickers.sh repo branch unprotect my-app "release/*"
+```
+
+---
+
+## 3. Verified Commit Signatures (`repo signatures`)
+
+Require every commit pushed to the repository to carry a cryptographically verified GPG or SSH signature:
+
+```bash
+# Check current enforcement status
+ssh gickers.sh repo signatures my-app
+
+# Enforce signed commits on every push
+ssh gickers.sh repo signatures my-app true
+```
+
+Configure Git locally to sign commits with your SSH key:
+```bash
+git config gpg.format ssh
+git config user.signingkey ~/.ssh/id_ed25519.pub
+git config commit.gpgsign true
+```
+
+---
+
+## 4. Repository Webhooks (`repo webhook`)
+
+Dispatch signed `HTTP POST` payloads (`X-SoftServe-Event`, HMAC-SHA256 signature) on repository events:
+
+Available events: `push`, `branch_tag_create`, `branch_tag_delete`, `collaborator`, `repository`, `repository_visibility_change`.
+
+```bash
+# Register a JSON webhook signed with a shared secret
+ssh gickers.sh repo webhook create my-app https://ci.example.com/hook \
+  -s "shared-secret" \
+  -e push,branch_tag_create \
+  -c json
+
+# List and delete webhooks
+ssh gickers.sh repo webhook list my-app
+ssh gickers.sh repo webhook delete my-app 2
+```
+
+### Tip: Mirror + Webhook Event Bridge
+Combine `repo mirror` with `repo webhook create`: every time the hourly mirror sync pulls upstream commits, **gickers.sh** can notify your Discord/Slack webhook, n8n workflow, or CI runner automatically.
+
+See also: [CLI Workflows & Pipes](/wiki/workflows-pipes) · [Deployments & Domains](/wiki/deploy-guide)
+MD;
+    }
+
+    public static function serverAdminMarkdown(): string
+    {
+        return <<<'MD'
+# Server Installation, Settings, Users & Wiki Administration
+
+Reference guide for **gickers.sh** host operators and server administrators.
+
+---
+
+## 1. One-Shot Installation & Server Updates (`install`, `server`)
+
+```bash
+# Deploy a full production node (Docker Compose, Caddy HTTPS, PostgreSQL, OpenSSH switch)
+ssh gickers.sh install --domain code.example.com --yes | bash
+
+# Inspect host health, disk usage, PHP runtime, and active deployments
+ssh gickers.sh server status
+
+# Pull latest code and rebuild server containers
+ssh gickers.sh server update | bash
+```
+
+---
+
+## 2. Global Server Policies (`settings`)
+
+```bash
+# Anonymous read policy (no-access, read-only, read-write, admin-access)
+ssh gickers.sh settings anon-access
+ssh gickers.sh settings anon-access read-only
+
+# Allow or close public self-service signup
+ssh gickers.sh settings allow-signup true
+
+# Allow keyless SSH read access to public repositories
+ssh gickers.sh settings allow-keyless false
+
+# Docker deployment policy: admins-only | authorized | repo-admins
+ssh gickers.sh settings deploy-policy authorized
+```
+
+---
+
+## 3. User & Key Governance (`user`)
+
+```bash
+# Create an account with an initial SSH key and optional admin role
+ssh gickers.sh user create bob -k "ssh-ed25519 AAAA... bob@work" --admin
+
+# Inspect, list, rename, promote/demote, or delete users
+ssh gickers.sh user list
+ssh gickers.sh user info bob
+ssh gickers.sh user set-username bob bob-new
+ssh gickers.sh user set-admin bob false
+ssh gickers.sh user deploy-allow bob true
+ssh gickers.sh user delete bob
+
+# Manage a user's keys or backup recovery password
+ssh gickers.sh user add-pubkey bob "ssh-ed25519 AAAA... bob@laptop"
+ssh gickers.sh user remove-pubkey bob "ssh-ed25519 AAAA... bob@old"
+openssl rand -base64 24 | ssh gickers.sh user password bob
+```
+
+---
+
+## 4. Managing the Wiki (`wiki`)
+
+All users can browse (`wiki list`, `wiki show <slug>`, `wiki search <query>`). Server admins can author pages via the Web editor (`/wiki/new`) or pipe Markdown directly over SSH:
+
+```bash
+# Publish or update a wiki page from a local Markdown file
+cat runbook.md | ssh gickers.sh wiki set ops/runbook -t "Incident Runbook" -c "Ops" -p 80
+
+# Read raw Markdown back into a local file
+ssh gickers.sh wiki show ops/runbook --raw > runbook.md
+
+# Delete a wiki page
+ssh gickers.sh wiki delete ops/runbook
+```
+MD;
+    }
+
+    public static function workflowsPipesMarkdown(): string
+    {
+        return <<<'MD'
+# CLI Workflows, Pipes, APIs & Automations
+
+**gickers.sh** is designed like a Unix filter: SSH commands accept structured data on `stdin`, emit clean raw output on `stdout` (with notices on `stderr`), and interoperate seamlessly with HTTP endpoints, `curl`, `jq`, `yq`, CI/CD runners, and Docker.
+
+---
+
+## 1. Stdin Pipes (`local -> gickers.sh`)
+
+```bash
+# 1. Pipe local Markdown directly into a server Wiki page
+cat ARCHITECTURE.md | ssh gickers.sh wiki set arch/overview -t "Architecture" -c Engineering
+
+# 2. Append optimized ControlMaster config (5ms SSH latency) to ~/.ssh/config
+ssh gickers.sh setup --raw >> ~/.ssh/config
+
+# 3. Feed a generated recovery password safely without exposing it in shell history
+openssl rand -base64 24 | ssh gickers.sh user password alice
+
+# 4. Run the interactive onboarding or server installer via pipe
+ssh gickers.sh signup | bash
+ssh gickers.sh install --domain git.example.com --yes | bash
+```
+
+---
+
+## 2. Stdout Pipes (`gickers.sh -> local tools`)
+
+```bash
+# 1. Parse compose.yaml or package.json directly from a repo without cloning
+ssh gickers.sh repo blob my-app main compose.yaml --raw | yq '.services | keys'
+ssh gickers.sh repo blob my-app main package.json --raw | jq '.dependencies'
+
+# 2. Export a commit or range diff as an applicable Git patch
+ssh gickers.sh repo commit my-app HEAD -p > hotfix.patch
+ssh gickers.sh repo diff my-app v1.0.0 v1.1.0 > release.diff
+
+# 3. Render a repository README in your favorite local Markdown viewer
+ssh gickers.sh repo readme my-app | glow -
+
+# 4. Bulk-sync encrypted deployment secrets from a local .env file
+grep -v '^#' .env.prod | xargs -I{} ssh gickers.sh repo deploy env set my-app main {}
+```
+
+---
+
+## 3. CI/CD & External API Integrations
+
+### Ephemeral Single-Use Token for CI/CD Runners
+Mint a tightly scoped, short-lived, single-use Personal Access Token (`PAT`) over SSH and pass it to `git clone` or Git LFS over HTTPS:
+```bash
+TOKEN=$(ssh gickers.sh token create "ci-job-${CI_JOB_ID}" \
+  --scope repo:read,lfs \
+  --repo alice/my-app \
+  --expires-in 15m \
+  --single-use | grep '^ss_')
+
+git clone "https://token:${TOKEN}@gickers.sh/alice/my-app.git"
+```
+
+### Raw HTTP Artifacts + Webhooks
+Fetch raw files over HTTPS (`GET /{repo}/raw/{ref}/{path}`) in external scripts or serverless functions, and pair with `repo webhook create` for event-driven automation:
+```bash
+# Fetch a config file from a public repository
+curl -fsSL https://gickers.sh/alice/my-app/raw/main/config/routes.yaml
+
+# Trigger an external CI/CD webhook on pushes and tag creation
+ssh gickers.sh repo webhook create my-app https://ci.example.com/hooks/gickers \
+  -e push,branch_tag_create \
+  -s "$(openssl rand -hex 32)"
+```
+
+### GitHub/GitLab Upstream Mirroring + Automated Deploy
+Mirror an upstream open-source project and auto-deploy a branch or monitor updates via webhook:
+```bash
+ssh gickers.sh repo mirror https://github.com/org/app.git my-app
+ssh gickers.sh repo deploy enable my-app main
+ssh gickers.sh repo deploy domain add my-app main app.example.com --service web --port 80
+```
 MD;
     }
 
@@ -638,6 +961,11 @@ Each deployment environment can be mapped to one or multiple public domains:
 ```bash
 # Map api.example.com to the "web" service on port 80:
 ssh gickers.sh repo deploy domain add my-app main api.example.com --service web --port 80
+
+# List, inspect, or detach custom domains:
+ssh gickers.sh repo deploy domain list my-app main
+ssh gickers.sh repo deploy domain get my-app main api.example.com
+ssh gickers.sh repo deploy domain remove my-app main api.example.com
 ```
 
 ### DNS Configuration
@@ -659,8 +987,9 @@ Store secrets (API keys, database URLs, tokens) encrypted with libsodium:
 ssh gickers.sh repo deploy env set my-app main DATABASE_URL="postgres://..."
 ssh gickers.sh repo deploy env set my-app main APP_ENV="production"
 
-# List defined environment variable keys (values remain hidden):
+# List keys or reveal a decrypted secret value:
 ssh gickers.sh repo deploy env list my-app main
+ssh gickers.sh repo deploy env get my-app main DATABASE_URL --reveal
 
 # Unset an environment variable:
 ssh gickers.sh repo deploy env unset my-app main UNWANTED_VAR
@@ -668,21 +997,30 @@ ssh gickers.sh repo deploy env unset my-app main UNWANTED_VAR
 
 ---
 
-## 5. Monitoring & Operational Commands
+## 5. Monitoring, Quotas & Lifecycle Commands
 
 ```bash
-# Inspect environment status and current running release:
+# Inspect environment status, deployed SHA, domains, and quotas:
 ssh gickers.sh repo deploy status my-app main
 
-# Stream real-time container runtime logs:
-ssh gickers.sh repo deploy logs my-app main --tail 100
+# Stream build or service logs in real time:
+ssh gickers.sh repo deploy logs my-app main --service web --follow
+ssh gickers.sh repo deploy logs my-app main --build
 
-# Restart running containers:
-ssh gickers.sh repo deploy restart my-app main
-
-# Manually trigger a redeployment from HEAD:
+# Trigger, rebuild (--all for server-wide), stop, restart, or disable:
 ssh gickers.sh repo deploy trigger my-app main
+ssh gickers.sh repo deploy redeploy my-app main
+ssh gickers.sh repo deploy restart my-app main
+ssh gickers.sh repo deploy stop my-app main
+ssh gickers.sh repo deploy disable my-app main
+
+# Server Admin: authorize deployments, tune CPU/RAM/PID quotas, or run one-shot exec:
+ssh gickers.sh repo deploy allow my-app true --ref "release/*"
+ssh gickers.sh repo deploy quota my-app --cpus 1.5 --memory 1g --pids 256
+ssh gickers.sh repo deploy exec my-app main web php bin/console doctrine:migrations:migrate -n
 ```
+
+See also: [CLI Workflows & Pipes](/wiki/workflows-pipes) · [Server & User Administration](/wiki/server-admin)
 MD;
     }
 

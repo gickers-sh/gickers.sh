@@ -307,6 +307,10 @@ final class WikiFeatureTest extends KernelTestCase
         self::assertNotNull($repoPage);
         self::assertSame('Repo', $repoPage->category());
 
+        foreach (['branch-governance', 'server-admin', 'workflows-pipes'] as $extraSlug) {
+            self::assertNotNull($this->wikiQuery->find($extraSlug), sprintf('Missing default wiki page "%s"', $extraSlug));
+        }
+
         $webSshKeys = $this->handleHttp(Request::create('/wiki/ssh-keys', 'GET'));
         self::assertSame(200, $webSshKeys->getStatusCode());
         self::assertStringContainsString('SSH Keys &amp; Permanent Agent Storage', (string) $webSshKeys->getContent());
