@@ -19,6 +19,7 @@ x-app: &app
   environment: &app-env
     APP_ENV: ${APP_ENV:-prod}
     APP_DEBUG: ${APP_DEBUG:-0}
+    APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
     APP_SECRET: ${APP_SECRET:?set APP_SECRET in .env.docker}
     APP_DOMAIN: ${APP_DOMAIN:-gits.run}
     GICKERS_SSH_BIN: /usr/local/bin/gickers-ssh

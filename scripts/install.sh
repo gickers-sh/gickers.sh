@@ -2171,6 +2171,7 @@ if [ "${SKIP_APP_DEPLOY:-0}" -eq 0 ]; then
 
     mkdir -p .data .data/caddy/sites var var/cache var/log
     chmod 755 .data .data/caddy/sites var 2>/dev/null || true
+    [ ! -f .env ] && touch .env 2>/dev/null || true
 
     # Si l'utilisateur actuel peut sudo ou si root, s'assurer que le répertoire appartient à CURRENT_USER
     if [ "$IS_ROOT" -eq 1 ]; then

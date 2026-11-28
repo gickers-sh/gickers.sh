@@ -50,7 +50,8 @@ RUN ln -sf /usr/local/bin/gickers-ssh /usr/local/bin/codes-ssh \
     && ln -sf /usr/local/bin/gickers-ssh /app/bin/gickers-ssh \
     && ln -sf /usr/local/bin/gickers-ssh /app/bin/codes-ssh \
     && composer dump-autoload --optimize --no-dev --no-scripts \
-    && chmod +x bin/soft bin/console /usr/local/bin/gickers-ssh /usr/local/bin/codes-ssh
+    && chmod +x bin/soft bin/console /usr/local/bin/gickers-ssh /usr/local/bin/codes-ssh \
+    && touch .env
 
 ENV APP_ENV=prod
 # soft:serve prepares state and supervises the requested component(s).
