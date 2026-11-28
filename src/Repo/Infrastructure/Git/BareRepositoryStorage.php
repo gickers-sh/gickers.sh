@@ -176,6 +176,56 @@ final class BareRepositoryStorage implements RepoDirectory
     }
 
     /**
+     * Forks from an external remote URL as a bare repository with the origin remote removed.
+     */
+    public function forkFromRemote(
+        string $remoteUrl,
+        RepoName $target,
+        string $description = '',
+        bool $enforcePublicRemote = true,
+    ): GitRepository {
+        $targetPath = $this->pathFor($target);
+        if ($this->exists($target)) {
+            throw new \RuntimeException(sprintf('Target repository "%s" already exists.', $target->value));
+        }
+
+        $parentDir = dirname($targetPath);
+        if (!is_dir($parentDir)) {
+            mkdir($parentDir, 0755, true);
+        }
+
+        $env = $enforcePublicRemote ? self::remoteGitEnv() : MinimalProcessEnv::build(['GIT_TERMINAL_PROMPT' => '0']);
+        $args = [
+            '-c',
+            'http.followRedirects=false',
+            '-c',
+            'submodule.recurse=false',
+        ];
+        if ($enforcePublicRemote) {
+            $args[] = '-c';
+            $args[] = 'protocol.file.allow=never';
+        }
+        $args[] = 'clone';
+        $args[] = '--bare';
+        $args[] = '--';
+        $args[] = $remoteUrl;
+        $args[] = $targetPath;
+
+        GitCommand::mustRun($parentDir, $args, env: $env);
+
+        // Remove origin remote so the fork has no upstream remote connection
+        GitCommand::run($targetPath, ['remote', 'remove', 'origin']);
+
+        if ('' !== $description) {
+            file_put_contents($targetPath . '/description', $description . "\n");
+        }
+
+        $realPath = realpath($targetPath) ?: $targetPath;
+
+        return ($this->reader ?? new GitRepositoryReader())->openRepository($realPath);
+    }
+
+    /**
      * Clones a remote repository as a bare/mirror repository.
      */
     public function importMirror(
@@ -275,6 +325,15 @@ final class BareRepositoryStorage implements RepoDirectory
         return array_values(array_unique($urls));
     }
 
+    public function isInternalRepoPath(string $path): bool
+    {
+        $reposBase = $this->settings->reposPath();
+        $realBase = realpath($reposBase) ?: $reposBase;
+        $realTarget = realpath($path) ?: $path;
+
+        return str_starts_with($realTarget, $realBase);
+    }
+
     /**
      * Refreshes a mirror from its origin with `git remote update --prune`: fetches every
      * configured remote and drops the refs deleted upstream.
@@ -303,14 +362,22 @@ final class BareRepositoryStorage implements RepoDirectory
             throw new \RuntimeException(sprintf('Mirror "%s" has no remote configured.', $name->value));
         }
 
-        $env = $enforcePublicRemote ? self::remoteGitEnv() : MinimalProcessEnv::build(['GIT_TERMINAL_PROMPT' => '0']);
+        $isLocalInternal = false;
+        foreach ($this->remoteUrls($name) as $remoteUrl) {
+            if ($this->isInternalRepoPath($remoteUrl)) {
+                $isLocalInternal = true;
+                break;
+            }
+        }
+
+        $env = $enforcePublicRemote && !$isLocalInternal ? self::remoteGitEnv() : MinimalProcessEnv::build(['GIT_TERMINAL_PROMPT' => '0']);
         $args = [
             '-c',
             'http.followRedirects=false',
             '-c',
             'submodule.recurse=false',
         ];
-        if ($enforcePublicRemote) {
+        if ($enforcePublicRemote && !$isLocalInternal) {
             $args[] = '-c';
             $args[] = 'protocol.file.allow=never';
         }

@@ -193,7 +193,7 @@ abstract class RepoUseCaseTestCase extends KernelTestCase
 
     protected function forkRepoUseCase(): ForkRepo
     {
-        return new ForkRepo($this->repoStore, $this->accessGuard, $this->accessResolver, $this->storage, $this->hookInstaller, $this->clock, $this->events);
+        return new ForkRepo($this->repoStore, $this->accessGuard, $this->accessResolver, $this->storage, $this->hookInstaller, $this->clock, $this->events, ssrfGuard: $this->ssrfGuard);
     }
 
     protected function deleteRepoUseCase(): DeleteRepo

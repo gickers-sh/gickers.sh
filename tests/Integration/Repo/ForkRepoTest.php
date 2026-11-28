@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Integration\Repo;
 
 use App\Access\Domain\AccessLevel;
+use App\Repo\Application\ForkRepo;
 use App\Repo\Domain\Event\RepoCreated;
 use App\Repo\Domain\Model\Collaborator;
 use App\Repo\Domain\RepoName;
@@ -67,5 +68,35 @@ final class ForkRepoTest extends RepoUseCaseTestCase
 
         $this->expectException(AccessDenied::class);
         ($this->forkRepoUseCase())(null, 'alice/pub');
+    }
+
+    public function testExtractRepoNameSource(): void
+    {
+        self::assertSame('soft-serve', ForkRepo::extractRepoNameSource('https://github.com/charmbracelet/soft-serve.git'));
+        self::assertSame('soft-serve', ForkRepo::extractRepoNameSource('https://github.com/charmbracelet/soft-serve'));
+        self::assertSame('soft-serve', ForkRepo::extractRepoNameSource('git@github.com:charmbracelet/soft-serve.git'));
+        self::assertSame('my-app', ForkRepo::extractRepoNameSource('ssh://git@gitlab.com:2222/group/subgroup/my-app.git'));
+        self::assertSame('my-repo', ForkRepo::extractRepoNameSource('alice/my-repo'));
+        self::assertSame('my-repo', ForkRepo::extractRepoNameSource('my-repo'));
+    }
+
+    public function testForkRejectsLoopbackUrl(): void
+    {
+        $bob = $this->user('bob');
+        $this->expectException(\App\Shared\Domain\Exception\InvalidInput::class);
+        ($this->forkRepoUseCase())($bob, 'http://127.0.0.1/evil.git');
+    }
+
+    public function testForkWithUnscopedTargetAutoPrefixesUsername(): void
+    {
+        $owner = $this->user('alice');
+        $this->repoRow('alice/pub', $owner, private: false);
+        $this->initRepoOnDisk('alice/pub');
+
+        $bob = $this->user('bob');
+        $fork = ($this->forkRepoUseCase())($bob, 'alice/pub', 'custom-fork');
+
+        self::assertSame('bob/custom-fork', $fork->nameString());
+        self::assertTrue($this->storage->exists(RepoName::fromInput('bob/custom-fork')));
     }
 }
