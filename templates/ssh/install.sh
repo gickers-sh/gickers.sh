@@ -717,12 +717,14 @@ fi
 # ------------------------------------------------------------------------------
 if [ "$NON_INTERACTIVE" -eq 0 ]; then
     # Préparation des descriptions et commandes pour chaque étape du checklist
-    DESC_DOCKER="Installe les paquets de base (curl, git, jq), le moteur Docker et le plugin Docker Compose."
+    DESC_DOCKER="Mise à jour des dépôts, installation des outils de base (curl, git, jq), configuration du dépôt officiel et installation du moteur Docker avec Docker Compose."
     case "$PKG_MGR" in
         apk)
             CMDS_DOCKER=$(cat << 'EOF'
-apk update && apk add --no-cache ca-certificates curl git git-lfs jq ufw docker docker-cli-compose
-rc-update add docker boot && service docker start
+apk update && \
+  apk add --no-cache ca-certificates curl git git-lfs jq ufw docker docker-cli-compose
+rc-update add docker boot
+service docker start
 addgroup $USER docker
 EOF
 )
@@ -731,31 +733,38 @@ EOF
             CMDS_DOCKER=$(cat << 'EOF'
 dnf install -y dnf-plugins-core
 dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
-dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-systemctl enable --now docker && usermod -aG docker $USER
+dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin git git-lfs jq curl
+systemctl enable --now docker
+usermod -aG docker $USER
 EOF
 )
             ;;
         pacman)
             CMDS_DOCKER=$(cat << 'EOF'
 pacman -Sy --noconfirm docker docker-compose git git-lfs curl jq ufw
-systemctl enable --now docker && usermod -aG docker $USER
+systemctl enable --now docker
+usermod -aG docker $USER
 EOF
 )
             ;;
         *)
             CMDS_DOCKER=$(cat << 'EOF'
-apt-get update -y && apt-get install -y ca-certificates curl gnupg git git-lfs jq ufw
+apt-get update -y && \
+  apt-get install -y --no-install-recommends ca-certificates curl gnupg git git-lfs jq ufw
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-systemctl enable --now docker && usermod -aG docker $USER
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  > /etc/apt/sources.list.d/docker.list
+apt-get update -y && \
+  apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-compose-plugin
+systemctl enable --now docker
+usermod -aG docker $USER
 EOF
 )
             ;;
     esac
 
-    DESC_SSHD="Migre le serveur OpenSSH hôte sur le port 2222 afin de libérer le port 22 pour le service Git SSH."
+    DESC_SSHD="Déplacement du port OpenSSH hôte sur 2222 et libération du port standard 22 pour le serveur Git SSH de codes.sh (clones et push transparents sans port custom)."
     if [ "$INIT_SYSTEM" = "openrc" ]; then
         CMDS_SSHD=$(cat << 'EOF'
 ufw allow 2222/tcp comment 'OpenSSH System (moved from 22)'
@@ -772,7 +781,7 @@ EOF
 )
     fi
 
-    DESC_UFW="Installe UFW (si absent) et autorise le trafic Web (80, 443), Git SSH (22) et OpenSSH hôte (2222)."
+    DESC_UFW="Installation du pare-feu UFW et configuration des règles pour n'exposer que les flux nécessaires : HTTP/ACME (80), HTTPS (443), Git SSH (22) et SSH système (2222)."
     case "$PKG_MGR" in
         apk)
             CMDS_UFW=$(cat << 'EOF'
@@ -798,7 +807,7 @@ EOF
             ;;
         *)
             CMDS_UFW=$(cat << 'EOF'
-apt-get install -y ufw
+apt-get install -y --no-install-recommends ufw
 ufw allow 80/tcp comment 'Gickers HTTP / ACME'
 ufw allow 443/tcp comment 'Gickers HTTPS'
 ufw allow 22/tcp comment 'Gickers Git SSH'
@@ -809,9 +818,10 @@ EOF
             ;;
     esac
 
-    DESC_APP="Télécharge ou synchronise le code source, configure .env.docker et démarre la stack complète Docker."
+    DESC_APP="Clonage du projet codes.sh, génération de l'environnement sécurisé (.env.docker), build des conteneurs isolés, initialisation Doctrine et démarrage des services."
     CMDS_APP=$(cat << 'EOF'
-git clone --depth 1 https://github.com/gickerssh/gickers.sh.git
+git clone --depth 1 https://github.com/gickerssh/gickers.sh.git "$INSTALL_DIR"
+cd "$INSTALL_DIR"
 docker compose --env-file .env.docker build
 docker compose --env-file .env.docker up -d postgres
 docker compose --env-file .env.docker run --rm init
@@ -819,10 +829,10 @@ docker compose --env-file .env.docker up -d
 EOF
 )
 
-    DESC_SYSTEMD="Configure le service d'initialisation pour lancer automatiquement l'infrastructure au boot du serveur."
+    DESC_SYSTEMD="Configuration du gestionnaire de services système de l'hôte pour garantir le démarrage automatique et la persistance des conteneurs à chaque reboot du serveur."
     if [ "$INIT_SYSTEM" = "openrc" ]; then
         CMDS_SYSTEMD=$(cat << 'EOF'
-# Service OpenRC /etc/init.d/gickers
+# Création du service OpenRC /etc/init.d/gickers
 rc-update add gickers default
 rc-service gickers start
 EOF

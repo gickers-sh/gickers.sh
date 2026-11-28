@@ -140,13 +140,17 @@ gum_checklist() {
     local descs=()
     local cmds=()
     for item in "$@"; do
-        local IFS='|'
-        local parts=()
-        read -ra parts <<< "$item"
-        labels+=("${parts[0]}")
-        checked+=("${parts[1]:-1}")
-        descs+=("${parts[2]:-}")
-        cmds+=("${parts[3]:-}")
+        local rest="$item"
+        local l="${rest%%|*}"
+        rest="${rest#*|}"
+        local c="${rest%%|*}"
+        rest="${rest#*|}"
+        local d="${rest%%|*}"
+        local cmd="${rest#*|}"
+        labels+=("$l")
+        checked+=("${c:-1}")
+        descs+=("$d")
+        cmds+=("$cmd")
     done
 
     local count=${#labels[@]}
@@ -171,7 +175,7 @@ gum_checklist() {
     [ "$max_width" -lt 30 ] && max_width=30
 
     local box_width=$(( term_cols - 6 ))
-    [ "$box_width" -gt 74 ] && box_width=74
+    [ "$box_width" -gt 92 ] && box_width=92
     [ "$box_width" -lt 40 ] && box_width=40
     local inner_width=$(( box_width - 4 ))
 
@@ -179,6 +183,41 @@ gum_checklist() {
         "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$prompt_title" "$C_RESET" "$C_DIM" "$C_RESET"
 
     local last_rendered_lines=0
+
+    # Fonction pour coloriser syntaxiquement une ligne de commande bash
+    colorize_bash_line() {
+        local raw_line="$1"
+        if [[ "$raw_line" =~ ^[[:space:]]*# ]]; then
+            printf "%s" "$C_DIM$raw_line$C_RESET"
+            return
+        fi
+
+        # Mots-clés / utilitaires en vert/cyan, drapeaux en muted, connecteurs en rose, variables en or
+        local colored=""
+        local tokens=()
+        read -ra tokens <<< "$raw_line"
+        local first=1
+        for token in "${tokens[@]}"; do
+            local color="$C_GOLD"
+            if [ "$first" -eq 1 ] || [ "$token" = "&&" ] || [ "$token" = "||" ] || [ "$token" = "|" ] || [ "$token" = ";" ]; then
+                if [ "$token" = "&&" ] || [ "$token" = "||" ] || [ "$token" = "|" ] || [ "$token" = ";" ] || [ "$token" = "\\" ]; then
+                    color="$C_PINK"
+                    first=1
+                else
+                    color="$C_GREEN"
+                    first=0
+                fi
+            elif [[ "$token" =~ ^- ]]; then
+                color="$C_MUTED"
+            elif [[ "$token" =~ ^\$ ]] || [[ "$token" =~ = ]]; then
+                color="$C_CYAN"
+            elif [[ "$token" =~ ^\> ]] || [[ "$token" =~ ^\< ]]; then
+                color="$C_PINK"
+            fi
+            colored+="${color}${token}${C_RESET} "
+        done
+        printf "%s" "${colored% }"
+    }
 
     draw_checklist_and_box() {
         local rendered=0
@@ -225,46 +264,63 @@ gum_checklist() {
             sep_line+="┤"
             bot_line+="╯"
 
-            printf "\r${ESC}[2K    %s%s%s\n" "$C_DIM" "$top_line" "$C_RESET"
+            printf "\r${ESC}[2K    %s%s%s\n" "$C_CYAN" "$top_line" "$C_RESET"
             rendered=$((rendered + 1))
 
             if [ -n "$cur_desc" ]; then
-                # Découpage du texte description sur inner_width
                 local desc_clean
                 desc_clean=$(echo "$cur_desc" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
                 while IFS= read -r dline; do
                     [ -z "$dline" ] && continue
                     while [ "${#dline}" -gt "$inner_width" ]; do
                         local chunk="${dline:0:$inner_width}"
-                        printf "\r${ESC}[2K    %s│%s %s%-*s%s %s│%s\n" "$C_DIM" "$C_RESET" "$C_WHITE" "$inner_width" "$chunk" "$C_RESET" "$C_DIM" "$C_RESET"
+                        printf "\r${ESC}[2K    %s│%s %s%-*s%s %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD$C_WHITE" "$inner_width" "$chunk" "$C_RESET" "$C_CYAN" "$C_RESET"
                         rendered=$((rendered + 1))
                         dline="${dline:$inner_width}"
                     done
-                    printf "\r${ESC}[2K    %s│%s %s%-*s%s %s│%s\n" "$C_DIM" "$C_RESET" "$C_WHITE" "$inner_width" "$dline" "$C_RESET" "$C_DIM" "$C_RESET"
+                    printf "\r${ESC}[2K    %s│%s %s%-*s%s %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD$C_WHITE" "$inner_width" "$dline" "$C_RESET" "$C_CYAN" "$C_RESET"
                     rendered=$((rendered + 1))
                 done <<< "$desc_clean"
             fi
 
             if [ -n "$cur_cmd" ]; then
                 if [ -n "$cur_desc" ]; then
-                    printf "\r${ESC}[2K    %s%s%s\n" "$C_DIM" "$sep_line" "$C_RESET"
+                    printf "\r${ESC}[2K    %s%s%s\n" "$C_CYAN" "$sep_line" "$C_RESET"
                     rendered=$((rendered + 1))
                 fi
                 while IFS= read -r cline; do
-                    local disp_cline="$cline"
-                    if [ "${#disp_cline}" -gt "$inner_width" ]; then
-                        disp_cline="${disp_cline:0:$((inner_width - 3))}..."
-                    fi
-                    local color_cline="$C_GOLD"
-                    if [[ "$cline" =~ ^# ]]; then
-                        color_cline="$C_DIM"
-                    fi
-                    printf "\r${ESC}[2K    %s│%s %s%-*s%s %s│%s\n" "$C_DIM" "$C_RESET" "$color_cline" "$inner_width" "$disp_cline" "$C_RESET" "$C_DIM" "$C_RESET"
+                    # Découpage intelligent par mot pour ne pas couper au milieu d'un token
+                    local remaining="$cline"
+                    while [ "${#remaining}" -gt "$inner_width" ]; do
+                        local split_idx="$inner_width"
+                        # Trouver le dernier espace avant inner_width
+                        local prefix="${remaining:0:$inner_width}"
+                        if [[ "$prefix" =~ ^(.*)[[:space:]]([^[:space:]]*)$ ]]; then
+                            split_idx="${#BASH_REMATCH[1]}"
+                        fi
+                        [ "$split_idx" -le 0 ] && split_idx="$inner_width"
+
+                        local part="${remaining:0:$split_idx}"
+                        local colored_part
+                        colored_part=$(colorize_bash_line "$part")
+                        local padding=$(( inner_width - ${#part} ))
+                        [ "$padding" -lt 0 ] && padding=0
+                        printf "\r${ESC}[2K    %s│%s %s%*s %s│%s\n" "$C_CYAN" "$C_RESET" "$colored_part" "$padding" "" "$C_CYAN" "$C_RESET"
+                        rendered=$((rendered + 1))
+                        remaining="${remaining:$split_idx}"
+                        remaining=$(echo "$remaining" | sed -e 's/^[[:space:]]*//')
+                        [ -n "$remaining" ] && remaining="  $remaining"
+                    done
+                    local colored_rem
+                    colored_rem=$(colorize_bash_line "$remaining")
+                    local pad=$(( inner_width - ${#remaining} ))
+                    [ "$pad" -lt 0 ] && pad=0
+                    printf "\r${ESC}[2K    %s│%s %s%*s %s│%s\n" "$C_CYAN" "$C_RESET" "$colored_rem" "$pad" "" "$C_CYAN" "$C_RESET"
                     rendered=$((rendered + 1))
                 done <<< "$cur_cmd"
             fi
 
-            printf "\r${ESC}[2K    %s%s%s\n" "$C_DIM" "$bot_line" "$C_RESET"
+            printf "\r${ESC}[2K    %s%s%s\n" "$C_CYAN" "$bot_line" "$C_RESET"
             rendered=$((rendered + 1))
         fi
 
@@ -1353,12 +1409,14 @@ fi
 # ------------------------------------------------------------------------------
 if [ "$NON_INTERACTIVE" -eq 0 ]; then
     # Préparation des descriptions et commandes pour chaque étape du checklist
-    DESC_DOCKER="Installe les paquets de base (curl, git, jq), le moteur Docker et le plugin Docker Compose."
+    DESC_DOCKER="Mise à jour des dépôts, installation des outils de base (curl, git, jq), configuration du dépôt officiel et installation du moteur Docker avec Docker Compose."
     case "$PKG_MGR" in
         apk)
             CMDS_DOCKER=$(cat << 'EOF'
-apk update && apk add --no-cache ca-certificates curl git git-lfs jq ufw docker docker-cli-compose
-rc-update add docker boot && service docker start
+apk update && \
+  apk add --no-cache ca-certificates curl git git-lfs jq ufw docker docker-cli-compose
+rc-update add docker boot
+service docker start
 addgroup $USER docker
 EOF
 )
@@ -1367,31 +1425,38 @@ EOF
             CMDS_DOCKER=$(cat << 'EOF'
 dnf install -y dnf-plugins-core
 dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
-dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-systemctl enable --now docker && usermod -aG docker $USER
+dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin git git-lfs jq curl
+systemctl enable --now docker
+usermod -aG docker $USER
 EOF
 )
             ;;
         pacman)
             CMDS_DOCKER=$(cat << 'EOF'
 pacman -Sy --noconfirm docker docker-compose git git-lfs curl jq ufw
-systemctl enable --now docker && usermod -aG docker $USER
+systemctl enable --now docker
+usermod -aG docker $USER
 EOF
 )
             ;;
         *)
             CMDS_DOCKER=$(cat << 'EOF'
-apt-get update -y && apt-get install -y ca-certificates curl gnupg git git-lfs jq ufw
+apt-get update -y && \
+  apt-get install -y --no-install-recommends ca-certificates curl gnupg git git-lfs jq ufw
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-systemctl enable --now docker && usermod -aG docker $USER
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  > /etc/apt/sources.list.d/docker.list
+apt-get update -y && \
+  apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-compose-plugin
+systemctl enable --now docker
+usermod -aG docker $USER
 EOF
 )
             ;;
     esac
 
-    DESC_SSHD="Migre le serveur OpenSSH hôte sur le port 2222 afin de libérer le port 22 pour le service Git SSH."
+    DESC_SSHD="Déplacement du port OpenSSH hôte sur 2222 et libération du port standard 22 pour le serveur Git SSH de codes.sh (clones et push transparents sans port custom)."
     if [ "$INIT_SYSTEM" = "openrc" ]; then
         CMDS_SSHD=$(cat << 'EOF'
 ufw allow 2222/tcp comment 'OpenSSH System (moved from 22)'
@@ -1408,7 +1473,7 @@ EOF
 )
     fi
 
-    DESC_UFW="Installe UFW (si absent) et autorise le trafic Web (80, 443), Git SSH (22) et OpenSSH hôte (2222)."
+    DESC_UFW="Installation du pare-feu UFW et configuration des règles pour n'exposer que les flux nécessaires : HTTP/ACME (80), HTTPS (443), Git SSH (22) et SSH système (2222)."
     case "$PKG_MGR" in
         apk)
             CMDS_UFW=$(cat << 'EOF'
@@ -1434,7 +1499,7 @@ EOF
             ;;
         *)
             CMDS_UFW=$(cat << 'EOF'
-apt-get install -y ufw
+apt-get install -y --no-install-recommends ufw
 ufw allow 80/tcp comment 'Gickers HTTP / ACME'
 ufw allow 443/tcp comment 'Gickers HTTPS'
 ufw allow 22/tcp comment 'Gickers Git SSH'
@@ -1445,9 +1510,10 @@ EOF
             ;;
     esac
 
-    DESC_APP="Télécharge ou synchronise le code source, configure .env.docker et démarre la stack complète Docker."
+    DESC_APP="Clonage du projet codes.sh, génération de l'environnement sécurisé (.env.docker), build des conteneurs isolés, initialisation Doctrine et démarrage des services."
     CMDS_APP=$(cat << 'EOF'
-git clone --depth 1 https://github.com/gickerssh/gickers.sh.git
+git clone --depth 1 https://github.com/gickerssh/gickers.sh.git "$INSTALL_DIR"
+cd "$INSTALL_DIR"
 docker compose --env-file .env.docker build
 docker compose --env-file .env.docker up -d postgres
 docker compose --env-file .env.docker run --rm init
@@ -1455,10 +1521,10 @@ docker compose --env-file .env.docker up -d
 EOF
 )
 
-    DESC_SYSTEMD="Configure le service d'initialisation pour lancer automatiquement l'infrastructure au boot du serveur."
+    DESC_SYSTEMD="Configuration du gestionnaire de services système de l'hôte pour garantir le démarrage automatique et la persistance des conteneurs à chaque reboot du serveur."
     if [ "$INIT_SYSTEM" = "openrc" ]; then
         CMDS_SYSTEMD=$(cat << 'EOF'
-# Service OpenRC /etc/init.d/gickers
+# Création du service OpenRC /etc/init.d/gickers
 rc-update add gickers default
 rc-service gickers start
 EOF
