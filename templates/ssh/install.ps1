@@ -31,6 +31,7 @@ $nonInteractive = ("__NON_INTERACTIVE__" -eq "1")
 $dryRun = ("__DRY_RUN__" -eq "1")
 $stepDocker = "__STEP_DOCKER__"
 $stepFirewall = "__STEP_FIREWALL__"
+$hardReset = ("__HARD_RESET__" -eq "1")
 
 # Default system user
 if ([string]::IsNullOrEmpty($systemUser)) {
@@ -66,6 +67,46 @@ if ([string]::IsNullOrEmpty($adminSshKey)) {
 }
 
 if (-not $nonInteractive) {
+    if ((Test-Path "compose.yaml") -or (Test-Path ".env.docker") -or (Test-Path (Join-Path $installDir "compose.yaml"))) {
+        $existOpts = @(
+            "Conserver les données et mettre à jour l'application (Idempotent - Recommandé)",
+            "Réinitialisation complète / Hard Reset (⚠️  Supprime base de données, volumes et dépôts)"
+        )
+        $existChoice = Gum-Choose -Title "Une installation existante a été détectée dans $installDir" -Options $existOpts
+        if ($existChoice -eq 1) {
+            $hardReset = $true
+        } else {
+            $hardReset = $false
+            Write-Host "  $escGreen✔$escReset $escBold${escWhite}Mode idempotent : vos données et configurations existantes seront conservées.$escReset`n"
+        }
+    }
+
+    if ($hardReset) {
+        Write-Host "`n  $escPink⚠️  ATTENTION : DEMANDE DE RÉINITIALISATION COMPLÈTE (HARD RESET)$escReset"
+        Write-Host "  $escPink Cette action est IRRÉVERSIBLE et va supprimer définitivement :$escReset"
+        Write-Host "    • Tous les dépôts Git et volumes Docker (gickers-data, gickers-db)"
+        Write-Host "    • La base de données PostgreSQL (comptes, clés SSH, tickets)`n"
+
+        $confirmOpts = @(
+            "Non, annuler et conserver mes données intactes (Recommandé)",
+            "Oui, je confirme vouloir supprimer TOUTES les données"
+        )
+        $confirm1 = Gum-Choose -Title "Confirmation 1/2 : Souhaitez-vous continuer la réinitialisation ?" -Options $confirmOpts
+        if ($confirm1 -ne 1) {
+            Write-Host "  $escGreen✔$escReset $escBold${escWhite}Réinitialisation annulée. Vos données sont préservées.$escReset`n"
+            $hardReset = $false
+        } else {
+            $resetConfirm = Gum-Input -PromptLabel "Confirmation 2/2 : Tapez 'RESET' en majuscules pour confirmer" -DefaultValue "" -Placeholder "RESET"
+            if ($resetConfirm -eq "RESET") {
+                $hardReset = $true
+                Write-Host "  $escPink✔$escReset $escBold${escWhite}Double confirmation validée. Hard reset enclenché.$escReset`n"
+            } else {
+                Write-Host "  $escGreen✔$escReset $escBold${escWhite}Saisie non conforme. Réinitialisation annulée, données préservées.$escReset`n"
+                $hardReset = $false
+            }
+        }
+    }
+
     # 0. User & Isolation choice
     $userOpts = @(
         "Utiliser l'utilisateur Windows actuel ($env:USERNAME) [Recommandé]",
@@ -167,6 +208,18 @@ if ($stepFirewall -eq "auto") {
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 Set-Location $installDir
 
+if ($hardReset) {
+    Write-Host "  $escPink⚙$escReset $escBold${escWhite}Exécution du Hard Reset (suppression des conteneurs, volumes et bases de données)...$escReset"
+    docker compose --env-file .env.docker down -v --remove-orphans 2>$null
+    docker compose down -v --remove-orphans 2>$null
+    docker volume rm -f gickers-sh_gickers-data gickers-sh_gickers-db gickers-sh_gickers-var gickers-sh_gickers-deploy-engine 2>$null
+    if (Test-Path ".env.docker") {
+        Move-Item ".env.docker" ".env.docker.reset.bak" -Force 2>$null
+    }
+    Remove-Item -Recurse -Force ".data", "var/cache", "var/log" 2>$null
+    Write-Host "  $escGreen✔$escReset $escBold${escWhite}Hard reset terminé. L'environnement est maintenant vierge.$escReset`n"
+}
+
 if (Test-Path ".git") {
     git fetch --depth 1 origin main 2>$null
     git reset --hard origin/main 2>$null
@@ -184,6 +237,17 @@ if ([string]::IsNullOrEmpty($postgresPassword)) {
 $adminClaimToken = ""
 if ([string]::IsNullOrEmpty($adminSshKey)) {
     $adminClaimToken = [System.Guid]::NewGuid().ToString("N")
+}
+
+if ((-not $hardReset) -and (Test-Path ".env.docker")) {
+    $existingSecret = (Get-Content ".env.docker" | Where-Object { $_ -match '^APP_SECRET=(.+)' } | ForEach-Object { $matches[1] })
+    $existingPass = (Get-Content ".env.docker" | Where-Object { $_ -match '^POSTGRES_PASSWORD=(.+)' } | ForEach-Object { $matches[1] })
+    $existingToken = (Get-Content ".env.docker" | Where-Object { $_ -match '^SOFT_SERVE_INITIAL_ADMIN_TOKEN=(.+)' } | ForEach-Object { $matches[1].Trim('"') })
+    $existingKeys = (Get-Content ".env.docker" | Where-Object { $_ -match '^SOFT_SERVE_INITIAL_ADMIN_KEYS=(.+)' } | ForEach-Object { $matches[1].Trim('"') })
+    if ($existingSecret) { $appSecret = $existingSecret }
+    if ($existingPass) { $postgresPassword = $existingPass }
+    if ($existingToken -and [string]::IsNullOrEmpty($adminSshKey)) { $adminClaimToken = $existingToken }
+    if ($existingKeys -and [string]::IsNullOrEmpty($adminSshKey)) { $adminSshKey = $existingKeys }
 }
 
 $sshUrl = if ($sshPort -eq "22") { "ssh://$domain" } else { "ssh://${domain}:${sshPort}" }

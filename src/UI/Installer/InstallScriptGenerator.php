@@ -110,6 +110,7 @@ final class InstallScriptGenerator
         $stepFirewall = (string) ($options['step_firewall'] ?? ((bool) ($options['skip_firewall'] ?? false) ? 'skip' : 'auto'));
         $stepSystemd = (string) ($options['step_systemd'] ?? ((bool) ($options['skip_systemd'] ?? false) ? 'skip' : 'auto'));
         $systemUser = (string) ($options['system_user'] ?? '');
+        $hardReset = (bool) ($options['hard_reset'] ?? false) ? '1' : '0';
 
         $headerCard = $this->renderHeaderCard($domain, $appName);
         $successCard = $this->renderSuccessCard($domain, $appName, $sshPort);
@@ -125,6 +126,7 @@ final class InstallScriptGenerator
             '__HTTPS_PORT__' => (string) $httpsPort,
             '__INSTALL_DIR__' => $installDir,
             '__SYSTEM_USER__' => $systemUser,
+            '__HARD_RESET__' => $hardReset,
             '__ADMIN_KEY__' => $adminKey,
             '__ADMIN_USER__' => $adminUser,
             '__POSTGRES_USER__' => $dbUser,
@@ -179,6 +181,7 @@ final class InstallScriptGenerator
         $stepFirewall = (string) ($options['step_firewall'] ?? ((bool) ($options['skip_firewall'] ?? false) ? 'skip' : 'auto'));
         $stepSystemd = (string) ($options['step_systemd'] ?? ((bool) ($options['skip_systemd'] ?? false) ? 'skip' : 'auto'));
         $systemUser = (string) ($options['system_user'] ?? '');
+        $hardReset = (bool) ($options['hard_reset'] ?? false) ? '1' : '0';
 
         $headerCard = $this->renderHeaderCard($domain, $appName);
         $successCard = $this->renderSuccessCard($domain, $appName, $sshPort);
@@ -194,6 +197,7 @@ final class InstallScriptGenerator
             '__HTTPS_PORT__' => (string) $httpsPort,
             '__INSTALL_DIR__' => $installDir,
             '__SYSTEM_USER__' => $systemUser,
+            '__HARD_RESET__' => $hardReset,
             '__ADMIN_KEY__' => $adminKey,
             '__ADMIN_USER__' => $adminUser,
             '__POSTGRES_USER__' => $dbUser,

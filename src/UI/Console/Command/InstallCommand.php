@@ -57,7 +57,8 @@ final class InstallCommand extends Command
             ->addOption('step-firewall', null, InputOption::VALUE_REQUIRED, 'Firewall step mode: auto, skip, or show')
             ->addOption('step-systemd', null, InputOption::VALUE_REQUIRED, 'Systemd step mode: auto, skip, or show')
             ->addOption('system-user', null, InputOption::VALUE_REQUIRED, 'Dedicated host system user for running gickers.sh')
-            ->addOption('system-only', null, InputOption::VALUE_NONE, 'Run only host system integration steps (Docker, SSHD 22, UFW, systemd)');
+            ->addOption('system-only', null, InputOption::VALUE_NONE, 'Run only host system integration steps (Docker, SSHD 22, UFW, systemd)')
+            ->addOption('hard-reset', null, InputOption::VALUE_NONE, 'Hard reset: destroy all existing Docker volumes, database, and repository data');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -137,6 +138,10 @@ final class InstallCommand extends Command
                 $cmdArgs[] = trim($systemUser);
             }
 
+            if ((bool) $input->getOption('hard-reset')) {
+                $cmdArgs[] = '--hard-reset';
+            }
+
             $process = new Process($cmdArgs);
             $process->setTimeout(null);
             $process->setTty(Process::isTtySupported());
@@ -206,6 +211,7 @@ final class InstallCommand extends Command
             'step_firewall' => is_string($stepFirewall) && '' !== trim($stepFirewall) ? trim($stepFirewall) : null,
             'step_systemd' => is_string($stepSystemd) && '' !== trim($stepSystemd) ? trim($stepSystemd) : null,
             'system_user' => is_string($input->getOption('system-user')) && '' !== trim((string) $input->getOption('system-user')) ? trim((string) $input->getOption('system-user')) : null,
+            'hard_reset' => (bool) $input->getOption('hard-reset'),
         ];
     }
 }

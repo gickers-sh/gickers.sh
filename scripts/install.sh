@@ -742,6 +742,7 @@ STEP_FIREWALL="auto"
 STEP_SYSTEMD="auto"
 SYSTEM_USER=""
 SYSTEM_ONLY="0"
+HARD_RESET="${HARD_RESET:-0}"
 ADMIN_CLAIM_TOKEN=""
 
 # Auto-detect root vs non-root
@@ -782,6 +783,7 @@ while [ $# -gt 0 ]; do
         --skip-sshd-switch) STEP_SSHD="skip"; shift ;;
         --skip-firewall) STEP_FIREWALL="skip"; shift ;;
         --skip-systemd) STEP_SYSTEMD="skip"; shift ;;
+        --hard-reset|--reset-data) HARD_RESET=1; shift ;;
         -y|--yes|--non-interactive) NON_INTERACTIVE=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         -h|--help)
@@ -805,6 +807,7 @@ while [ $# -gt 0 ]; do
             echo "  --lfs <bool>              Enable Git LFS (true/false)"
             echo "  --sudo                    Enable sudo mode for system operations"
             echo "  --system-only             Configure only host system steps (Docker, SSH 22, UFW, systemd)"
+            echo "  --hard-reset              Wipe all Docker volumes, database, and repository data (Double confirmation in interactive mode)"
             echo "  --step-docker <mode>      Docker step: auto, skip, or show"
             echo "  --step-sshd <mode>        SSH switch step: auto, skip, or show"
             echo "  --step-firewall <mode>    Firewall step: auto, skip, or show"
@@ -1378,15 +1381,67 @@ EOF
     printf "\n"
 fi
 
-# Détection d'une installation existante pour proposition rapide
-if [ -f "$INSTALL_DIR/compose.yaml" ] && [ "$NON_INTERACTIVE" -eq 0 ] && [ "$IS_ROOT" -eq 1 -o "$USE_SUDO" = "1" ]; then
+# Détection d'une installation existante et choix du mode
+EXISTING_INSTALL=0
+if [ -f "$INSTALL_DIR/compose.yaml" ] || [ -f "$PWD/compose.yaml" ] || [ -f "$INSTALL_DIR/.env.docker" ] || [ -f "$PWD/.env.docker" ]; then
+    EXISTING_INSTALL=1
+fi
+
+if [ "$EXISTING_INSTALL" -eq 1 ] && [ "$NON_INTERACTIVE" -eq 0 ]; then
     EXISTING_OPTS=(
-        "Mettre à jour uniquement l'infrastructure hôte (Port 22 SSH, UFW, Systemd)"
-        "Réinstaller ou reconfigurer l'application complète"
+        "Conserver les données et mettre à jour l'application (Idempotent - Recommandé)"
     )
+    if [ "$IS_ROOT" -eq 1 ] || [ "$USE_SUDO" = "1" ]; then
+        EXISTING_OPTS+=("Mettre à jour uniquement l'infrastructure hôte (Port 22 SSH, UFW, Systemd)")
+    fi
+    EXISTING_OPTS+=(
+        "Réinitialisation complète / Hard Reset (⚠️  Supprime base de données, volumes et dépôts)"
+    )
+
     gum_choose "Une installation existante a été détectée dans $INSTALL_DIR" "${EXISTING_OPTS[@]}" && EXIST_SELECTION=$? || EXIST_SELECTION=$?
-    if [ "$EXIST_SELECTION" -eq 0 ]; then
+    SELECTED_TEXT="${EXISTING_OPTS[$EXIST_SELECTION]}"
+
+    if [[ "$SELECTED_TEXT" == *"infrastructure hôte"* ]]; then
         run_system_only
+    elif [[ "$SELECTED_TEXT" == *"Hard Reset"* ]]; then
+        HARD_RESET=1
+    else
+        HARD_RESET=0
+        printf "  %s✔%s %sMode idempotent : vos données, volumes et configurations existantes seront conservés.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+    fi
+fi
+
+# Double confirmation stricte pour le Hard Reset (interactif)
+if [ "$HARD_RESET" -eq 1 ] && [ "$NON_INTERACTIVE" -eq 0 ]; then
+    printf "\n"
+    printf "  %s╭────────────────────────────────────────────────────────────────────────╮%s\n" "$C_BOLD$C_PINK" "$C_RESET"
+    printf "  %s│%s %s⚠️  ATTENTION : DEMANDE DE RÉINITIALISATION COMPLÈTE (HARD RESET)       %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
+    printf "  %s├────────────────────────────────────────────────────────────────────────┤%s\n" "$C_BOLD$C_PINK" "$C_RESET"
+    printf "  %s│%s Cette action est %sIRRÉVERSIBLE%s et va détruire définitivement :          %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
+    printf "  %s│%s   • Tous les dépôts Git hébergés et objets Git LFS                      %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
+    printf "  %s│%s   • La base PostgreSQL (utilisateurs, comptes, clés SSH, tickets)       %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
+    printf "  %s│%s   • Les volumes Docker gickers-data, gickers-db et conteneurs           %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
+    printf "  %s│%s   • La configuration de production .env.docker actuelle                 %s│%s\n" "$C_BOLD$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
+    printf "  %s╰────────────────────────────────────────────────────────────────────────╯%s\n\n" "$C_BOLD$C_PINK" "$C_RESET"
+
+    CONFIRM_OPTS=(
+        "Non, annuler et conserver mes données intactes (Recommandé)"
+        "Oui, je comprends les risques et souhaite réinitialiser"
+    )
+    gum_choose "Confirmation 1/2 : Êtes-vous sûr de vouloir supprimer TOUTES les données ?" "${CONFIRM_OPTS[@]}" && CONFIRM_1=$? || CONFIRM_1=$?
+    if [ "$CONFIRM_1" -ne 1 ]; then
+        printf "  %s✔%s %sRéinitialisation annulée. Vos données sont préservées intactes.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+        HARD_RESET=0
+    else
+        reset_confirm=""
+        gum_input "Confirmation 2/2 : Tapez 'RESET' en majuscules pour confirmer" reset_confirm "" "RESET"
+        if [ "$reset_confirm" = "RESET" ]; then
+            HARD_RESET=1
+            printf "  %s✔%s %sDouble confirmation validée. Hard reset enclenché.%s\n\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+        else
+            printf "  %s✔%s %sSaisie non conforme ('%s' != 'RESET'). Réinitialisation annulée, données préservées.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$reset_confirm" "$C_RESET"
+            HARD_RESET=0
+        fi
     fi
 fi
 
@@ -2073,6 +2128,27 @@ if [ "${SKIP_APP_DEPLOY:-0}" -eq 0 ]; then
     mkdir -p "$INSTALL_DIR"
     cd "$INSTALL_DIR"
 
+    # Exécution du Hard Reset si demandé et confirmé
+    if [ "${HARD_RESET:-0}" -eq 1 ]; then
+        (
+            if command -v docker >/dev/null 2>&1; then
+                docker compose --env-file .env.docker down -v --remove-orphans >/dev/null 2>&1 || docker compose down -v --remove-orphans >/dev/null 2>&1 || true
+                docker volume rm -f gickers-sh_gickers-data gickers-sh_gickers-db gickers-sh_gickers-var gickers-sh_gickers-deploy-engine >/dev/null 2>&1 || true
+            fi
+            if [ -f .env.docker ]; then
+                mv .env.docker .env.docker.reset.$(date +%s).bak 2>/dev/null || rm -f .env.docker
+            fi
+            rm -rf .data var/cache var/log 2>/dev/null || true
+        ) < /dev/null &
+        gum_spin $! "Exécution du Hard Reset (destruction des conteneurs, volumes et bases de données)..."
+        printf "  %s✔%s %sHard reset terminé avec succès. Démarrage d'une installation vierge.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+
+        APP_SECRET=""
+        POSTGRES_PASSWORD=""
+        ADMIN_CLAIM_TOKEN=""
+        ADMIN_SSH_KEY=""
+    fi
+
     if [ -d "$INSTALL_DIR/.git" ]; then
         (
             cd "$INSTALL_DIR"
@@ -2133,6 +2209,7 @@ if [ "${SKIP_APP_DEPLOY:-0}" -eq 0 ]; then
             EXISTING_SECRET=$(grep -E '^APP_SECRET=' .env.docker 2>/dev/null | cut -d '=' -f2- || true)
             EXISTING_PG_PASS=$(grep -E '^POSTGRES_PASSWORD=' .env.docker 2>/dev/null | cut -d '=' -f2- || true)
             EXISTING_CLAIM_TOKEN=$(grep -E '^SOFT_SERVE_INITIAL_ADMIN_TOKEN=' .env.docker 2>/dev/null | cut -d '=' -f2- | tr -d '"' || true)
+            EXISTING_ADMIN_KEYS=$(grep -E '^SOFT_SERVE_INITIAL_ADMIN_KEYS=' .env.docker 2>/dev/null | cut -d '=' -f2- | tr -d '"' || true)
             if [ -n "$EXISTING_SECRET" ]; then
                 APP_SECRET="$EXISTING_SECRET"
             fi
@@ -2141,6 +2218,9 @@ if [ "${SKIP_APP_DEPLOY:-0}" -eq 0 ]; then
             fi
             if [ -n "$EXISTING_CLAIM_TOKEN" ] && [ -z "$ADMIN_SSH_KEY" ]; then
                 ADMIN_CLAIM_TOKEN="$EXISTING_CLAIM_TOKEN"
+            fi
+            if [ -n "$EXISTING_ADMIN_KEYS" ] && [ -z "$ADMIN_SSH_KEY" ]; then
+                ADMIN_SSH_KEY="$EXISTING_ADMIN_KEYS"
             fi
         fi
     fi

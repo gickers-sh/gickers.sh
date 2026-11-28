@@ -74,7 +74,8 @@ final class InstallCommand extends AbstractSshCommand
             ->addOption('step-sshd', null, InputOption::VALUE_REQUIRED, 'SSH switch step mode: auto, skip, or show')
             ->addOption('step-firewall', null, InputOption::VALUE_REQUIRED, 'Firewall step mode: auto, skip, or show')
             ->addOption('step-systemd', null, InputOption::VALUE_REQUIRED, 'Systemd step mode: auto, skip, or show')
-            ->addOption('system-user', null, InputOption::VALUE_REQUIRED, 'Dedicated host system user for running gickers.sh');
+            ->addOption('system-user', null, InputOption::VALUE_REQUIRED, 'Dedicated host system user for running gickers.sh')
+            ->addOption('hard-reset', null, InputOption::VALUE_NONE, 'Hard reset: destroy all existing Docker volumes, database, and repository data');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -119,6 +120,7 @@ final class InstallCommand extends AbstractSshCommand
             'step_firewall' => $this->nullableStringOption($input, 'step-firewall'),
             'step_systemd' => $this->nullableStringOption($input, 'step-systemd'),
             'system_user' => $this->nullableStringOption($input, 'system-user'),
+            'hard_reset' => (bool) $input->getOption('hard-reset'),
         ];
 
         $isWindows = (bool) $input->getOption('ps1')
