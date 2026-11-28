@@ -120,6 +120,147 @@ gum_choose() {
     return "$selected"
 }
 
+# Gum-styled checklist / multi-select component with checkboxes
+# Usage: gum_checklist "Titre" out_var "Item 1:1" "Item 2:1" "Item 3:0" ...
+# Returns an array in $out_var containing 1 or 0 for each item.
+gum_checklist() {
+    local prompt_title="$1"
+    local out_var="$2"
+    shift 2
+
+    local labels=()
+    local checked=()
+    for item in "$@"; do
+        if [[ "$item" =~ ^(.*):([01])$ ]]; then
+            labels+=("${BASH_REMATCH[1]}")
+            checked+=("${BASH_REMATCH[2]}")
+        else
+            labels+=("$item")
+            checked+=(1)
+        fi
+    done
+
+    local count=${#labels[@]}
+    local selected=0
+    local key=""
+
+    # Fallback non-interactif
+    if [ -z "$TTY_INPUT" ] || [ ! -t 1 ]; then
+        local res_array=("${checked[@]}")
+        eval "$out_var=(\"\${res_array[@]}\")"
+        return 0
+    fi
+
+    local term_cols=""
+    if [ -n "$TTY_INPUT" ] && [ -r "$TTY_INPUT" ]; then
+        term_cols=$(stty size < "$TTY_INPUT" 2>/dev/null | awk '{print $2}')
+        [ -z "$term_cols" ] && term_cols=$(tput cols < "$TTY_INPUT" 2>/dev/null || true)
+    fi
+    [ -z "$term_cols" ] && term_cols=$(tput cols 2>/dev/null || echo 80)
+    [ -z "$term_cols" ] || [ "$term_cols" -le 0 ] && term_cols=80
+    local max_width=$(( term_cols - 10 ))
+    [ "$max_width" -lt 30 ] && max_width=30
+
+    printf "\n  %s?%s %s%s%s %s(Espace: cocher/décocher • Entrée: valider)%s\n" \
+        "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$prompt_title" "$C_RESET" "$C_DIM" "$C_RESET"
+
+    draw_checklist() {
+        for i in "${!labels[@]}"; do
+            local opt_text="${labels[i]}"
+            if [ "${#opt_text}" -gt "$max_width" ]; then
+                opt_text="${opt_text:0:$((max_width - 3))}..."
+            fi
+
+            local box_icon
+            if [ "${checked[i]}" -eq 1 ]; then
+                box_icon="${C_GREEN}[✔]${C_RESET}"
+            else
+                box_icon="${C_DIM}[ ]${C_RESET}"
+            fi
+
+            if [ "$i" -eq "$selected" ]; then
+                printf "\r${ESC}[2K    ${BG_SELECT} %s❯ %s %s%s %s\n" \
+                    "$C_PINK" "$box_icon" "$C_BOLD$C_CYAN" "$opt_text" "$C_RESET"
+            else
+                printf "\r${ESC}[2K      %s %s%s%s\n" \
+                    "$box_icon" "$C_MUTED" "$opt_text" "$C_RESET"
+            fi
+        done
+    }
+
+    printf "${ESC}[?25l"
+    draw_checklist
+
+    while true; do
+        IFS= read -rsn1 key < "$TTY_INPUT" || break
+        if [[ $key == $'\x1b' ]]; then
+            read -rsn2 -t 0.2 rest < "$TTY_INPUT" || true
+            case "$rest" in
+                "[A"|"OA")
+                    selected=$(( (selected - 1 + count) % count ))
+                    printf "\r${ESC}[%dA" "$count"
+                    draw_checklist
+                    ;;
+                "[B"|"OB")
+                    selected=$(( (selected + 1) % count ))
+                    printf "\r${ESC}[%dA" "$count"
+                    draw_checklist
+                    ;;
+            esac
+        elif [[ $key == "k" ]]; then
+            selected=$(( (selected - 1 + count) % count ))
+            printf "\r${ESC}[%dA" "$count"
+            draw_checklist
+        elif [[ $key == "j" ]]; then
+            selected=$(( (selected + 1) % count ))
+            printf "\r${ESC}[%dA" "$count"
+            draw_checklist
+        elif [[ $key == " " ]]; then
+            if [ "${checked[selected]}" -eq 1 ]; then
+                checked[selected]=0
+            else
+                checked[selected]=1
+            fi
+            printf "\r${ESC}[%dA" "$count"
+            draw_checklist
+        elif [[ $key == "a" ]]; then
+            local all_on=1
+            for c in "${checked[@]}"; do
+                [ "$c" -eq 0 ] && all_on=0 && break
+            done
+            local target_state=$(( 1 - all_on ))
+            for i in "${!checked[@]}"; do
+                checked[i]=$target_state
+            done
+            printf "\r${ESC}[%dA" "$count"
+            draw_checklist
+        elif [[ $key == "" ]]; then
+            break
+        elif [[ $key == "q" ]]; then
+            printf "${ESC}[?25h\n"
+            echo "Annulé."
+            exit 0
+        fi
+    done
+
+    # Effacement et affichage confirmé
+    local total_lines=$(( count + 1 ))
+    printf "\r${ESC}[%dA${ESC}[J" "$total_lines"
+    printf "${ESC}[?25h"
+
+    local selected_count=0
+    for c in "${checked[@]}"; do
+        [ "$c" -eq 1 ] && selected_count=$((selected_count + 1))
+    done
+
+    printf "  %s✔%s %s%s%s : ${BG_BADGE} ${C_BOLD}${C_CYAN}%d/%d étapes sélectionnées ${C_RESET}\n" \
+        "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$prompt_title" "$C_RESET" "$selected_count" "$count"
+
+    local res_array=("${checked[@]}")
+    eval "$out_var=(\"\${res_array[@]}\")"
+    return 0
+}
+
 # Gum-styled input component with placeholder
 gum_input() {
     local prompt_label="$1"

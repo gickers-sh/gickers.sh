@@ -379,16 +379,23 @@ EOF
     fi
 
     # 4. Pare-feu UFW
-    if command -v ufw >/dev/null 2>&1; then
-        (
+    (
+        if ! command -v ufw >/dev/null 2>&1; then
+            if command -v apt-get >/dev/null 2>&1; then
+                $EXEC_SUDO apt-get update -y >/dev/null 2>&1
+                $EXEC_SUDO apt-get install -y --no-install-recommends ufw >/dev/null 2>&1
+            fi
+        fi
+
+        if command -v ufw >/dev/null 2>&1; then
             $EXEC_SUDO ufw allow 2222/tcp comment 'Host SSH daemon' >/dev/null 2>&1 || true
             $EXEC_SUDO ufw allow 80/tcp comment 'Gickers HTTP' >/dev/null 2>&1 || true
             $EXEC_SUDO ufw allow 443/tcp comment 'Gickers HTTPS' >/dev/null 2>&1 || true
             $EXEC_SUDO ufw allow 22/tcp comment 'Gickers Git SSH' >/dev/null 2>&1 || true
             $EXEC_SUDO ufw --force enable >/dev/null 2>&1 || true
-        ) &
-        gum_spin $! "Application des règles de pare-feu UFW (80, 443, 22, 2222)..."
-    fi
+        fi
+    ) &
+    gum_spin $! "Installation et application des règles UFW (80, 443, 22, 2222)..."
 
     # 5. Service systemd
     local systemd_user_line=""
@@ -600,23 +607,46 @@ fi
 # 3. Formulaire Interactif et Sélection Granulaire par Étape
 # ------------------------------------------------------------------------------
 if [ "$NON_INTERACTIVE" -eq 0 ]; then
+    # Sélection des étapes à exécuter au lancement
+    CHECKLIST_ITEMS=(
+        "Dépendances système & Docker CE:1"
+        "Port SSH Git 22 (Bascule OpenSSH vers 2222):1"
+        "Pare-feu hôte UFW (Installation & règles de sécurité):1"
+        "Déploiement applicatif (Conteneurs Docker, Postgres, Caddy):1"
+        "Service systemd gickers.service (Démarrage au boot):1"
+    )
+    gum_checklist "Sélectionnez les étapes à exécuter sur cette machine" SELECTED_STEPS "${CHECKLIST_ITEMS[@]}"
+
+    if [ "${SELECTED_STEPS[0]:-1}" -eq 0 ]; then
+        STEP_DOCKER="skip"
+    fi
+    if [ "${SELECTED_STEPS[1]:-1}" -eq 0 ]; then
+        STEP_SSHD="skip"
+    fi
+    if [ "${SELECTED_STEPS[2]:-1}" -eq 0 ]; then
+        STEP_FIREWALL="skip"
+    fi
+    if [ "${SELECTED_STEPS[3]:-1}" -eq 0 ]; then
+        SKIP_APP_DEPLOY=1
+    else
+        SKIP_APP_DEPLOY=0
+    fi
+    if [ "${SELECTED_STEPS[4]:-1}" -eq 0 ]; then
+        STEP_SYSTEMD="skip"
+    fi
+
     # --------------------------------------------------------------------------
     # ÉTAPE SYSTÈME 1 : Docker & Dépendances
     # --------------------------------------------------------------------------
-    if [ "$DOCKER_AVAILABLE" -eq 1 ]; then
+    if [ "$STEP_DOCKER" = "skip" ]; then
+        printf "  %sℹ%s %sDépendances système & Docker CE : ignoré (décoché par l'utilisateur)%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_RESET"
+    elif [ "$DOCKER_AVAILABLE" -eq 1 ]; then
         DOCKER_VER=$(docker --version 2>/dev/null | awk '{print $3}' | tr -d ',' || echo "ok")
         printf "  %s✔%s %sDocker est déjà accessible pour %s : ${C_BOLD}${C_GREEN}Docker %s & Compose${C_RESET}\n" "$C_GREEN" "$C_RESET" "$C_WHITE" "$CURRENT_USER" "$DOCKER_VER"
         STEP_DOCKER="skip"
     elif [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" != "1" ]; then
         printf "\n  %s!%s %sDocker CE n'est pas disponible pour votre utilisateur et sudo est absent.%s\n" "$C_GOLD" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
-        DOCKER_NO_SUDO_MENU=(
-            "[Afficher les commandes] Voir les commandes d'installation Docker pour l'administrateur"
-            "[Ignorer cette étape] Poursuivre (je configure Docker moi-même)"
-        )
-        gum_choose "Dépendances système & Docker CE" "${DOCKER_NO_SUDO_MENU[@]}" && DOCKER_SELECTION=$? || DOCKER_SELECTION=$?
-        if [ "$DOCKER_SELECTION" -eq 0 ]; then
-            STEP_DOCKER="show"
-            DOCKER_CMDS=$(cat << 'EOF'
+        DOCKER_CMDS=$(cat << 'EOF'
 # 1. Mise à jour des paquets et prérequis
 sudo apt-get update -y && sudo apt-get install -y ca-certificates curl gnupg git git-lfs jq ufw
 # 2. Clé GPG officielle Docker
@@ -632,47 +662,48 @@ sudo systemctl enable --now docker
 sudo usermod -aG docker $USER
 EOF
 )
-            print_manual_commands_box "Commandes manuelles : Installation Docker CE & Compose" "$DOCKER_CMDS"
-        else
-            STEP_DOCKER="skip"
-        fi
+        print_manual_commands_box "Commandes d'installation Docker CE & Compose" "$DOCKER_CMDS"
+        DOCKER_NO_SUDO_MENU=(
+            "[Ignorer cette étape] Poursuivre (je configure Docker moi-même)"
+            "[Afficher les commandes] Revoir les commandes d'installation"
+        )
+        gum_choose "Dépendances système & Docker CE" "${DOCKER_NO_SUDO_MENU[@]}" && DOCKER_SELECTION=$? || DOCKER_SELECTION=$?
+        STEP_DOCKER="skip"
     elif [ "$STEP_DOCKER" = "auto" ]; then
+        DOCKER_CMDS=$(cat << 'EOF'
+# 1. Mise à jour des paquets et prérequis
+apt-get update -y && apt-get install -y ca-certificates curl gnupg git git-lfs jq ufw
+# 2. Clé GPG officielle Docker
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
+# 3. Dépôt Docker CE
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
+# 4. Installation de Docker et du plugin Compose
+apt-get update -y && apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+# 5. Démarrage et ajout au groupe docker
+systemctl enable --now docker
+usermod -aG docker $USER
+EOF
+)
+        print_manual_commands_box "Commandes prévues : Installation Docker CE & Compose" "$DOCKER_CMDS"
         DOCKER_MENU=(
-            "[Auto] Installer Docker CE officiel & Compose (Recommandé)"
+            "[Auto] Exécuter ces commandes pour installer Docker CE & Compose (Recommandé)"
             "[Ignorer] Je gère l'installation de Docker moi-même"
-            "[Manuel] Voir les commandes d'installation Docker annotées"
         )
         gum_choose "Dépendances système & Docker CE" "${DOCKER_MENU[@]}" && DOCKER_SELECTION=$? || DOCKER_SELECTION=$?
         case "$DOCKER_SELECTION" in
             0) STEP_DOCKER="auto" ;;
             1) STEP_DOCKER="skip" ;;
-            2)
-                STEP_DOCKER="show"
-                DOCKER_CMDS=$(cat << 'EOF'
-# 1. Mise à jour des paquets et prérequis
-sudo apt-get update -y && sudo apt-get install -y ca-certificates curl gnupg git git-lfs jq ufw
-# 2. Clé GPG officielle Docker
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-# 3. Dépôt Docker CE
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list
-# 4. Installation de Docker et du plugin Compose
-sudo apt-get update -y && sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-# 5. Démarrage et ajout au groupe docker
-sudo systemctl enable --now docker
-sudo usermod -aG docker $USER
-EOF
-)
-                print_manual_commands_box "Commandes manuelles : Installation Docker CE & Compose" "$DOCKER_CMDS"
-                ;;
         esac
     fi
 
     # --------------------------------------------------------------------------
     # ÉTAPE SYSTÈME 2 : Port SSH Git et Bascule OpenSSH
     # --------------------------------------------------------------------------
-    if [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" != "1" ]; then
+    if [ "$STEP_SSHD" = "skip" ]; then
+        printf "  %sℹ%s %sTransition du port SSH hôte : ignoré (décoché par l'utilisateur)%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_RESET"
+    elif [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" != "1" ]; then
         if [ "$SSHD_ON_PORT_22" -eq 1 ]; then
             printf "  %sℹ%s %sPort 22 occupé par OpenSSH : sans sudo, gickers.sh utilisera le port non-privilégié 2223.%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
             SSH_PORT="2223"
@@ -680,11 +711,22 @@ EOF
         STEP_SSHD="skip"
     elif [ "$SSHD_ON_PORT_22" -eq 1 ]; then
         printf "\n  %s!%s %sLe port 22 est actuellement occupé par le serveur OpenSSH hôte (sshd).%s\n" "$C_GOLD" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+        SSHD_CMDS=$(cat << 'EOF'
+# 1. Ouvrir le port 2222 dans le pare-feu AVANT de modifier sshd
+ufw allow 2222/tcp comment 'OpenSSH System (moved from 22)'
+# 2. Configurer OpenSSH pour écouter sur 2222
+echo "Port 2222" > /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf
+# 3. Redémarrer sshd ou le socket systemd
+systemctl daemon-reload && systemctl restart ssh.socket || systemctl restart sshd
+# 4. Vos futures connexions d'administration VPS se feront avec :
+# ssh -p 2222 user@<IP_VPS>
+EOF
+)
+        print_manual_commands_box "Commandes prévues : Migration OpenSSH vers port 2222" "$SSHD_CMDS"
         SSHD_MENU=(
             "[Auto] Basculer OpenSSH hôte sur le port 2222 (Port 22 pour Git)"
             "[Port alternatif] Garder OpenSSH sur 22 et utiliser 2223 pour Git"
             "[Ignorer] Ne pas modifier la configuration OpenSSH"
-            "[Manuel] Voir les commandes de migration de port OpenSSH"
         )
         gum_choose "Transition du port SSH hôte (Libération du port 22 pour Git)" "${SSHD_MENU[@]}" && SSHD_SELECTION=$? || SSHD_SELECTION=$?
         case "$SSHD_SELECTION" in
@@ -699,24 +741,6 @@ EOF
             2)
                 STEP_SSHD="skip"
                 ;;
-            3)
-                STEP_SSHD="show"
-                SSHD_CMDS=$(cat << 'EOF'
-# 1. Ouvrir le port 2222 dans le pare-feu AVANT de modifier sshd
-sudo ufw allow 2222/tcp comment 'OpenSSH System (moved from 22)'
-# 2. Configurer OpenSSH pour écouter sur 2222
-sudo tee /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf << 'CONF'
-Port 2222
-CONF
-# 3. Redémarrer sshd ou le socket systemd
-sudo systemctl daemon-reload && sudo systemctl restart ssh.socket || sudo systemctl restart sshd
-# 4. Vos futures connexions d'administration VPS se feront avec :
-# ssh -p 2222 user@<IP_VPS>
-EOF
-)
-                print_manual_commands_box "Commandes manuelles : Migration OpenSSH vers port 2222" "$SSHD_CMDS"
-                SSH_PORT="22"
-                ;;
         esac
     else
         printf "  %s✔%s %sPort SSH Git : ${C_BOLD}${C_GREEN}Port 22 déjà libre${C_RESET} %s(OpenSSH hôte non présent sur le port 22)%s\n" "$C_GREEN" "$C_RESET" "$C_WHITE" "$C_MUTED" "$C_RESET"
@@ -727,67 +751,77 @@ EOF
     # --------------------------------------------------------------------------
     # ÉTAPE SYSTÈME 3 : Pare-feu UFW
     # --------------------------------------------------------------------------
-    if [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" != "1" ]; then
+    if [ "$STEP_FIREWALL" = "skip" ]; then
+        printf "  %sℹ%s %sConfiguration du pare-feu hôte : ignoré (décoché par l'utilisateur)%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_RESET"
+    elif [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" != "1" ]; then
         printf "  %sℹ%s %sPare-feu UFW : ignoré en mode applicatif utilisateur (sudo requis pour modifier les règles).%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_RESET"
         STEP_FIREWALL="skip"
-    elif [ "$UFW_ACTIVE" -eq 1 ]; then
-        if [ "$STEP_FIREWALL" = "auto" ]; then
+    elif [ "$STEP_FIREWALL" = "auto" ]; then
+        UFW_INSTALLED=0
+        if command -v ufw >/dev/null 2>&1; then
+            UFW_INSTALLED=1
+        fi
+
+        UFW_PREVIEW_INSTALL=""
+        if [ "$UFW_INSTALLED" -eq 0 ]; then
+            UFW_PREVIEW_INSTALL="# 0. Installation de UFW via le gestionnaire de paquets
+apt-get update -y && apt-get install -y --no-install-recommends ufw
+"
+        fi
+
+        UFW_CMDS=$(cat << EOF
+${UFW_PREVIEW_INSTALL}# 1. Autoriser le port SSH d'administration du système
+ufw allow 2222/tcp comment 'System OpenSSH'
+# 2. Autoriser HTTP (80) et HTTPS (443) pour Caddy SSL
+ufw allow 80/tcp comment 'Gickers HTTP / ACME'
+ufw allow 443/tcp comment 'Gickers HTTPS'
+# 3. Autoriser le port Git SSH public
+ufw allow ${SSH_PORT:-22}/tcp comment 'Gickers Git SSH'
+# 4. Activer le pare-feu
+ufw --force enable
+EOF
+)
+        if [ "$UFW_INSTALLED" -eq 1 ]; then
+            print_manual_commands_box "Commandes prévues : Règles de pare-feu UFW" "$UFW_CMDS"
             UFW_MENU=(
-                "[Auto] Ouvrir ports Web (80, 443), Git ($SSH_PORT) et hôte dans UFW"
+                "[Auto] Appliquer les règles UFW (Ports 80, 443, ${SSH_PORT:-22}, 2222)"
                 "[Ignorer] Je gère mes règles de pare-feu moi-même"
-                "[Manuel] Voir les règles de pare-feu UFW à appliquer"
             )
-            gum_choose "Configuration du pare-feu hôte (UFW actif détecté)" "${UFW_MENU[@]}" && UFW_SELECTION=$? || UFW_SELECTION=$?
+            gum_choose "Configuration du pare-feu hôte (UFW)" "${UFW_MENU[@]}" && UFW_SELECTION=$? || UFW_SELECTION=$?
             case "$UFW_SELECTION" in
                 0) STEP_FIREWALL="auto" ;;
                 1) STEP_FIREWALL="skip" ;;
-                2)
-                    STEP_FIREWALL="show"
-                    UFW_CMDS=$(cat << EOF
-# 1. Autoriser le port SSH d'administration du système
-sudo ufw allow 2222/tcp comment 'System OpenSSH'
-# 2. Autoriser HTTP (80) et HTTPS (443) pour Caddy SSL
-sudo ufw allow 80/tcp comment 'Gickers HTTP / ACME'
-sudo ufw allow 443/tcp comment 'Gickers HTTPS'
-# 3. Autoriser le port Git SSH public
-sudo ufw allow ${SSH_PORT}/tcp comment 'Gickers Git SSH'
-# 4. Activer le pare-feu
-sudo ufw enable
-EOF
-)
-                    print_manual_commands_box "Commandes manuelles : Règles de pare-feu UFW" "$UFW_CMDS"
-                    ;;
+            esac
+        else
+            printf "\n  %s!%s %sLe pare-feu UFW n'est pas installé sur cette machine.%s\n" "$C_GOLD" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+            print_manual_commands_box "Commandes prévues : Installation et configuration UFW" "$UFW_CMDS"
+            UFW_MENU=(
+                "[Auto] Installer UFW et appliquer les règles de sécurité (Recommandé)"
+                "[Ignorer] Ne pas installer de pare-feu pour le moment"
+            )
+            gum_choose "Pare-feu hôte (UFW non installé)" "${UFW_MENU[@]}" && UFW_SELECTION=$? || UFW_SELECTION=$?
+            case "$UFW_SELECTION" in
+                0) STEP_FIREWALL="auto" ;;
+                1) STEP_FIREWALL="skip" ;;
             esac
         fi
-    else
-        printf "  %sℹ%s %sPare-feu hôte : UFW inactif ou non installé (étape pare-feu ignorée)%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_RESET"
-        STEP_FIREWALL="skip"
     fi
 
     # --------------------------------------------------------------------------
     # ÉTAPE SYSTÈME 4 : Service Systemd (gickers.service)
     # --------------------------------------------------------------------------
-    if [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" != "1" ]; then
+    if [ "$STEP_SYSTEMD" = "skip" ]; then
+        printf "  %sℹ%s %sService systemd gickers.service : ignoré (décoché par l'utilisateur)%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_RESET"
+    elif [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" != "1" ]; then
         printf "  %sℹ%s %sService systemd : ignoré en mode applicatif (sudo requis pour /etc/systemd/system).%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_RESET"
         STEP_SYSTEMD="skip"
     elif [ "$SYSTEMD_GICKERS_EXISTS" -eq 1 ]; then
         printf "  %s✔%s %sService systemd : ${C_BOLD}${C_GREEN}gickers.service déjà présent${C_RESET}\n" "$C_GREEN" "$C_RESET" "$C_WHITE"
         STEP_SYSTEMD="skip"
     elif [ "$STEP_SYSTEMD" = "auto" ]; then
-        SYSTEMD_MENU=(
-            "[Auto] Créer et activer gickers.service (redémarrage au boot)"
-            "[Ignorer] Gérer les conteneurs manuellement via compose"
-            "[Manuel] Voir l'unité systemd et commandes systemctl"
-        )
-        gum_choose "Intégration systemd (démarrage automatique au boot du VPS)" "${SYSTEMD_MENU[@]}" && SYSTEMD_SELECTION=$? || SYSTEMD_SELECTION=$?
-        case "$SYSTEMD_SELECTION" in
-            0) STEP_SYSTEMD="auto" ;;
-            1) STEP_SYSTEMD="skip" ;;
-            2)
-                STEP_SYSTEMD="show"
-                SYSTEMD_CMDS=$(cat << EOF
+        SYSTEMD_CMDS=$(cat << EOF
 # 1. Créer le service systemd
-sudo tee /etc/systemd/system/gickers.service << 'UNIT'
+tee /etc/systemd/system/gickers.service << 'UNIT'
 [Unit]
 Description=Gickers.sh Git Forge & Container Platform
 Requires=docker.service
@@ -808,146 +842,157 @@ WantedBy=multi-user.target
 UNIT
 
 # 2. Recharger et activer le service au démarrage
-sudo systemctl daemon-reload
-sudo systemctl enable gickers.service
+systemctl daemon-reload
+systemctl enable gickers.service
 EOF
 )
-                print_manual_commands_box "Commandes manuelles : Service systemd gickers.service" "$SYSTEMD_CMDS"
-                ;;
+        print_manual_commands_box "Commandes prévues : Création du service systemd" "$SYSTEMD_CMDS"
+        SYSTEMD_MENU=(
+            "[Auto] Créer et activer gickers.service (redémarrage au boot)"
+            "[Ignorer] Gérer les conteneurs manuellement via compose"
+        )
+        gum_choose "Intégration systemd (démarrage automatique au boot du VPS)" "${SYSTEMD_MENU[@]}" && SYSTEMD_SELECTION=$? || SYSTEMD_SELECTION=$?
+        case "$SYSTEMD_SELECTION" in
+            0) STEP_SYSTEMD="auto" ;;
+            1) STEP_SYSTEMD="skip" ;;
         esac
     fi
 
     # --------------------------------------------------------------------------
     # Formulaire de configuration applicative
     # --------------------------------------------------------------------------
-    # 0. Utilisateur système dédié et isolation
-    USER_OPTS=()
-    if [ "$IS_ROOT" -eq 1 ] || [ "$USE_SUDO" = "1" ]; then
-        USER_OPTS+=(
-            "[Recommandé] Créer l'utilisateur système dédié (gickers)"
-            "Utiliser l'utilisateur actuel ($CURRENT_USER)"
-            "Spécifier un autre utilisateur système..."
-        )
-        gum_choose "Utilisateur système pour exécuter gickers.sh" "${USER_OPTS[@]}" && USER_SELECTION=$? || USER_SELECTION=$?
-        case "$USER_SELECTION" in
-            0)
-                SYSTEM_USER="gickers"
-                if [ -z "$PROJECT_ROOT" ]; then
-                    INSTALL_DIR="/home/gickers/gickers.sh"
-                fi
-                ;;
-            1)
-                SYSTEM_USER="$CURRENT_USER"
-                if [ -z "$PROJECT_ROOT" ]; then
-                    if [ "$CURRENT_USER" = "root" ]; then
-                        INSTALL_DIR="/var/www/gickers"
-                    else
-                        INSTALL_DIR="$HOME/gickers.sh"
-                    fi
-                fi
-                ;;
-            2)
-                gum_input "Nom de l'utilisateur système" SYSTEM_USER "gickers"
-                if [ -z "$PROJECT_ROOT" ]; then
-                    INSTALL_DIR="/home/$SYSTEM_USER/gickers.sh"
-                fi
-                ;;
-        esac
-    fi
-
-    # 1. Target Domain
-    gum_input "Domaine public (FQDN)" DOMAIN "$DOMAIN" "ex: gits.run ou code.mon-domaine.com"
-    DOMAIN=$(echo "$DOMAIN" | tr -d '[:space:]')
-
-    # 2. Application Name
-    gum_input "Nom d'usage de la forge" APP_NAME "$APP_NAME" "ex: Gickers.sh"
-
-    # 3. Installation Directory
-    gum_input "Répertoire d'installation" INSTALL_DIR "$INSTALL_DIR"
-    INSTALL_DIR="${INSTALL_DIR/#\~/$HOME}"
-
-    # 4. Web Ports (HTTP / HTTPS)
-    HTTP_OPTS=(
-        "Ports standard 80 & 443 (Certificats SSL auto Let's Encrypt / Caddy)"
-        "Personnaliser les ports Web (ex: reverse-proxy existant)"
-    )
-    gum_choose "Configuration des ports Web" "${HTTP_OPTS[@]}" && WEB_CHOICE=$? || WEB_CHOICE=$?
-    if [ "$WEB_CHOICE" -eq 1 ]; then
-        gum_input "Port HTTP public" HTTP_PORT "$HTTP_PORT"
-        gum_input "Port HTTPS public" HTTPS_PORT "$HTTPS_PORT"
-    fi
-
-    # 5. Admin SSH Key
-    KEY_OPTS=()
-    if [ -n "$DETECTED_ADMIN_KEY" ]; then
-        KEY_SHORT=$(echo "$DETECTED_ADMIN_KEY" | awk '{print $1, substr($2,1,16)"...", $3}')
-        KEY_OPTS+=("Utiliser la clé détectée localement (${KEY_SHORT})")
-    fi
-    KEY_OPTS+=(
-        "Générer une clé SSH admin dédiée (ed25519)"
-        "Coller une clé publique SSH (.pub)"
-        "Configurer plus tard (premier utilisateur connecté = admin)"
-    )
-
-    gum_choose "Clé SSH de l'administrateur initial" "${KEY_OPTS[@]}" && KEY_CHOICE=$? || KEY_CHOICE=$?
-
-    KEY_ACTION=""
-    if [ -n "$DETECTED_ADMIN_KEY" ]; then
-        case "$KEY_CHOICE" in
-            0) ADMIN_SSH_KEY="$DETECTED_ADMIN_KEY" ;;
-            1) KEY_ACTION="generate" ;;
-            2) KEY_ACTION="paste" ;;
-            3) ADMIN_SSH_KEY="" ;;
-        esac
+    if [ "${SKIP_APP_DEPLOY:-0}" -eq 1 ]; then
+        printf "  %sℹ%s %sDéploiement applicatif : ignoré (décoché par l'utilisateur)%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_RESET"
     else
-        case "$KEY_CHOICE" in
-            0) KEY_ACTION="generate" ;;
-            1) KEY_ACTION="paste" ;;
-            2) ADMIN_SSH_KEY="" ;;
+        # 0. Utilisateur système dédié et isolation
+        USER_OPTS=()
+        if [ "$IS_ROOT" -eq 1 ] || [ "$USE_SUDO" = "1" ]; then
+            USER_OPTS+=(
+                "[Recommandé] Créer l'utilisateur système dédié (gickers)"
+                "Utiliser l'utilisateur actuel ($CURRENT_USER)"
+                "Spécifier un autre utilisateur système..."
+            )
+            gum_choose "Utilisateur système pour exécuter gickers.sh" "${USER_OPTS[@]}" && USER_SELECTION=$? || USER_SELECTION=$?
+            case "$USER_SELECTION" in
+                0)
+                    SYSTEM_USER="gickers"
+                    if [ -z "$PROJECT_ROOT" ]; then
+                        INSTALL_DIR="/home/gickers/gickers.sh"
+                    fi
+                    ;;
+                1)
+                    SYSTEM_USER="$CURRENT_USER"
+                    if [ -z "$PROJECT_ROOT" ]; then
+                        if [ "$CURRENT_USER" = "root" ]; then
+                            INSTALL_DIR="/var/www/gickers"
+                        else
+                            INSTALL_DIR="$HOME/gickers.sh"
+                        fi
+                    fi
+                    ;;
+                2)
+                    gum_input "Nom de l'utilisateur système" SYSTEM_USER "gickers"
+                    if [ -z "$PROJECT_ROOT" ]; then
+                        INSTALL_DIR="/home/$SYSTEM_USER/gickers.sh"
+                    fi
+                    ;;
+            esac
+        fi
+
+        # 1. Target Domain
+        gum_input "Domaine public (FQDN)" DOMAIN "$DOMAIN" "ex: gits.run ou code.mon-domaine.com"
+        DOMAIN=$(echo "$DOMAIN" | tr -d '[:space:]')
+
+        # 2. Application Name
+        gum_input "Nom d'usage de la forge" APP_NAME "$APP_NAME" "ex: Gickers.sh"
+
+        # 3. Installation Directory
+        gum_input "Répertoire d'installation" INSTALL_DIR "$INSTALL_DIR"
+        INSTALL_DIR="${INSTALL_DIR/#\~/$HOME}"
+
+        # 4. Web Ports (HTTP / HTTPS)
+        HTTP_OPTS=(
+            "Ports standard 80 & 443 (Certificats SSL auto Let's Encrypt / Caddy)"
+            "Personnaliser les ports Web (ex: reverse-proxy existant)"
+        )
+        gum_choose "Configuration des ports Web" "${HTTP_OPTS[@]}" && WEB_CHOICE=$? || WEB_CHOICE=$?
+        if [ "$WEB_CHOICE" -eq 1 ]; then
+            gum_input "Port HTTP public" HTTP_PORT "$HTTP_PORT"
+            gum_input "Port HTTPS public" HTTPS_PORT "$HTTPS_PORT"
+        fi
+
+        # 5. Admin SSH Key
+        KEY_OPTS=()
+        if [ -n "$DETECTED_ADMIN_KEY" ]; then
+            KEY_SHORT=$(echo "$DETECTED_ADMIN_KEY" | awk '{print $1, substr($2,1,16)"...", $3}')
+            KEY_OPTS+=("Utiliser la clé détectée localement (${KEY_SHORT})")
+        fi
+        KEY_OPTS+=(
+            "Générer une clé SSH admin dédiée (ed25519)"
+            "Coller une clé publique SSH (.pub)"
+            "Configurer plus tard (premier utilisateur connecté = admin)"
+        )
+
+        gum_choose "Clé SSH de l'administrateur initial" "${KEY_OPTS[@]}" && KEY_CHOICE=$? || KEY_CHOICE=$?
+
+        KEY_ACTION=""
+        if [ -n "$DETECTED_ADMIN_KEY" ]; then
+            case "$KEY_CHOICE" in
+                0) ADMIN_SSH_KEY="$DETECTED_ADMIN_KEY" ;;
+                1) KEY_ACTION="generate" ;;
+                2) KEY_ACTION="paste" ;;
+                3) ADMIN_SSH_KEY="" ;;
+            esac
+        else
+            case "$KEY_CHOICE" in
+                0) KEY_ACTION="generate" ;;
+                1) KEY_ACTION="paste" ;;
+                2) ADMIN_SSH_KEY="" ;;
+            esac
+        fi
+
+        if [ "$KEY_ACTION" = "generate" ]; then
+            ADMIN_KEY_PATH="$HOME/.ssh/gickers_admin_ed25519"
+            prompt_key_path_with_collision_check "$ADMIN_KEY_PATH" ADMIN_KEY_PATH OVERWRITE_ADMIN_KEY
+            mkdir -p "$(dirname "$ADMIN_KEY_PATH")" && chmod 700 "$(dirname "$ADMIN_KEY_PATH")"
+            if [ "$OVERWRITE_ADMIN_KEY" -eq 1 ]; then
+                prompt_password_with_confirm "Passphrase de la clé admin" ADMIN_PASSPHRASE
+                ( ssh-keygen -t ed25519 -f "$ADMIN_KEY_PATH" -C "admin@${DOMAIN}" -N "$ADMIN_PASSPHRASE" >/dev/null 2>&1 ) &
+                gum_spin $! "Génération de la clé SSH ed25519..."
+            fi
+            if [ -f "${ADMIN_KEY_PATH}.pub" ]; then
+                ADMIN_SSH_KEY=$(cat "${ADMIN_KEY_PATH}.pub")
+                printf "  %s✔%s %sClé admin configurée : ${BG_BADGE} ${C_BOLD}${C_GOLD}%s ${C_RESET}\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$ADMIN_KEY_PATH"
+            fi
+        elif [ "$KEY_ACTION" = "paste" ]; then
+            gum_paste_pubkey ADMIN_SSH_KEY
+        fi
+
+        # 6. Admin Username
+        DEFAULT_ADMIN_USER="${ADMIN_USER:-admin}"
+        gum_input "Nom d'utilisateur administrateur" ADMIN_USER "$DEFAULT_ADMIN_USER"
+        ADMIN_USER=$(echo "$ADMIN_USER" | tr -d '[:space:]')
+
+        # 7. Server Access Policy
+        POLICY_OPTS=(
+            "Lecture seule publique (read-only) [Dépôts publics visibles]"
+            "Privé strict (no-access) [Authentification SSH requise]"
+            "Public complet (public) [Dépôts et création ouverts]"
+        )
+        gum_choose "Politique d'accès anonyme" "${POLICY_OPTS[@]}" && POL_CHOICE=$? || POL_CHOICE=$?
+        case "$POL_CHOICE" in
+            0) ANON_ACCESS="read-only" ;;
+            1) ANON_ACCESS="no-access" ;;
+            2) ANON_ACCESS="public" ;;
         esac
+
+        SIGNUP_OPTS=(
+            "Inscriptions en libre-service activées (true) [Recommandé]"
+            "Inscriptions fermées (false) [Serveur privé]"
+        )
+        gum_choose "Inscriptions de nouveaux utilisateurs" "${SIGNUP_OPTS[@]}" && SIGN_CHOICE=$? || SIGN_CHOICE=$?
+        [ "$SIGN_CHOICE" -eq 0 ] && ALLOW_SIGNUP="true" || ALLOW_SIGNUP="false"
     fi
-
-    if [ "$KEY_ACTION" = "generate" ]; then
-        ADMIN_KEY_PATH="$HOME/.ssh/gickers_admin_ed25519"
-        prompt_key_path_with_collision_check "$ADMIN_KEY_PATH" ADMIN_KEY_PATH OVERWRITE_ADMIN_KEY
-        mkdir -p "$(dirname "$ADMIN_KEY_PATH")" && chmod 700 "$(dirname "$ADMIN_KEY_PATH")"
-        if [ "$OVERWRITE_ADMIN_KEY" -eq 1 ]; then
-            prompt_password_with_confirm "Passphrase de la clé admin" ADMIN_PASSPHRASE
-            ( ssh-keygen -t ed25519 -f "$ADMIN_KEY_PATH" -C "admin@${DOMAIN}" -N "$ADMIN_PASSPHRASE" >/dev/null 2>&1 ) &
-            gum_spin $! "Génération de la clé SSH ed25519..."
-        fi
-        if [ -f "${ADMIN_KEY_PATH}.pub" ]; then
-            ADMIN_SSH_KEY=$(cat "${ADMIN_KEY_PATH}.pub")
-            printf "  %s✔%s %sClé admin configurée : ${BG_BADGE} ${C_BOLD}${C_GOLD}%s ${C_RESET}\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$ADMIN_KEY_PATH"
-        fi
-    elif [ "$KEY_ACTION" = "paste" ]; then
-        gum_paste_pubkey ADMIN_SSH_KEY
-    fi
-
-    # 6. Admin Username
-    DEFAULT_ADMIN_USER="${ADMIN_USER:-admin}"
-    gum_input "Nom d'utilisateur administrateur" ADMIN_USER "$DEFAULT_ADMIN_USER"
-    ADMIN_USER=$(echo "$ADMIN_USER" | tr -d '[:space:]')
-
-    # 7. Server Access Policy
-    POLICY_OPTS=(
-        "Lecture seule publique (read-only) [Dépôts publics visibles]"
-        "Privé strict (no-access) [Authentification SSH requise]"
-        "Public complet (public) [Dépôts et création ouverts]"
-    )
-    gum_choose "Politique d'accès anonyme" "${POLICY_OPTS[@]}" && POL_CHOICE=$? || POL_CHOICE=$?
-    case "$POL_CHOICE" in
-        0) ANON_ACCESS="read-only" ;;
-        1) ANON_ACCESS="no-access" ;;
-        2) ANON_ACCESS="public" ;;
-    esac
-
-    SIGNUP_OPTS=(
-        "Inscriptions en libre-service activées (true) [Recommandé]"
-        "Inscriptions fermées (false) [Serveur privé]"
-    )
-    gum_choose "Inscriptions de nouveaux utilisateurs" "${SIGNUP_OPTS[@]}" && SIGN_CHOICE=$? || SIGN_CHOICE=$?
-    [ "$SIGN_CHOICE" -eq 0 ] && ALLOW_SIGNUP="true" || ALLOW_SIGNUP="false"
 
     # 8. Summary & Confirmation
     printf "\n"
@@ -1065,8 +1110,15 @@ fi
 
 # C. Règles de pare-feu UFW
 if [ "$STEP_FIREWALL" = "auto" ] && [ -n "$EXEC_SUDO" -o "$IS_ROOT" -eq 1 ]; then
-    if command -v ufw >/dev/null 2>&1; then
-        (
+    (
+        if ! command -v ufw >/dev/null 2>&1; then
+            if command -v apt-get >/dev/null 2>&1; then
+                $EXEC_SUDO apt-get update -y >/dev/null 2>&1
+                $EXEC_SUDO apt-get install -y --no-install-recommends ufw >/dev/null 2>&1
+            fi
+        fi
+
+        if command -v ufw >/dev/null 2>&1; then
             CURRENT_SSH=$(ss -tlnp 2>/dev/null | grep -E 'sshd|ssh' | awk '{print $4}' | awk -F: '{print $NF}' | head -n 1 || echo "2222")
             [ -z "$CURRENT_SSH" ] && CURRENT_SSH="2222"
             $EXEC_SUDO ufw allow "$CURRENT_SSH"/tcp comment 'Host SSH daemon' >/dev/null 2>&1 || true
@@ -1076,61 +1128,62 @@ if [ "$STEP_FIREWALL" = "auto" ] && [ -n "$EXEC_SUDO" -o "$IS_ROOT" -eq 1 ]; the
                 $EXEC_SUDO ufw allow "$SSH_PORT"/tcp comment 'Gickers Git SSH' >/dev/null 2>&1 || true
             fi
             $EXEC_SUDO ufw --force enable >/dev/null 2>&1 || true
-        ) &
-        gum_spin $! "Configuration des règles de pare-feu UFW..."
-    fi
+        fi
+    ) &
+    gum_spin $! "Installation et configuration des règles de pare-feu UFW..."
 fi
 
 # ------------------------------------------------------------------------------
 # 5. Répertoire Applicatif et Synchronisation du Projet
 # ------------------------------------------------------------------------------
-mkdir -p "$INSTALL_DIR"
-cd "$INSTALL_DIR"
+if [ "${SKIP_APP_DEPLOY:-0}" -eq 0 ]; then
+    mkdir -p "$INSTALL_DIR"
+    cd "$INSTALL_DIR"
 
-if [ ! -f "$INSTALL_DIR/compose.yaml" ]; then
-    if [ -n "$PROJECT_ROOT" ] && [ -f "$PROJECT_ROOT/compose.yaml" ] && [ "$PROJECT_ROOT" != "$INSTALL_DIR" ]; then
-        (
-            tar --exclude='.git' --exclude='.data' --exclude='var' -cf - -C "$PROJECT_ROOT" . | tar -xf - -C "$INSTALL_DIR"
-        ) &
-        gum_spin $! "Copie des fichiers sources vers $INSTALL_DIR..."
+    if [ ! -f "$INSTALL_DIR/compose.yaml" ]; then
+        if [ -n "$PROJECT_ROOT" ] && [ -f "$PROJECT_ROOT/compose.yaml" ] && [ "$PROJECT_ROOT" != "$INSTALL_DIR" ]; then
+            (
+                tar --exclude='.git' --exclude='.data' --exclude='var' -cf - -C "$PROJECT_ROOT" . | tar -xf - -C "$INSTALL_DIR"
+            ) &
+            gum_spin $! "Copie des fichiers sources vers $INSTALL_DIR..."
+        else
+            (
+                git clone --depth 1 https://github.com/gickerssh/gickers.sh.git "$INSTALL_DIR" >/dev/null 2>&1 || git clone --depth 1 https://github.com/gickerssh/gickers.sh.git . >/dev/null 2>&1 || true
+            ) &
+            gum_spin $! "Téléchargement du projet gickers.sh..."
+        fi
+    fi
+
+    mkdir -p .data .data/caddy/sites var var/cache var/log
+    chmod 755 .data .data/caddy/sites var 2>/dev/null || true
+
+    # --------------------------------------------------------------------------
+    # 6. Configuration de Production (.env.docker)
+    # --------------------------------------------------------------------------
+    APP_SECRET=$(openssl rand -hex 16 2>/dev/null || date +%s%N | sha256sum | head -c 32)
+    if [ -z "$POSTGRES_PASSWORD" ]; then
+        POSTGRES_PASSWORD=$(openssl rand -base64 24 2>/dev/null | tr -dc 'a-zA-Z0-9' | head -c 24 || echo "gickers_secret_pass_$(date +%s)")
+    fi
+
+    if [ -f .env.docker ]; then
+        cp .env.docker .env.docker.bak
+        EXISTING_SECRET=$(grep -E '^APP_SECRET=' .env.docker | cut -d '=' -f2- || true)
+        EXISTING_PG_PASS=$(grep -E '^POSTGRES_PASSWORD=' .env.docker | cut -d '=' -f2- || true)
+        if [ -n "$EXISTING_SECRET" ] && [ "$EXISTING_SECRET" != "change-me" ]; then
+            APP_SECRET="$EXISTING_SECRET"
+        fi
+        if [ -n "$EXISTING_PG_PASS" ] && [ "$EXISTING_PG_PASS" != "gickers" ]; then
+            POSTGRES_PASSWORD="$EXISTING_PG_PASS"
+        fi
+    fi
+
+    if [ "$SSH_PORT" = "22" ]; then
+        SOFT_SERVE_SSH_URL="ssh://${DOMAIN}"
     else
-        (
-            git clone --depth 1 https://github.com/gickerssh/gickers.sh.git "$INSTALL_DIR" >/dev/null 2>&1 || git clone --depth 1 https://github.com/gickerssh/gickers.sh.git . >/dev/null 2>&1 || true
-        ) &
-        gum_spin $! "Téléchargement du projet gickers.sh..."
+        SOFT_SERVE_SSH_URL="ssh://${DOMAIN}:${SSH_PORT}"
     fi
-fi
 
-mkdir -p .data .data/caddy/sites var var/cache var/log
-chmod 755 .data .data/caddy/sites var 2>/dev/null || true
-
-# ------------------------------------------------------------------------------
-# 6. Configuration de Production (.env.docker)
-# ------------------------------------------------------------------------------
-APP_SECRET=$(openssl rand -hex 16 2>/dev/null || date +%s%N | sha256sum | head -c 32)
-if [ -z "$POSTGRES_PASSWORD" ]; then
-    POSTGRES_PASSWORD=$(openssl rand -base64 24 2>/dev/null | tr -dc 'a-zA-Z0-9' | head -c 24 || echo "gickers_secret_pass_$(date +%s)")
-fi
-
-if [ -f .env.docker ]; then
-    cp .env.docker .env.docker.bak
-    EXISTING_SECRET=$(grep -E '^APP_SECRET=' .env.docker | cut -d '=' -f2- || true)
-    EXISTING_PG_PASS=$(grep -E '^POSTGRES_PASSWORD=' .env.docker | cut -d '=' -f2- || true)
-    if [ -n "$EXISTING_SECRET" ] && [ "$EXISTING_SECRET" != "change-me" ]; then
-        APP_SECRET="$EXISTING_SECRET"
-    fi
-    if [ -n "$EXISTING_PG_PASS" ] && [ "$EXISTING_PG_PASS" != "gickers" ]; then
-        POSTGRES_PASSWORD="$EXISTING_PG_PASS"
-    fi
-fi
-
-if [ "$SSH_PORT" = "22" ]; then
-    SOFT_SERVE_SSH_URL="ssh://${DOMAIN}"
-else
-    SOFT_SERVE_SSH_URL="ssh://${DOMAIN}:${SSH_PORT}"
-fi
-
-cat > .env.docker << EOF
+    cat > .env.docker << EOF
 # ==============================================================================
 # Production Environment for Gickers.sh (Domain: ${DOMAIN})
 # Generated automatically on $(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date)
@@ -1173,31 +1226,32 @@ DEPLOY_DOCKER_RUNTIME=runsc
 DEPLOY_GVISOR_PLATFORM=systrap
 EOF
 
-chmod 600 .env.docker 2>/dev/null || true
-printf "  %s✔%s %sConfiguration .env.docker initialisée.%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+    chmod 600 .env.docker 2>/dev/null || true
+    printf "  %s✔%s %sConfiguration .env.docker initialisée.%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
 
-# ------------------------------------------------------------------------------
-# 7. Build et Déploiement Docker Compose
-# ------------------------------------------------------------------------------
-( docker compose --env-file .env.docker build >/dev/null 2>&1 ) &
-gum_spin $! "Construction des conteneurs Docker (PHP, gickers-ssh, FrankenPHP)..."
+    # --------------------------------------------------------------------------
+    # 7. Build et Déploiement Docker Compose
+    # --------------------------------------------------------------------------
+    ( docker compose --env-file .env.docker build >/dev/null 2>&1 ) &
+    gum_spin $! "Construction des conteneurs Docker (PHP, gickers-ssh, FrankenPHP)..."
 
-( docker compose --env-file .env.docker up -d postgres >/dev/null 2>&1 ) &
-gum_spin $! "Démarrage de PostgreSQL..."
+    ( docker compose --env-file .env.docker up -d postgres >/dev/null 2>&1 ) &
+    gum_spin $! "Démarrage de PostgreSQL..."
 
-# Wait for PostgreSQL readiness
-RETRY=0
-MAX_RETRY=30
-until docker compose --env-file .env.docker exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1 || [ $RETRY -eq $MAX_RETRY ]; do
-    sleep 1
-    RETRY=$((RETRY + 1))
-done
+    # Wait for PostgreSQL readiness
+    RETRY=0
+    MAX_RETRY=30
+    until docker compose --env-file .env.docker exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1 || [ $RETRY -eq $MAX_RETRY ]; do
+        sleep 1
+        RETRY=$((RETRY + 1))
+    done
 
-( docker compose --env-file .env.docker run --rm init >/dev/null 2>&1 ) &
-gum_spin $! "Exécution des migrations Doctrine & initialisation du serveur..."
+    ( docker compose --env-file .env.docker run --rm init >/dev/null 2>&1 ) &
+    gum_spin $! "Exécution des migrations Doctrine & initialisation du serveur..."
 
-( docker compose --env-file .env.docker up -d >/dev/null 2>&1 ) &
-gum_spin $! "Démarrage complet de la stack (HTTP, SSH, Worker, Deploy-Engine)..."
+    ( docker compose --env-file .env.docker up -d >/dev/null 2>&1 ) &
+    gum_spin $! "Démarrage complet de la stack (HTTP, SSH, Worker, Deploy-Engine)..."
+fi
 
 # ------------------------------------------------------------------------------
 # 8. Service Systemd (gickers.service)
