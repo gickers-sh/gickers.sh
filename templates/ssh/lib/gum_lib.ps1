@@ -278,3 +278,307 @@ function Gum-PastePubkey {
 
 function Select-Menu { Gum-Choose @args }
 
+function Run-LoggedStep {
+    param(
+        [string]$StepLabel,
+        [string]$LogFile,
+        [string]$WorkDir,
+        [scriptblock]$CommandBlock
+    )
+
+    $chars = @('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏')
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+
+    while ($true) {
+        $sw.Restart()
+        $prevPwd = (Get-Location).Path
+        if (-not [string]::IsNullOrEmpty($WorkDir) -and (Test-Path $WorkDir)) {
+            Set-Location $WorkDir
+        }
+
+        $cmdStr = $CommandBlock.ToString()
+        $isBuild = $cmdStr -match "docker\s+compose.*build"
+
+        $exitCode = 0
+        if ($isBuild) {
+            Write-Host "  $escPink⠋$escReset $escBold$escWhite$StepLabel...$escReset"
+            try {
+                & $CommandBlock 2>&1 | Tee-Object -FilePath $LogFile
+                $exitCode = $LASTEXITCODE
+            } catch {
+                $exitCode = 1
+                $_ | Out-File -FilePath $LogFile -Append
+            }
+        } else {
+            Write-Host -NoNewline "$esc[?25l"
+            $job = Start-Job -ScriptBlock {
+                param($blk, $dir, $log)
+                Set-Location $dir
+                try {
+                    & $blk 2>&1 | Out-File -FilePath $log -Encoding UTF8
+                    return $LASTEXITCODE
+                } catch {
+                    $_ | Out-File -FilePath $log -Append -Encoding UTF8
+                    return 1
+                }
+            } -ArgumentList $CommandBlock, (Get-Location).Path, $LogFile
+
+            $i = 0
+            while ($job.State -eq 'Running') {
+                $elapsedSec = [math]::Floor($sw.Elapsed.TotalSeconds)
+                $timeStr = if ($elapsedSec -ge 60) {
+                    "$([math]::Floor($elapsedSec / 60))m $(($elapsedSec % 60).ToString('D2'))s"
+                } else {
+                    "${elapsedSec}s"
+                }
+                Write-Host -NoNewline "`r  $escPink$($chars[$i])$escReset $escBold$escWhite$StepLabel...$escReset $escDim[$timeStr]$escReset$esc[K"
+                $i = ($i + 1) % 10
+                Start-Sleep -Milliseconds 80
+            }
+
+            Write-Host -NoNewline "$esc[?25h"
+            $null = Receive-Job -Job $job
+            $exitCode = $job.ChildJobs[0].ExitCode
+            if ($null -eq $exitCode) { $exitCode = 0 }
+            Remove-Job -Job $job -Force
+        }
+
+        Set-Location $prevPwd
+        $sw.Stop()
+        $elapsedSec = [math]::Floor($sw.Elapsed.TotalSeconds)
+        $timeStr = if ($elapsedSec -ge 60) {
+            "$([math]::Floor($elapsedSec / 60))m $(($elapsedSec % 60).ToString('D2'))s"
+        } else {
+            "${elapsedSec}s"
+        }
+
+        if ($exitCode -eq 0) {
+            Write-Host "`r$esc[2K  $escGreen✔$escReset $escBold$escWhite$StepLabel...$escReset $escMuted($timeStr)$escReset"
+            return 0
+        }
+
+        Write-Host "`r$esc[2K  $escPink✖$escReset $escBold$escPink$StepLabel ÉCHOUÉ$escReset $escDim(Code: $exitCode, Durée: $timeStr)$escReset`n"
+        Write-Host "  $escBold${escCyan}Dernières lignes du journal ($LogFile) :$escReset"
+        if (Test-Path $LogFile) {
+            Get-Content -Path $LogFile -Tail 35 | ForEach-Object {
+                Write-Host "    $escDim$_$escReset"
+            }
+        }
+        Write-Host ""
+
+        $errOpts = @(
+            "Réessayer cette étape maintenant (Recommandé)",
+            "Afficher l'intégralité du journal de log",
+            "Ignorer cette étape et continuer quand même",
+            "Abandonner l'installation"
+        )
+        $errChoice = Gum-Choose -Title "Action en cas d'erreur sur '$StepLabel'" -Options $errOpts
+        switch ($errChoice) {
+            0 { continue }
+            1 {
+                if (Test-Path $LogFile) {
+                    Get-Content -Path $LogFile | Out-Host -Paging
+                }
+                continue
+            }
+            2 {
+                Write-Host "  $escGold!$escReset $escBold${escWhite}Étape ignorée par l'administrateur.$escReset`n"
+                return 0
+            }
+            3 {
+                Write-Host "`n  $escPink✖$escReset $escBold${escPink}Installation interrompue par l'administrateur.$escReset`n"
+                exit $exitCode
+            }
+        }
+    }
+}
+
+function Manage-InstanceUpdate {
+    param([string]$Dir)
+    $logFile = Join-Path $env:TEMP "gickers_update.log"
+    Write-Host "`n  $escBold${escCyan}🔄 Mise à jour de l'instance gickers.sh : $Dir$escReset`n"
+
+    if (Test-Path (Join-Path $Dir ".git")) {
+        Run-LoggedStep -StepLabel "Récupération du dernier code source (git pull)" -LogFile $logFile -WorkDir $Dir -CommandBlock {
+            git fetch --depth 1 origin main 2>$null
+            git reset --hard origin/main 2>$null
+        }
+    }
+
+    if (Test-Path (Join-Path $Dir "compose.yaml")) {
+        Run-LoggedStep -StepLabel "Construction / Mise à jour des images Docker" -LogFile $logFile -WorkDir $Dir -CommandBlock {
+            docker compose --env-file .env.docker build
+        }
+        Run-LoggedStep -StepLabel "Application des migrations Doctrine" -LogFile $logFile -WorkDir $Dir -CommandBlock {
+            docker compose --env-file .env.docker run -T --rm init
+        }
+        Run-LoggedStep -StepLabel "Redémarrage de la stack applicative" -LogFile $logFile -WorkDir $Dir -CommandBlock {
+            docker compose --env-file .env.docker up -d
+        }
+    }
+
+    Write-Host "  $escGreen✔$escReset $escBold${escWhite}Instance mise à jour avec succès.$escReset`n"
+    exit 0
+}
+
+function Manage-InstanceRestart {
+    param([string]$Dir)
+    $logFile = Join-Path $env:TEMP "gickers_restart.log"
+    Write-Host "`n  $escBold${escCyan}🔁 Redémarrage des services : $Dir$escReset`n"
+
+    if (Test-Path (Join-Path $Dir "compose.yaml")) {
+        Run-LoggedStep -StepLabel "Redémarrage des conteneurs Docker" -LogFile $logFile -WorkDir $Dir -CommandBlock {
+            docker compose --env-file .env.docker restart
+        }
+    }
+
+    Write-Host "  $escGreen✔$escReset $escBold${escWhite}Services redémarrés avec succès.$escReset`n"
+    exit 0
+}
+
+function Manage-InstanceRebuild {
+    param([string]$Dir)
+    $logFile = Join-Path $env:TEMP "gickers_rebuild.log"
+    Write-Host "`n  $escBold${escCyan}🏗️  Reconstruction complète des conteneurs : $Dir$escReset`n"
+
+    if (Test-Path (Join-Path $Dir "compose.yaml")) {
+        Run-LoggedStep -StepLabel "Reconstruction des images Docker (--no-cache)" -LogFile $logFile -WorkDir $Dir -CommandBlock {
+            docker compose --env-file .env.docker build --no-cache
+        }
+        Run-LoggedStep -StepLabel "Redémarrage des conteneurs avec les nouvelles images" -LogFile $logFile -WorkDir $Dir -CommandBlock {
+            docker compose --env-file .env.docker up -d --force-recreate
+        }
+    }
+
+    Write-Host "  $escGreen✔$escReset $escBold${escWhite}Images reconstruites et conteneurs relancés avec succès.$escReset`n"
+    exit 0
+}
+
+function Manage-InstanceRedeploy {
+    param([string]$Dir)
+    $logFile = Join-Path $env:TEMP "gickers_redeploy.log"
+    Write-Host "`n  $escBold${escCyan}🚀 Redéploiement (cache, migrations & stack) : $Dir$escReset`n"
+
+    if (Test-Path (Join-Path $Dir "compose.yaml")) {
+        Run-LoggedStep -StepLabel "Exécution des migrations & warmup cache (init)" -LogFile $logFile -WorkDir $Dir -CommandBlock {
+            docker compose --env-file .env.docker run -T --rm init
+        }
+        Run-LoggedStep -StepLabel "Redéploiement de la stack" -LogFile $logFile -WorkDir $Dir -CommandBlock {
+            docker compose --env-file .env.docker up -d
+        }
+    }
+
+    Write-Host "  $escGreen✔$escReset $escBold${escWhite}Redéploiement terminé avec succès.$escReset`n"
+    exit 0
+}
+
+function Manage-InstanceEdit {
+    param([string]$Dir)
+    $envFile = Join-Path $Dir ".env.docker"
+    if (-not (Test-Path $envFile)) { $envFile = Join-Path $Dir ".env.local" }
+    if (-not (Test-Path $envFile)) {
+        Write-Host "  $escPink✖$escReset $escBold${escPink}Fichier de configuration introuvable dans $Dir$escReset`n"
+        exit 1
+    }
+
+    Write-Host "`n  $escBold${escCyan}⚙️  Édition de la configuration : $envFile$escReset`n"
+
+    $curDomain = (Get-Content $envFile | Where-Object { $_ -match '^APP_DOMAIN=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+    if ([string]::IsNullOrEmpty($curDomain)) { $curDomain = "gits.run" }
+    $curSsh = (Get-Content $envFile | Where-Object { $_ -match '^SSH_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+    if ([string]::IsNullOrEmpty($curSsh)) { $curSsh = "22" }
+    $curHttp = (Get-Content $envFile | Where-Object { $_ -match '^HTTP_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+    if ([string]::IsNullOrEmpty($curHttp)) { $curHttp = "80" }
+    $curHttps = (Get-Content $envFile | Where-Object { $_ -match '^HTTPS_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+    if ([string]::IsNullOrEmpty($curHttps)) { $curHttps = "443" }
+
+    $newDomain = Gum-Input -PromptLabel "Domaine public (FQDN)" -DefaultValue $curDomain
+    $newSsh = Gum-Input -PromptLabel "Port SSH public" -DefaultValue $curSsh
+    $newHttp = Gum-Input -PromptLabel "Port HTTP public" -DefaultValue $curHttp
+    $newHttps = Gum-Input -PromptLabel "Port HTTPS public" -DefaultValue $curHttps
+
+    $signOpts = @("Inscriptions ouvertes (true)", "Inscriptions fermées (false)")
+    $signChoice = Gum-Choose -Title "Politique d'inscriptions" -Options $signOpts
+    $newSignup = if ($signChoice -eq 1) { "false" } else { "true" }
+
+    $lines = Get-Content $envFile
+    $newLines = @()
+    foreach ($line in $lines) {
+        if ($line -match '^APP_DOMAIN=') { $newLines += "APP_DOMAIN=$newDomain" }
+        elseif ($line -match '^SSH_PORT=') { $newLines += "SSH_PORT=$newSsh" }
+        elseif ($line -match '^HTTP_PORT=') { $newLines += "HTTP_PORT=$newHttp" }
+        elseif ($line -match '^HTTPS_PORT=') { $newLines += "HTTPS_PORT=$newHttps" }
+        elseif ($line -match '^SOFT_SERVE_ALLOW_SIGNUP=') { $newLines += "SOFT_SERVE_ALLOW_SIGNUP=$newSignup" }
+        elseif ($line -match '^SOFT_SERVE_SSH_PUBLIC_URL=') { $newLines += "SOFT_SERVE_SSH_PUBLIC_URL=ssh://$newDomain" }
+        elseif ($line -match '^SOFT_SERVE_HTTP_PUBLIC_URL=') { $newLines += "SOFT_SERVE_HTTP_PUBLIC_URL=https://$newDomain" }
+        else { $newLines += $line }
+    }
+    Set-Content -Path $envFile -Value $newLines -Encoding UTF8
+
+    Write-Host "`n  $escGreen✔$escReset $escBold${escWhite}Configuration mise à jour dans $envFile$escReset"
+
+    if (Test-Path (Join-Path $Dir "compose.yaml")) {
+        $logFile = Join-Path $env:TEMP "gickers_edit_apply.log"
+        Run-LoggedStep -StepLabel "Application de la nouvelle configuration aux conteneurs" -LogFile $logFile -WorkDir $Dir -CommandBlock {
+            docker compose --env-file .env.docker up -d
+        }
+    }
+
+    Write-Host "  $escGreen✔$escReset $escBold${escWhite}Modifications appliquées avec succès.$escReset`n"
+    exit 0
+}
+
+function Manage-InstanceDelete {
+    param(
+        [string]$Dir,
+        [string]$Domain
+    )
+    if ([string]::IsNullOrEmpty($Domain)) { $Domain = "cette instance" }
+    $expectedConfirm = "DELETE $Domain"
+
+    Write-Host "`n  $escPink⚠️  ATTENTION : DEMANDE DE SUPPRESSION DÉFINITIVE (DELETE)$escReset"
+    Write-Host "  ${escMuted}Cible : $escBold$escWhite$Domain$escReset (Répertoire : $escCyan$Dir$escReset)$escReset"
+    Write-Host "  $escPink Cette action est IRRÉVERSIBLE et va détruire définitivement :$escReset"
+    Write-Host "    • Tous les conteneurs, réseaux et volumes Docker de cette instance"
+    Write-Host "    • La base de données PostgreSQL, les dépôts Git et configurations"
+    Write-Host "    • Le dossier d'installation $Dir sur la machine`n"
+
+    $confirmOpts = @(
+        "Non, annuler et conserver mon instance intacte (Recommandé)",
+        "Oui, je veux détruire et supprimer définitivement cette instance"
+    )
+    $c1 = Gum-Choose -Title "Confirmation 1/2 : Êtes-vous certain de vouloir supprimer cette instance ?" -Options $confirmOpts
+    if ($c1 -ne 1) {
+        Write-Host "  $escGreen✔$escReset $escBold${escWhite}Suppression annulée. L'instance reste intacte.$escReset`n"
+        exit 0
+    }
+
+    $delConfirm = Gum-Input -PromptLabel "Confirmation 2/2 : Tapez '$expectedConfirm' pour confirmer" -DefaultValue "" -Placeholder $expectedConfirm
+    if ($delConfirm -ne $expectedConfirm) {
+        Write-Host "  $escGreen✔$escReset $escBold${escWhite}Saisie non conforme. Suppression annulée, données préservées.$escReset`n"
+        exit 0
+    }
+
+    Write-Host "`n  $escPink🗑️  Suppression définitive en cours pour $Domain...$escReset"
+    $logFile = Join-Path $env:TEMP "gickers_delete_docker.log"
+
+    if (Test-Path (Join-Path $Dir "compose.yaml")) {
+        Run-LoggedStep -StepLabel "Arrêt et destruction des conteneurs et volumes Docker" -LogFile $logFile -WorkDir $Dir -CommandBlock {
+            docker compose --env-file .env.docker down -v --remove-orphans 2>$null
+            docker compose down -v --remove-orphans 2>$null
+        }
+    }
+
+    docker volume rm -f gickers-sh_gickers-data gickers-sh_gickers-db gickers-sh_gickers-var gickers-sh_gickers-deploy-engine 2>$null
+
+    if (Test-Path $Dir) {
+        $logFileFs = Join-Path $env:TEMP "gickers_delete_fs.log"
+        Run-LoggedStep -StepLabel "Suppression du répertoire $Dir" -LogFile $logFileFs -WorkDir (Get-Location).Path -CommandBlock {
+            Remove-Item -Recurse -Force -Path $Dir
+        }
+    }
+
+    Write-Host "  $escGreen✔$escReset $escBold${escWhite}Instance $Domain supprimée définitivement avec succès. Ports et ressources libérés.$escReset`n"
+    exit 0
+}
+
