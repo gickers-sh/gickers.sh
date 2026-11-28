@@ -206,6 +206,7 @@ final class SshEntrypointCommand extends Command
             if (null !== $scriptOption) {
                 $tokens[] = $scriptOption;
             }
+            $tokens = $this->normalizeKeyOptionTokens($tokens);
 
             if ([] === $tokens) {
                 if ($unknownKey) {
@@ -227,7 +228,12 @@ final class SshEntrypointCommand extends Command
             if (('signup' === $firstToken || 'recover' === $firstToken) && null !== $targetUsername) {
                 $hasPositional = false;
                 for ($i = 1; $i < count($tokens); ++$i) {
-                    if (!str_starts_with($tokens[$i], '-')) {
+                    $t = $tokens[$i];
+                    if (in_array($t, ['-t', '--token', '-k', '--key', '--key-path'], true)) {
+                        ++$i; // skip option value
+                        continue;
+                    }
+                    if (!str_starts_with($t, '-')) {
                         $hasPositional = true;
                         break;
                     }
@@ -780,5 +786,71 @@ final class SshEntrypointCommand extends Command
         }
 
         return null;
+    }
+
+    /**
+     * Normalizes unquoted SSH public key tokens passed to -k or --key so that keys containing
+     * spaces (e.g. `ssh-ed25519 AAA... user@host`) are recombined into a single option value.
+     *
+     * @param list<string> $tokens
+     * @return list<string>
+     */
+    private function normalizeKeyOptionTokens(array $tokens): array
+    {
+        $count = count($tokens);
+        $normalized = [];
+        for ($i = 0; $i < $count; ++$i) {
+            $token = $tokens[$i];
+
+            if (('-k' === $token || '--key' === $token) && isset($tokens[$i + 1])) {
+                $keyType = $tokens[$i + 1];
+                if ($this->isSshKeyType($keyType)
+                    && isset($tokens[$i + 2])
+                    && preg_match('/^[A-Za-z0-9+\/]{16,}={0,3}$/', $tokens[$i + 2])
+                ) {
+                    $keyParts = [$keyType, $tokens[$i + 2]];
+                    $advance = 2;
+                    while (isset($tokens[$i + 1 + $advance]) && !str_starts_with($tokens[$i + 1 + $advance], '-')) {
+                        $keyParts[] = $tokens[$i + 1 + $advance];
+                        ++$advance;
+                    }
+
+                    $normalized[] = $token;
+                    $normalized[] = implode(' ', $keyParts);
+                    $i += $advance;
+                    continue;
+                }
+            }
+
+            if (str_starts_with($token, '--key=') || str_starts_with($token, '-k=')) {
+                $eqPos = (int) strpos($token, '=');
+                $prefix = substr($token, 0, $eqPos + 1);
+                $keyType = substr($token, $eqPos + 1);
+                if ($this->isSshKeyType($keyType)
+                    && isset($tokens[$i + 1])
+                    && preg_match('/^[A-Za-z0-9+\/]{16,}={0,3}$/', $tokens[$i + 1])
+                ) {
+                    $keyParts = [$keyType, $tokens[$i + 1]];
+                    $advance = 1;
+                    while (isset($tokens[$i + 1 + $advance]) && !str_starts_with($tokens[$i + 1 + $advance], '-')) {
+                        $keyParts[] = $tokens[$i + 1 + $advance];
+                        ++$advance;
+                    }
+
+                    $normalized[] = $prefix.implode(' ', $keyParts);
+                    $i += $advance;
+                    continue;
+                }
+            }
+
+            $normalized[] = $token;
+        }
+
+        return $normalized;
+    }
+
+    private function isSshKeyType(string $val): bool
+    {
+        return (bool) preg_match('/^(?:ssh-(?:rsa|dss|ed25519)|ecdsa-sha2-[a-z0-9]+|sk-(?:ssh|ecdsa)[a-z0-9@.-]+)$/i', $val);
     }
 }

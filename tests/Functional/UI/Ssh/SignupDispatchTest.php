@@ -91,6 +91,23 @@ final class SignupDispatchTest extends KernelTestCase
         self::assertSame($username, $user->username());
     }
 
+    public function testSignupWithUnquotedCustomKeyOption(): void
+    {
+        $connectedKey = self::generateKey();
+        $customKey = self::generateKey();
+        $username = 'unq'.bin2hex(random_bytes(5));
+
+        // Note: $customKey contains spaces ("ssh-ed25519 AAAA... comment") and is passed unquoted
+        $tester = $this->dispatch('signup '.$username.' --register -k '.$customKey, $connectedKey);
+
+        self::assertSame(0, $tester->getStatusCode(), self::text($tester));
+        self::assertStringContainsString('registered', self::text($tester));
+
+        $user = $this->userStore->byFingerprint(SshKey::parse($customKey)->fingerprint);
+        self::assertNotNull($user);
+        self::assertSame($username, $user->username());
+    }
+
     public function testKnownKeyCannotSignUpAnotherUsernameWithSameKey(): void
     {
         $key = self::generateKey();
