@@ -539,6 +539,190 @@ WantedBy=multi-user.target' | $EXEC_SUDO tee /etc/systemd/system/gickers.service
 }
 
 # ------------------------------------------------------------------------------
+# Routines Dédiées : Gestion d'Instance Détectée (Update/Restart/Rebuild/etc.)
+# ------------------------------------------------------------------------------
+manage_instance_update() {
+    local dir="$1"
+    local log_file="/tmp/gickers_update.log"
+    printf "\n  %s🔄 Mise à jour de l'instance gickers.sh : %s%s\n\n" "$C_BOLD$C_CYAN" "$dir" "$C_RESET"
+
+    if [ -d "$dir/.git" ]; then
+        run_logged_step "Récupération du dernier code source (git pull)" "$log_file" "$dir" \
+            bash -c "git fetch --depth 1 origin main && git reset --hard origin/main || git pull --rebase origin main"
+    fi
+
+    if [ -f "$dir/compose.yaml" ] && command -v docker >/dev/null 2>&1; then
+        run_logged_step "Construction / Mise à jour des images Docker" "$log_file" "$dir" \
+            docker compose --env-file .env.docker build
+        run_logged_step "Application des migrations Doctrine" "$log_file" "$dir" \
+            docker compose --env-file .env.docker run -T --rm init
+        run_logged_step "Redémarrage de la stack applicative" "$log_file" "$dir" \
+            docker compose --env-file .env.docker up -d
+    elif [ ! -f "$dir/compose.yaml" ] || ! command -v docker >/dev/null 2>&1; then
+        if command -v php >/dev/null 2>&1; then
+            run_logged_step "Application des migrations Doctrine & vidage du cache" "$log_file" "$dir" \
+                bash -c "php bin/console doctrine:migrations:migrate --no-interaction && php bin/console cache:clear"
+        fi
+        if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet gickers.service 2>/dev/null; then
+            run_logged_step "Redémarrage du service systemd" "$log_file" "$dir" \
+                systemctl restart gickers.service
+        fi
+    fi
+
+    printf "  %s✔%s %sInstance mise à jour avec succès.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+    exit 0
+}
+
+manage_instance_restart() {
+    local dir="$1"
+    local log_file="/tmp/gickers_restart.log"
+    printf "\n  %s🔁 Redémarrage des services : %s%s\n\n" "$C_BOLD$C_CYAN" "$dir" "$C_RESET"
+
+    if [ -f "$dir/compose.yaml" ] && command -v docker >/dev/null 2>&1; then
+        run_logged_step "Redémarrage des conteneurs Docker" "$log_file" "$dir" \
+            docker compose --env-file .env.docker restart
+    elif command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet gickers.service 2>/dev/null; then
+        run_logged_step "Redémarrage du service systemd gickers" "$log_file" "$dir" \
+            systemctl restart gickers.service
+    fi
+
+    printf "  %s✔%s %sServices redémarrés avec succès.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+    exit 0
+}
+
+manage_instance_rebuild() {
+    local dir="$1"
+    local log_file="/tmp/gickers_rebuild.log"
+    printf "\n  %s🏗️  Reconstruction complète des conteneurs : %s%s\n\n" "$C_BOLD$C_CYAN" "$dir" "$C_RESET"
+
+    if [ -f "$dir/compose.yaml" ] && command -v docker >/dev/null 2>&1; then
+        run_logged_step "Reconstruction des images Docker (--no-cache)" "$log_file" "$dir" \
+            docker compose --env-file .env.docker build --no-cache
+        run_logged_step "Redémarrage des conteneurs avec les nouvelles images" "$log_file" "$dir" \
+            docker compose --env-file .env.docker up -d --force-recreate
+    fi
+
+    printf "  %s✔%s %sImages reconstruites et conteneurs relancés avec succès.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+    exit 0
+}
+
+manage_instance_redeploy() {
+    local dir="$1"
+    local log_file="/tmp/gickers_redeploy.log"
+    printf "\n  %s🚀 Redéploiement (cache, migrations & stack) : %s%s\n\n" "$C_BOLD$C_CYAN" "$dir" "$C_RESET"
+
+    if [ -f "$dir/compose.yaml" ] && command -v docker >/dev/null 2>&1; then
+        run_logged_step "Exécution des migrations & warmup cache (init)" "$log_file" "$dir" \
+            docker compose --env-file .env.docker run -T --rm init
+        run_logged_step "Redéploiement de la stack" "$log_file" "$dir" \
+            docker compose --env-file .env.docker up -d
+    fi
+
+    printf "  %s✔%s %sRedéploiement terminé avec succès.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+    exit 0
+}
+
+manage_instance_edit() {
+    local dir="$1"
+    local env_file="$dir/.env.docker"
+    [ ! -f "$env_file" ] && env_file="$dir/.env.local"
+    if [ ! -f "$env_file" ]; then
+        printf "  %s✖%s %sFichier de configuration introuvable dans %s%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$dir" "$C_RESET"
+        exit 1
+    fi
+
+    printf "\n  %s⚙️  Édition de la configuration : %s%s\n\n" "$C_BOLD$C_CYAN" "$env_file" "$C_RESET"
+
+    local cur_domain cur_ssh cur_http cur_https cur_signup
+    cur_domain=$(grep -E '^APP_DOMAIN=' "$env_file" 2>/dev/null | cut -d '=' -f2- | tr -d ' "' || echo "gits.run")
+    cur_ssh=$(grep -E '^SSH_PORT=' "$env_file" 2>/dev/null | cut -d '=' -f2- | tr -d ' "' || echo "22")
+    cur_http=$(grep -E '^HTTP_PORT=' "$env_file" 2>/dev/null | cut -d '=' -f2- | tr -d ' "' || echo "80")
+    cur_https=$(grep -E '^HTTPS_PORT=' "$env_file" 2>/dev/null | cut -d '=' -f2- | tr -d ' "' || echo "443")
+    cur_signup=$(grep -E '^SOFT_SERVE_ALLOW_SIGNUP=' "$env_file" 2>/dev/null | cut -d '=' -f2- | tr -d ' "' || echo "true")
+
+    gum_input "Domaine public (FQDN)" cur_domain "$cur_domain"
+    gum_input "Port SSH public" cur_ssh "$cur_ssh"
+    gum_input "Port HTTP public" cur_http "$cur_http"
+    gum_input "Port HTTPS public" cur_https "$cur_https"
+
+    local SIGN_OPTS=("Inscriptions ouvertes (true)" "Inscriptions fermées (false)")
+    gum_choose "Politique d'inscriptions" "${SIGN_OPTS[@]}" && local s_idx=$? || local s_idx=$?
+    [ "$s_idx" -eq 1 ] && cur_signup="false" || cur_signup="true"
+
+    sed -i.bak -E \
+        -e "s|^APP_DOMAIN=.*|APP_DOMAIN=${cur_domain}|" \
+        -e "s|^SSH_PORT=.*|SSH_PORT=${cur_ssh}|" \
+        -e "s|^HTTP_PORT=.*|HTTP_PORT=${cur_http}|" \
+        -e "s|^HTTPS_PORT=.*|HTTPS_PORT=${cur_https}|" \
+        -e "s|^SOFT_SERVE_ALLOW_SIGNUP=.*|SOFT_SERVE_ALLOW_SIGNUP=${cur_signup}|" \
+        -e "s|^SOFT_SERVE_SSH_PUBLIC_URL=.*|SOFT_SERVE_SSH_PUBLIC_URL=ssh://${cur_domain}|" \
+        -e "s|^SOFT_SERVE_HTTP_PUBLIC_URL=.*|SOFT_SERVE_HTTP_PUBLIC_URL=https://${cur_domain}|" \
+        "$env_file"
+    rm -f "${env_file}.bak"
+
+    printf "\n  %s✔%s %sConfiguration mise à jour dans %s%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$env_file" "$C_RESET"
+
+    if [ -f "$dir/compose.yaml" ] && command -v docker >/dev/null 2>&1; then
+        run_logged_step "Application de la nouvelle configuration aux conteneurs" "/tmp/gickers_edit_apply.log" "$dir" \
+            docker compose --env-file .env.docker up -d
+    fi
+
+    printf "  %s✔%s %sModifications appliquées avec succès.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+    exit 0
+}
+
+manage_instance_delete() {
+    local dir="$1"
+    local dom="$2"
+    [ -z "$dom" ] && dom="cette instance"
+    local expected_confirm="DELETE $dom"
+
+    printf "\n"
+    printf "  %s⚠️  ATTENTION : DEMANDE DE SUPPRESSION DÉFINITIVE (DELETE)%s\n" "$C_BOLD$C_PINK" "$C_RESET"
+    printf "  %sCible : %s%s%s (Répertoire : %s%s%s)%s\n" "$C_MUTED" "$C_BOLD$C_WHITE" "$dom" "$C_RESET" "$C_CYAN" "$dir" "$C_RESET" "$C_RESET"
+    printf "  %sCette action est %sIRRÉVERSIBLE%s%s et va détruire définitivement :%s\n" "$C_WHITE" "$C_BOLD$C_PINK" "$C_RESET" "$C_WHITE" "$C_RESET"
+    printf "    %s•%s %sTous les conteneurs, réseaux et volumes Docker de cette instance%s\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
+    printf "    %s•%s %sLa base de données PostgreSQL, les dépôts Git et configurations%s\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
+    printf "    %s•%s %sLe dossier d'installation %s sur le serveur%s\n\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$dir" "$C_RESET"
+
+    local CONFIRM_OPTS=(
+        "Non, annuler et conserver mon instance intacte (Recommandé)"
+        "Oui, je veux détruire et supprimer définitivement cette instance"
+    )
+    gum_choose "Confirmation 1/2 : Êtes-vous certain de vouloir supprimer cette instance ?" "${CONFIRM_OPTS[@]}" && local c1=$? || local c1=$?
+    if [ "$c1" -ne 1 ]; then
+        printf "  %s✔%s %sSuppression annulée. L'instance reste intacte.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+        exit 0
+    fi
+
+    local del_confirm=""
+    gum_input "Confirmation 2/2 : Tapez '$expected_confirm' pour confirmer" del_confirm "" "$expected_confirm"
+    if [ "$del_confirm" != "$expected_confirm" ]; then
+        printf "  %s✔%s %sSaisie non conforme ('%s' != '%s'). Suppression annulée, données préservées.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$del_confirm" "$expected_confirm" "$C_RESET"
+        exit 0
+    fi
+
+    printf "\n  %s🗑️  Suppression définitive en cours pour %s...%s\n" "$C_BOLD$C_PINK" "$dom" "$C_RESET"
+
+    if [ -d "$dir" ] && command -v docker >/dev/null 2>&1; then
+        run_logged_step "Arrêt et destruction des conteneurs et volumes Docker" "/tmp/gickers_delete_docker.log" "$dir" \
+            bash -c "docker compose --env-file .env.docker down -v --remove-orphans || docker compose down -v --remove-orphans || true"
+    fi
+
+    if command -v docker >/dev/null 2>&1; then
+        docker volume rm -f gickers-sh_gickers-data gickers-sh_gickers-db gickers-sh_gickers-var gickers-sh_gickers-deploy-engine >/dev/null 2>&1 || true
+    fi
+
+    if [ -d "$dir" ] && [ "$dir" != "/" ] && [ "$dir" != "$HOME" ]; then
+        run_logged_step "Suppression du répertoire $dir" "/tmp/gickers_delete_fs.log" "$PWD" \
+            rm -rf "$dir"
+    fi
+
+    printf "  %s✔%s %sInstance %s supprimée définitivement avec succès. Ports et ressources libérés.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$dom" "$C_RESET"
+    exit 0
+}
+
+# ------------------------------------------------------------------------------
 # 2. Gestion et Avertissements Privilèges (Sudo vs Non-Sudo)
 # ------------------------------------------------------------------------------
 if [ "$SYSTEM_ONLY" -eq 1 ]; then
@@ -651,123 +835,169 @@ if [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" != "1" ]; then
     printf "    %scurl -fsSL https://raw.githubusercontent.com/gickerssh/gickers.sh/main/scripts/install.sh | sudo bash -s -- --system-only%s\n\n" "$C_CYAN" "$C_RESET"
 fi
 
-# Détection d'une installation existante et choix du mode
+# ==============================================================================
+# INVENTAIRE EN AMONT DES INSTANCES GICKERS.SH & CHOIX D'ACTION
+# ==============================================================================
 EXISTING_INSTALL=0
 EXISTING_DETAIL=""
 EXISTING_DOMAIN=""
+CREATE_NEW_INSTANCE=0
 
 # 1. Recherche et inventaire de toutes les instances applicatives sur la machine
 DETECTED_DIRS=()
 CANDIDATE_SEARCH_PATHS=("$INSTALL_DIR" "$PWD" "/home/gickers/gickers.sh" "/var/www/gickers" "$HOME/gickers.sh")
-if [ -d "/home" ]; then
-    while IFS= read -r f_path; do
-        [ -n "$f_path" ] && CANDIDATE_SEARCH_PATHS+=("$(dirname "$f_path")")
-    done < <(find /home -maxdepth 3 -name "compose.yaml" 2>/dev/null | grep -iE 'gickers|codes\.sh' || true)
+
+# Détection Docker Compose via les labels de conteneurs et les images officielles
+if command -v docker >/dev/null 2>&1; then
+    while IFS= read -r w_dir; do
+        [ -n "$w_dir" ] && [ -d "$w_dir" ] && CANDIDATE_SEARCH_PATHS+=("$w_dir")
+    done < <(docker ps -a --filter "ancestor=gickers-sh:latest" --format '{{ index .Labels "com.docker.compose.project.working_dir" }}' 2>/dev/null | grep -v '^$' || true)
+
+    while IFS= read -r w_dir; do
+        [ -n "$w_dir" ] && [ -d "$w_dir" ] && CANDIDATE_SEARCH_PATHS+=("$w_dir")
+    done < <(docker ps -a --filter "label=com.docker.compose.project=gickers-sh" --format '{{ index .Labels "com.docker.compose.project.working_dir" }}' 2>/dev/null | grep -v '^$' || true)
 fi
 
 for c_dir in "${CANDIDATE_SEARCH_PATHS[@]}"; do
     [ -z "$c_dir" ] || [ ! -d "$c_dir" ] && continue
-    if [ -f "$c_dir/compose.yaml" ] || [ -f "$c_dir/.env.docker" ] || [ -f "$c_dir/.env.local" ]; then
-        # Déduplication
-        local_already=0
+    if [ -f "$c_dir/compose.yaml" ] || [ -f "$c_dir/docker-compose.yml" ] || [ -f "$c_dir/.env.docker" ] || [ -f "$c_dir/.env.local" ]; then
+        already_seen=0
         for seen in "${DETECTED_DIRS[@]}"; do
-            [ "$seen" = "$c_dir" ] && local_already=1 && break
+            [ "$seen" = "$c_dir" ] && already_seen=1 && break
         done
-        [ "$local_already" -eq 0 ] && DETECTED_DIRS+=("$c_dir")
+        [ "$already_seen" -eq 0 ] && DETECTED_DIRS+=("$c_dir")
     fi
 done
 
-# Si plusieurs instances sont trouvées, permettre de choisir celle ciblée
-if [ "${#DETECTED_DIRS[@]}" -gt 1 ] && [ "$NON_INTERACTIVE" -eq 0 ]; then
-    INSTANCE_MENU=()
-    for d_path in "${DETECTED_DIRS[@]}"; do
-        inst_dom=""
-        if [ -f "$d_path/.env.docker" ]; then
-            inst_dom=$(grep -E '^APP_DOMAIN=' "$d_path/.env.docker" 2>/dev/null | cut -d '=' -f2- | tr -d ' "' || true)
-        fi
-        [ -z "$inst_dom" ] && inst_dom="(domaine non spécifié)"
-        INSTANCE_MENU+=("$d_path — $inst_dom")
-    done
-    gum_choose "Plusieurs installations de gickers.sh ont été détectées. Laquelle cibler ?" "${INSTANCE_MENU[@]}" && INST_SEL=$? || INST_SEL=$?
-    INSTALL_DIR="${DETECTED_DIRS[$INST_SEL]}"
-    EXISTING_INSTALL=1
-    EXISTING_DETAIL="Instance sélectionnée : $INSTALL_DIR"
-elif [ "${#DETECTED_DIRS[@]}" -eq 1 ]; then
-    EXISTING_INSTALL=1
-    INSTALL_DIR="${DETECTED_DIRS[0]}"
-    EXISTING_DETAIL="Fichiers détectés dans $INSTALL_DIR"
-fi
-
-# Résolution du domaine de l'instance existante
-if [ -n "$INSTALL_DIR" ] && [ -d "$INSTALL_DIR" ]; then
-    if [ -f "$INSTALL_DIR/.env.docker" ]; then
-        EXISTING_DOMAIN=$(grep -E '^APP_DOMAIN=' "$INSTALL_DIR/.env.docker" 2>/dev/null | cut -d '=' -f2- | tr -d ' "' || true)
-    elif [ -f "$INSTALL_DIR/.env.local" ]; then
-        EXISTING_DOMAIN=$(grep -E '^APP_DOMAIN=' "$INSTALL_DIR/.env.local" 2>/dev/null | cut -d '=' -f2- | tr -d ' "' || true)
+# Collecte des métadonnées et état d'exécution (Runtime State) pour chaque instance
+DETECTED_DOMAINS=()
+DETECTED_LABELS=()
+for d_path in "${DETECTED_DIRS[@]}"; do
+    inst_dom=""
+    if [ -f "$d_path/.env.docker" ]; then
+        inst_dom=$(grep -E '^APP_DOMAIN=' "$d_path/.env.docker" 2>/dev/null | cut -d '=' -f2- | tr -d ' "' || true)
+    elif [ -f "$d_path/.env.local" ]; then
+        inst_dom=$(grep -E '^APP_DOMAIN=' "$d_path/.env.local" 2>/dev/null | cut -d '=' -f2- | tr -d ' "' || true)
     fi
-fi
-[ -n "$EXISTING_DOMAIN" ] && DOMAIN="$EXISTING_DOMAIN"
+    [ -z "$inst_dom" ] && inst_dom="domaine non spécifié"
+    DETECTED_DOMAINS+=("$inst_dom")
 
-# 2. Recherche par conteneurs ou volumes Docker existants si aucun répertoire n'avait été trouvé
-if [ "$EXISTING_INSTALL" -eq 0 ] && command -v docker >/dev/null 2>&1; then
-    docker_containers=$(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E 'gickers|codes-sh' || true)
-    docker_volumes=$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -E 'gickers|codes-sh' || true)
-    if [ -n "$docker_containers" ] || [ -n "$docker_volumes" ]; then
+    inst_state="Arrêté"
+    if command -v docker >/dev/null 2>&1; then
+        running_cnt=$(docker ps --filter "label=com.docker.compose.project.working_dir=$d_path" -q 2>/dev/null | wc -l | tr -d ' ')
+        total_cnt=$(docker ps -a --filter "label=com.docker.compose.project.working_dir=$d_path" -q 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$total_cnt" -gt 0 ]; then
+            if [ "$running_cnt" -gt 0 ]; then
+                inst_state="Docker actif (${running_cnt}/${total_cnt} UP)"
+            else
+                inst_state="Docker arrêté (0/${total_cnt})"
+            fi
+        fi
+    fi
+
+    inst_ssh="22"
+    if [ -f "$d_path/.env.docker" ]; then
+        inst_ssh=$(grep -E '^SSH_PORT=' "$d_path/.env.docker" 2>/dev/null | cut -d '=' -f2- | tr -d ' "' || echo "22")
+    fi
+
+    DETECTED_LABELS+=("$d_path • $inst_dom [$inst_state] (SSH: $inst_ssh)")
+done
+
+# Affichage du menu amont si une ou plusieurs instances sont trouvées
+if [ "${#DETECTED_DIRS[@]}" -gt 0 ] && [ "$NON_INTERACTIVE" -eq 0 ]; then
+    TARGET_INDEX=0
+    if [ "${#DETECTED_DIRS[@]}" -gt 1 ]; then
+        INST_PICKER_OPTS=()
+        for (( i=0; i<${#DETECTED_DIRS[@]}; i++ )); do
+            if [ "$i" -eq 0 ]; then
+                INST_PICKER_OPTS+=("Gérer l'instance : ${DETECTED_LABELS[$i]} [Recommandé]")
+            else
+                INST_PICKER_OPTS+=("Gérer l'instance : ${DETECTED_LABELS[$i]}")
+            fi
+        done
+        INST_PICKER_OPTS+=("Créer et déployer une NOUVELLE instance gickers.sh indépendante")
+
+        gum_choose "Instances gickers.sh détectées sur cette machine" "${INST_PICKER_OPTS[@]}" && TARGET_INDEX=$? || TARGET_INDEX=$?
+        if [ "$TARGET_INDEX" -eq 255 ]; then
+            printf "\n  %sOpération annulée.%s\n\n" "$C_MUTED" "$C_RESET"
+            exit 0
+        fi
+
+        if [ "$TARGET_INDEX" -ge "${#DETECTED_DIRS[@]}" ]; then
+            EXISTING_INSTALL=0
+            CREATE_NEW_INSTANCE=1
+            INSTALL_DIR=""
+        else
+            EXISTING_INSTALL=1
+            INSTALL_DIR="${DETECTED_DIRS[$TARGET_INDEX]}"
+            EXISTING_DOMAIN="${DETECTED_DOMAINS[$TARGET_INDEX]}"
+            DOMAIN="$EXISTING_DOMAIN"
+        fi
+    else
         EXISTING_INSTALL=1
-        EXISTING_DETAIL="Conteneurs ou volumes Docker actifs détectés sur l'hôte"
+        INSTALL_DIR="${DETECTED_DIRS[0]}"
+        EXISTING_DOMAIN="${DETECTED_DOMAINS[0]}"
+        DOMAIN="$EXISTING_DOMAIN"
     fi
-fi
 
-# Choix interactif du mode de déploiement (Docker vs Natif Host)
-if [ "$NON_INTERACTIVE" -eq 0 ]; then
-    MODE_OPTS=(
-        "Production VPS — Docker & Conteneurs Isolés (Let's Encrypt SSL, Postgres, gVisor) [Recommandé]"
-        "Instance Légère — Natif Host / Sans Docker (PHP + SQLite + gickers-ssh autonome) [Idéal dev / machine perso]"
-    )
-    gum_choose "Mode d'exécution de gickers.sh sur cette machine" "${MODE_OPTS[@]}" && MODE_CHOICE=$? || MODE_CHOICE=$?
-    if [ "$MODE_CHOICE" -eq 1 ]; then
-        MODE="native"
-        STEP_DOCKER="skip"
-        if [ "$SSH_PORT" = "22" ]; then
-            SSH_PORT="2223"
+    if [ "$EXISTING_INSTALL" -eq 1 ]; then
+        ACTION_OPTS=(
+            "Mettre à jour l'application (Update) [Recommandé]"
+            "Redémarrer les services (Restart)"
+            "Reconstruire les conteneurs (Rebuild)"
+            "Redéployer / Réappliquer migrations & cache (Redeploy)"
+            "Éditer la configuration (.env.docker / domaine / ports)"
+        )
+        if [ "$IS_ROOT" -eq 1 ] || [ "$USE_SUDO" = "1" ]; then
+            ACTION_OPTS+=("Mettre à jour uniquement l'infrastructure hôte (Port 22 SSH, UFW, Systemd)")
         fi
-        if [ "$HTTP_PORT" = "80" ]; then
-            HTTP_PORT="23232"
+        ACTION_OPTS+=(
+            "Réinitialisation complète / Hard Reset (⚠️  Supprime base de données et dépôts)"
+            "Supprimer définitivement cette instance / Delete (⚠️  Détruit conteneurs, volumes et dossier)"
+            "Créer et déployer une NOUVELLE instance gickers.sh indépendante"
+        )
+
+        target_title="Gestion de l'instance : $EXISTING_DOMAIN ($INSTALL_DIR)"
+        gum_choose "$target_title" "${ACTION_OPTS[@]}" && ACTION_SEL=$? || ACTION_SEL=$?
+        if [ "$ACTION_SEL" -eq 255 ]; then
+            printf "\n  %sOpération annulée.%s\n\n" "$C_MUTED" "$C_RESET"
+            exit 0
         fi
-    else
-        MODE="docker"
-    fi
-fi
 
-if [ "$EXISTING_INSTALL" -eq 1 ] && [ "$NON_INTERACTIVE" -eq 0 ]; then
-    EXISTING_OPTS=(
-        "Conserver les données et mettre à jour l'application (Idempotent - Recommandé)"
-    )
-    if [ "$IS_ROOT" -eq 1 ] || [ "$USE_SUDO" = "1" ]; then
-        EXISTING_OPTS+=("Mettre à jour uniquement l'infrastructure hôte (Port 22 SSH, UFW, Systemd)")
-    fi
-    EXISTING_OPTS+=(
-        "Réinitialisation complète / Hard Reset (⚠️  Supprime base de données, volumes et dépôts)"
-    )
+        SELECTED_ACTION="${ACTION_OPTS[$ACTION_SEL]}"
 
-    detect_msg="Une installation existante a été détectée sur cette machine"
-    if [ -n "$EXISTING_DOMAIN" ]; then
-        detect_msg="Installation existante détectée pour ${EXISTING_DOMAIN} ($INSTALL_DIR)"
-    elif [ -n "$EXISTING_DETAIL" ]; then
-        detect_msg="Installation existante détectée ($EXISTING_DETAIL)"
-    elif [ -n "$INSTALL_DIR" ]; then
-        detect_msg="Une installation existante a été détectée dans $INSTALL_DIR"
-    fi
-    gum_choose "$detect_msg" "${EXISTING_OPTS[@]}" && EXIST_SELECTION=$? || EXIST_SELECTION=$?
-    SELECTED_TEXT="${EXISTING_OPTS[$EXIST_SELECTION]}"
-
-    if [[ "$SELECTED_TEXT" == *"infrastructure hôte"* ]]; then
-        run_system_only
-    elif [[ "$SELECTED_TEXT" == *"Hard Reset"* ]]; then
-        HARD_RESET=1
-    else
-        HARD_RESET=0
-        printf "  %s✔%s %sMode idempotent : vos données, volumes et configurations existantes seront conservés.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+        case "$SELECTED_ACTION" in
+            *"Update"*)
+                manage_instance_update "$INSTALL_DIR"
+                ;;
+            *"Restart"*)
+                manage_instance_restart "$INSTALL_DIR"
+                ;;
+            *"Rebuild"*)
+                manage_instance_rebuild "$INSTALL_DIR"
+                ;;
+            *"Redeploy"*)
+                manage_instance_redeploy "$INSTALL_DIR"
+                ;;
+            *"Éditer"*)
+                manage_instance_edit "$INSTALL_DIR"
+                ;;
+            *"infrastructure hôte"*)
+                run_system_only
+                ;;
+            *"Hard Reset"*)
+                HARD_RESET=1
+                ;;
+            *"Delete"*)
+                manage_instance_delete "$INSTALL_DIR" "$EXISTING_DOMAIN"
+                ;;
+            *"NOUVELLE instance"*)
+                EXISTING_INSTALL=0
+                CREATE_NEW_INSTANCE=1
+                INSTALL_DIR=""
+                EXISTING_DOMAIN=""
+                ;;
+        esac
     fi
 fi
 
@@ -793,6 +1023,7 @@ if [ "$HARD_RESET" -eq 1 ] && [ "$NON_INTERACTIVE" -eq 0 ]; then
     if [ "$CONFIRM_1" -ne 1 ]; then
         printf "  %s✔%s %sRéinitialisation annulée. Vos données sont préservées intactes.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
         HARD_RESET=0
+        exit 0
     else
         reset_confirm=""
         gum_input "Confirmation 2/2 : Tapez '$expected_confirm_phrase' pour confirmer" reset_confirm "" "$expected_confirm_phrase"
@@ -802,7 +1033,29 @@ if [ "$HARD_RESET" -eq 1 ] && [ "$NON_INTERACTIVE" -eq 0 ]; then
         else
             printf "  %s✔%s %sSaisie non conforme ('%s' != '%s'). Réinitialisation annulée, données préservées.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$reset_confirm" "$expected_confirm_phrase" "$C_RESET"
             HARD_RESET=0
+            exit 0
         fi
+    fi
+fi
+
+# Choix interactif du mode de déploiement (Docker vs Natif Host) pour nouvelle installation ou Hard Reset
+if [ "$NON_INTERACTIVE" -eq 0 ] && [ "$EXISTING_INSTALL" -eq 0 -o "$HARD_RESET" -eq 1 ]; then
+    MODE_OPTS=(
+        "Production VPS — Docker & Conteneurs Isolés (Let's Encrypt SSL, Postgres, gVisor) [Recommandé]"
+        "Instance Légère — Natif Host / Sans Docker (PHP + SQLite + gickers-ssh autonome) [Idéal dev / machine perso]"
+    )
+    gum_choose "Mode d'exécution de gickers.sh sur cette machine" "${MODE_OPTS[@]}" && MODE_CHOICE=$? || MODE_CHOICE=$?
+    if [ "$MODE_CHOICE" -eq 1 ]; then
+        MODE="native"
+        STEP_DOCKER="skip"
+        if [ "$SSH_PORT" = "22" ]; then
+            SSH_PORT="2223"
+        fi
+        if [ "$HTTP_PORT" = "80" ]; then
+            HTTP_PORT="23232"
+        fi
+    else
+        MODE="docker"
     fi
 fi
 
