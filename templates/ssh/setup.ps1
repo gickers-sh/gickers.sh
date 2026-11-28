@@ -27,6 +27,7 @@ $connectedFingerprint = '__CONNECTED_FINGERPRINT__'
 $testCmd = "__TEST_CMD__"
 $isSignup = "__IS_SIGNUP__"
 $alreadyRegistered = "__ALREADY_REGISTERED__"
+$claimToken = "__CLAIM_TOKEN__"
 
 if ($alreadyRegistered -eq "0") {
     $defaultUser = if ($username) { $username } else { $env:USERNAME }
@@ -208,15 +209,16 @@ if ($alreadyRegistered -eq "0") {
     while (-not $regSuccess) {
         Write-Host -NoNewline "  $escPink⠋$escReset $escBold$escWhite Enregistrement de votre compte @$username sur $hostName...$escReset"
         try {
+            $tokenArgs = if ($claimToken) { @('--token', $claimToken) } else { @() }
             if ($choice -eq 1 -and (Test-Path "$keyPath.pub")) {
                 $pubContent = (Get-Content "$keyPath.pub" -Raw).Trim()
-                $out = & ssh $portOpt -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new $hostName signup $username --register -k "$pubContent" 2>&1
+                $out = & ssh $portOpt -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new $hostName signup $username --register @tokenArgs -k "$pubContent" 2>&1
             } elseif ($choice -eq 2 -and $pastedKey) {
-                $out = & ssh $portOpt -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new $hostName signup $username --register -k "$pastedKey" 2>&1
+                $out = & ssh $portOpt -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new $hostName signup $username --register @tokenArgs -k "$pastedKey" 2>&1
             } elseif ($keyPath -and (Test-Path $keyPath)) {
-                $out = & ssh $portOpt -i "$keyPath" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new $hostName signup $username --register 2>&1
+                $out = & ssh $portOpt -i "$keyPath" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new $hostName signup $username --register @tokenArgs 2>&1
             } else {
-                $out = & ssh $portOpt -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new $hostName signup $username --register 2>&1
+                $out = & ssh $portOpt -o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new $hostName signup $username --register @tokenArgs 2>&1
             }
             if ($LASTEXITCODE -eq 0) {
                 $regSuccess = $true

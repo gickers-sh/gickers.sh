@@ -143,6 +143,7 @@ CONF;
         string $connectedComment,
         bool $isSignup = false,
         bool $alreadyRegistered = true,
+        ?string $claimToken = null,
     ): string {
         $host = self::validateHost($host);
         $username = self::validateUsername($username, allowEmpty: true);
@@ -175,6 +176,7 @@ CONF;
             '__IS_PROD__' => $this->isProd() ? '1' : '0',
             '__IS_SIGNUP__' => $isSignup ? '1' : '0',
             '__ALREADY_REGISTERED__' => $alreadyRegistered ? '1' : '0',
+            '__CLAIM_TOKEN__' => (string) ($claimToken ?? ''),
         ]);
     }
 
@@ -188,6 +190,7 @@ CONF;
         string $connectedComment,
         bool $isSignup = false,
         bool $alreadyRegistered = true,
+        ?string $claimToken = null,
     ): string {
         $host = self::validateHost($host);
         $username = self::validateUsername($username, allowEmpty: true);
@@ -220,6 +223,7 @@ CONF;
             '__IS_PROD__' => $this->isProd() ? '1' : '0',
             '__IS_SIGNUP__' => $isSignup ? '1' : '0',
             '__ALREADY_REGISTERED__' => $alreadyRegistered ? '1' : '0',
+            '__CLAIM_TOKEN__' => (string) ($claimToken ?? ''),
         ]);
     }
 

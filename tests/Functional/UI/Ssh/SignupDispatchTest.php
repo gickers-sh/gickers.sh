@@ -322,4 +322,38 @@ final class SignupDispatchTest extends KernelTestCase
         self::assertSame(1, $blockedTester->getStatusCode());
         self::assertStringContainsString('Signup rate limit exceeded for this SSH key', self::text($blockedTester));
     }
+
+    public function testSignupWithClaimTokenPromotesToAdminEvenWhenSignupDisabled(): void
+    {
+        // 1. Inscriptions fermées sur le serveur
+        $this->serverPolicy->setAllowSignup(false);
+
+        $token = 'claim_test_'.bin2hex(random_bytes(8));
+        $dataPath = self::getContainer()->get(\App\Shared\Infrastructure\Config\ServerSettings::class)->dataPath;
+        @mkdir($dataPath, 0755, true);
+        file_put_contents($dataPath.'/admin_claim_token', $token);
+
+        $key = self::generateKey();
+        $username = 'adminclaim'.bin2hex(random_bytes(3));
+
+        // 2. Un signup standard sans token échoue car les inscriptions sont fermées
+        $blocked = $this->dispatch(sprintf('signup %s --register', $username), $key);
+        self::assertSame(1, $blocked->getStatusCode());
+
+        // 3. Le signup avec le token de claim réussit et accorde les droits admin
+        $success = $this->dispatch(sprintf('signup %s --register --token=%s', $username, $token), $key);
+        self::assertSame(0, $success->getStatusCode(), self::text($success));
+        self::assertStringContainsString('registered successfully as admin', self::text($success));
+
+        $user = $this->userStore->byUsername($username);
+        self::assertNotNull($user);
+        self::assertTrue($user->isAdmin());
+
+        // 4. Le token est à usage unique et ne peut plus être réutilisé
+        $key2 = self::generateKey();
+        $reused = $this->dispatch(sprintf('signup another%s --register --token=%s', bin2hex(random_bytes(3)), $token), $key2);
+        self::assertSame(1, $reused->getStatusCode());
+
+        @unlink($dataPath.'/admin_claim_token.used');
+    }
 }

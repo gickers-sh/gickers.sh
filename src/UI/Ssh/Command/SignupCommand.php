@@ -36,7 +36,7 @@ final class SignupCommand extends AbstractSshCommand
 
     public static function sshAliases(): array
     {
-        return ['setup', 'config'];
+        return ['setup', 'config', 'claim'];
     }
 
     public function __construct(
@@ -54,6 +54,7 @@ final class SignupCommand extends AbstractSshCommand
             ->setDescription('Register yourself as a new user with the SSH key you connected with and configure client')
             ->addArgument('username', InputArgument::OPTIONAL, 'Desired or target username (defaults to SSH user if omitted)')
             ->addOption('key', 'k', InputOption::VALUE_REQUIRED, 'Public key to register instead of the one you connected with')
+            ->addOption('token', 't', InputOption::VALUE_REQUIRED, 'Bootstrap admin claim token')
             ->addOption('bash', null, InputOption::VALUE_NONE, 'Generate Bash setup script (.sh)')
             ->addOption('ps1', null, InputOption::VALUE_NONE, 'Generate PowerShell setup script (.ps1)')
             ->addOption('register', null, InputOption::VALUE_NONE, 'Perform direct database registration without script')
@@ -63,6 +64,7 @@ final class SignupCommand extends AbstractSshCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        $claimToken = $this->nullableStringOption($input, 'token');
         $customKey = $this->nullableStringOption($input, 'key');
         $rawUsername = $this->nullableStringArgument($input, 'username');
         if (null === $rawUsername || '' === trim($rawUsername)) {
@@ -88,9 +90,11 @@ final class SignupCommand extends AbstractSshCommand
                 $username,
                 $customKey,
                 $this->clientIdentifier(),
+                $claimToken,
             );
 
-            $this->line($output, sprintf('✔ User @%s registered successfully.', $user->username()));
+            $adminBadge = $user->isAdmin() ? ' as admin' : '';
+            $this->line($output, sprintf('✔ User @%s registered successfully%s.', $user->username(), $adminBadge));
 
             return Command::SUCCESS;
         }
@@ -150,6 +154,7 @@ final class SignupCommand extends AbstractSshCommand
                     $connectedComment,
                     isSignup: !$alreadyRegistered,
                     alreadyRegistered: $alreadyRegistered,
+                    claimToken: $claimToken,
                 ));
             } else {
                 $this->writeRaw($output, $this->scriptGenerator->generateBashScript(
@@ -162,6 +167,7 @@ final class SignupCommand extends AbstractSshCommand
                     $connectedComment,
                     isSignup: !$alreadyRegistered,
                     alreadyRegistered: $alreadyRegistered,
+                    claimToken: $claimToken,
                 ));
             }
 

@@ -109,6 +109,7 @@ final class SshEntrypointCommand extends Command
             $accessToken = null;
             $isRecover = $this->isRecoverCommandLine($commandLine);
             $isInstall = $this->isInstallCommandLine($commandLine);
+            $isClaimToken = $this->isClaimTokenCommandLine($commandLine);
 
             $clientIdentifier = $this->resolveClientIdentifier($fingerprint);
 
@@ -161,10 +162,10 @@ final class SshEntrypointCommand extends Command
             if (null === $user && !$hasFingerprint && !$isInstall && !$this->serverPolicy->allowKeyless()) {
                 throw new AccessDenied('unauthorized');
             }
-            // An unknown public key may recover an existing account via backup password or fetch installer
+            // An unknown public key may recover an existing account, claim admin via token, or fetch installer
             // even when self-service signup is closed; all other surfaces stay closed when allow-signup=false.
             $unknownKey = null === $user && $hasFingerprint;
-            if ($unknownKey && !$isRecover && !$isInstall && !$this->serverPolicy->allowSignup()) {
+            if ($unknownKey && !$isRecover && !$isInstall && !$isClaimToken && !$this->serverPolicy->allowSignup()) {
                 throw new AccessDenied('unauthorized');
             }
 
@@ -445,7 +446,7 @@ final class SshEntrypointCommand extends Command
             return true;
         }
 
-        if (in_array($tokens[0], ['signup', 'setup', 'config', 'recover', 'install', 'installer', 'deploy'], true)) {
+        if (in_array($tokens[0], ['signup', 'setup', 'config', 'recover', 'install', 'installer', 'deploy', 'claim'], true)) {
             return true;
         }
 
@@ -469,7 +470,7 @@ final class SshEntrypointCommand extends Command
                 return true;
             }
 
-            return in_array($helpTarget, ['signup', 'setup', 'config', 'recover', 'install', 'installer', 'deploy'], true);
+            return in_array($helpTarget, ['signup', 'setup', 'config', 'recover', 'install', 'installer', 'deploy', 'claim'], true);
         }
 
         return false;
@@ -520,6 +521,38 @@ final class SshEntrypointCommand extends Command
         }
 
         return 'help' === $tokens[0] && isset($tokens[1]) && 'recover' === $tokens[1];
+    }
+
+    private function isClaimTokenCommandLine(string $commandLine): bool
+    {
+        if ('' === $commandLine) {
+            return false;
+        }
+
+        try {
+            $tokens = (new StringInput($commandLine))->getRawTokens(false);
+        } catch (\Throwable) {
+            return false;
+        }
+
+        if ([] === $tokens) {
+            return false;
+        }
+
+        $cleanFirst = strtolower((string) preg_replace('/\s*\|\s*(bash|sh|iex|powershell)\b.*$/i', '', $tokens[0]));
+        if ('claim' === $cleanFirst) {
+            return true;
+        }
+
+        if (in_array($cleanFirst, ['signup', 'setup', 'config'], true)) {
+            foreach ($tokens as $token) {
+                if (str_starts_with($token, '--token') || str_starts_with($token, '-t')) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function resolveClientIdentifier(?string $fingerprint): string
@@ -685,6 +718,11 @@ final class SshEntrypointCommand extends Command
      */
     private function extractToken(InputInterface $input, string $commandLine): array
     {
+        // For self-registration / claim commands, `--token` is the bootstrap claim token, not a PAT.
+        if (preg_match('/^\s*(signup|setup|config|claim)\b/i', $commandLine)) {
+            return [$commandLine, null];
+        }
+
         $tokenOpt = $input->getOption('token');
         if (is_string($tokenOpt) && '' !== trim($tokenOpt)) {
             return [$commandLine, trim($tokenOpt)];

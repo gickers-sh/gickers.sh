@@ -23,6 +23,8 @@ final readonly class ServerSettings
         public string $anonAccess,
         public bool $allowKeyless,
         string $initialAdminKeys,
+        public string $initialAdminToken = '',
+        public bool $allowSignup = true,
     ) {
         $keys = [];
         foreach (preg_split('/\\R/', $initialAdminKeys) ?: [] as $line) {

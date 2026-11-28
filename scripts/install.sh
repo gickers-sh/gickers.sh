@@ -1818,7 +1818,7 @@ EOF
         KEY_OPTS+=(
             "Générer une clé SSH admin dédiée (ed25519)"
             "Coller une clé publique SSH (.pub)"
-            "Configurer plus tard (premier utilisateur connecté = admin)"
+            "Onboarding client sécurisé via token (ssh gickers.sh signup --token <token> | bash)"
         )
 
         gum_choose "Clé SSH de l'administrateur initial" "${KEY_OPTS[@]}" && KEY_CHOICE=$? || KEY_CHOICE=$?
@@ -1898,7 +1898,7 @@ EOF
     if [ -n "$ADMIN_SSH_KEY" ]; then
         printf "    • %sAdmin initial :%s        %s@%s%s\n" "$C_MUTED" "$C_RESET" "$C_GREEN" "$ADMIN_USER" "$C_RESET"
     else
-        printf "    • %sAdmin initial :%s        %sPremier utilisateur connecté (auto)%s\n" "$C_MUTED" "$C_RESET" "$C_MUTED" "$C_RESET"
+        printf "    • %sAdmin initial :%s        %sOnboarding sécurisé par token (signup --token)%s\n" "$C_MUTED" "$C_RESET" "$C_CYAN" "$C_RESET"
     fi
     printf "    • %sÉtape Docker :%s         %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_WHITE" "$STEP_DOCKER" "$C_RESET"
     printf "    • %sBascule SSHD :%s         %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_WHITE" "$STEP_SSHD" "$C_RESET"
@@ -2105,6 +2105,10 @@ if [ "${SKIP_APP_DEPLOY:-0}" -eq 0 ]; then
     if [ -z "$POSTGRES_PASSWORD" ]; then
         POSTGRES_PASSWORD=$(openssl rand -base64 24 2>/dev/null | tr -dc 'a-zA-Z0-9' | head -c 24 || echo "gickers_secret_pass_$(date +%s)")
     fi
+    ADMIN_CLAIM_TOKEN=""
+    if [ -z "$ADMIN_SSH_KEY" ]; then
+        ADMIN_CLAIM_TOKEN=$(openssl rand -hex 16 2>/dev/null || date +%s%N | sha256sum | head -c 32)
+    fi
 
     if [ -f .env.docker ]; then
         # Assurer les droits de lecture si le fichier appartient à l'utilisateur ou via sudo
@@ -2121,11 +2125,15 @@ if [ "${SKIP_APP_DEPLOY:-0}" -eq 0 ]; then
             cp .env.docker .env.docker.bak 2>/dev/null || true
             EXISTING_SECRET=$(grep -E '^APP_SECRET=' .env.docker 2>/dev/null | cut -d '=' -f2- || true)
             EXISTING_PG_PASS=$(grep -E '^POSTGRES_PASSWORD=' .env.docker 2>/dev/null | cut -d '=' -f2- || true)
+            EXISTING_CLAIM_TOKEN=$(grep -E '^SOFT_SERVE_INITIAL_ADMIN_TOKEN=' .env.docker 2>/dev/null | cut -d '=' -f2- | tr -d '"' || true)
             if [ -n "$EXISTING_SECRET" ]; then
                 APP_SECRET="$EXISTING_SECRET"
             fi
             if [ -n "$EXISTING_PG_PASS" ]; then
                 POSTGRES_PASSWORD="$EXISTING_PG_PASS"
+            fi
+            if [ -n "$EXISTING_CLAIM_TOKEN" ] && [ -z "$ADMIN_SSH_KEY" ]; then
+                ADMIN_CLAIM_TOKEN="$EXISTING_CLAIM_TOKEN"
             fi
         fi
     fi
@@ -2171,6 +2179,8 @@ SOFT_SERVE_LFS_ENABLED=${LFS_ENABLED}
 SOFT_SERVE_ANON_ACCESS=${ANON_ACCESS}
 SOFT_SERVE_ALLOW_KEYLESS=${ALLOW_KEYLESS}
 SOFT_SERVE_INITIAL_ADMIN_KEYS="${ADMIN_SSH_KEY}"
+SOFT_SERVE_INITIAL_ADMIN_TOKEN="${ADMIN_CLAIM_TOKEN}"
+SOFT_SERVE_ALLOW_SIGNUP=${ALLOW_SIGNUP}
 SOFT_SERVE_WEBHOOK_ALLOW_LIST=
 
 # Isolated Deploy Engine (Docker-in-Docker with gVisor sandbox & anti-SSRF)
@@ -2214,6 +2224,8 @@ SOFT_SERVE_LFS_ENABLED=${LFS_ENABLED}
 SOFT_SERVE_ANON_ACCESS=${ANON_ACCESS}
 SOFT_SERVE_ALLOW_KEYLESS=${ALLOW_KEYLESS}
 SOFT_SERVE_INITIAL_ADMIN_KEYS="${ADMIN_SSH_KEY}"
+SOFT_SERVE_INITIAL_ADMIN_TOKEN="${ADMIN_CLAIM_TOKEN}"
+SOFT_SERVE_ALLOW_SIGNUP=${ALLOW_SIGNUP}
 SOFT_SERVE_WEBHOOK_ALLOW_LIST=
 
 # Isolated Deploy Engine (Docker-in-Docker with gVisor sandbox & anti-SSRF)
@@ -2367,3 +2379,20 @@ cat << 'EOF'
 [38;2;65;72;104m[48;2;31;35;53m╰────────────────────────────────────────────────────────────────────────╯[m
 EOF
 echo ""
+
+if [ -n "$ADMIN_CLAIM_TOKEN" ]; then
+    SSH_PORT_CMD_OPT=""
+    if [ "$SSH_PORT" != "22" ] && [ -n "$SSH_PORT" ]; then
+        SSH_PORT_CMD_OPT="-p ${SSH_PORT} "
+    fi
+    printf "  %s╭────────────────────────────────────────────────────────────────────────╮%s\n" "$C_BOLD$C_GREEN" "$C_RESET"
+    printf "  %s│%s %s🔑 Initialisation Administrateur (Token sécurisé à usage unique)       %s│%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
+    printf "  %s├────────────────────────────────────────────────────────────────────────┤%s\n" "$C_BOLD$C_GREEN" "$C_RESET"
+    printf "  %s│%s Initialisez votre compte administrateur depuis votre poste client :     %s│%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
+    printf "  %s│%s                                                                        %s│%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
+    printf "  %s│%s   %s%sssh %s%s signup --token %s | bash%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD" "$C_CYAN" "$SSH_PORT_CMD_OPT" "$DOMAIN" "$ADMIN_CLAIM_TOKEN" "$C_RESET"
+    printf "  %s│%s                                                                        %s│%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
+    printf "  %s│%s Sur Windows (PowerShell) :                                             %s│%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
+    printf "  %s│%s   %s%sssh %s%s signup --token %s | iex%s\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD" "$C_CYAN" "$SSH_PORT_CMD_OPT" "$DOMAIN" "$ADMIN_CLAIM_TOKEN" "$C_RESET"
+    printf "  %s╰────────────────────────────────────────────────────────────────────────╯%s\n\n" "$C_BOLD$C_GREEN" "$C_RESET"
+fi

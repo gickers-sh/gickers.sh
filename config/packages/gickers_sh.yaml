@@ -2,6 +2,8 @@ parameters:
     gickers_sh.default_data_path: '%kernel.project_dir%/.data'
     codes_sh.default_data_path: '%gickers_sh.default_data_path%'
     env(SOFT_SERVE_DATA_PATH): '%gickers_sh.default_data_path%'
+    env(SOFT_SERVE_INITIAL_ADMIN_TOKEN): ''
+    env(SOFT_SERVE_ALLOW_SIGNUP): 'true'
 
 services:
     App\Shared\Infrastructure\Config\ServerSettings:
@@ -16,6 +18,8 @@ services:
             $anonAccess: '%env(SOFT_SERVE_ANON_ACCESS)%'
             $allowKeyless: '%env(bool:SOFT_SERVE_ALLOW_KEYLESS)%'
             $initialAdminKeys: '%env(SOFT_SERVE_INITIAL_ADMIN_KEYS)%'
+            $initialAdminToken: '%env(string:SOFT_SERVE_INITIAL_ADMIN_TOKEN)%'
+            $allowSignup: '%env(bool:SOFT_SERVE_ALLOW_SIGNUP)%'
 
 when@test:
     parameters:

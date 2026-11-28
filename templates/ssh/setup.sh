@@ -29,6 +29,7 @@ CONNECTED_FINGERPRINT="__CONNECTED_FINGERPRINT__"
 TEST_CMD="__TEST_CMD__"
 IS_SIGNUP="__IS_SIGNUP__"
 ALREADY_REGISTERED="__ALREADY_REGISTERED__"
+CLAIM_TOKEN="__CLAIM_TOKEN__"
 
 if [ "$ALREADY_REGISTERED" = "0" ]; then
     DEFAULT_USER="${USERNAME:-$(whoami 2>/dev/null || echo "user")}"
@@ -195,13 +196,17 @@ if [ "$ALREADY_REGISTERED" = "0" ]; then
 
     while [ "$REG_SUCCESS" -eq 0 ]; do
         TMP_ERR=$(mktemp 2>/dev/null || echo "/tmp/gickers_reg_err_$$")
+        EXTRA_TOKEN_ARGS=()
+        if [ -n "$CLAIM_TOKEN" ]; then
+            EXTRA_TOKEN_ARGS=(--token "$CLAIM_TOKEN")
+        fi
         REG_ARGS=("${SSH_PORT_ARGS[@]}")
         if [ "${#REG_KEY_ARGS[@]}" -gt 0 ]; then
-            REG_ARGS+=(-o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new "$HOST" signup "$USERNAME" --register "${REG_KEY_ARGS[@]}")
+            REG_ARGS+=(-o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new "$HOST" signup "$USERNAME" --register "${EXTRA_TOKEN_ARGS[@]}" "${REG_KEY_ARGS[@]}")
         elif [ -n "$KEY_PATH" ] && [ -f "$KEY_PATH" ]; then
-            REG_ARGS+=(-i "$KEY_PATH" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "$HOST" signup "$USERNAME" --register)
+            REG_ARGS+=(-i "$KEY_PATH" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new "$HOST" signup "$USERNAME" --register "${EXTRA_TOKEN_ARGS[@]}")
         else
-            REG_ARGS+=(-o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new "$HOST" signup "$USERNAME" --register)
+            REG_ARGS+=(-o IdentitiesOnly=no -o StrictHostKeyChecking=accept-new "$HOST" signup "$USERNAME" --register "${EXTRA_TOKEN_ARGS[@]}")
         fi
 
         ( ssh "${REG_ARGS[@]}" >"$TMP_ERR" 2>&1 ) &

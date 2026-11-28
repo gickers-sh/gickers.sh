@@ -74,8 +74,8 @@ final readonly class ServerPolicy
             return filter_var($setting->value(), \FILTER_VALIDATE_BOOLEAN);
         }
 
-        // Self-service signup is on by default; admins disable it via `settings allow-signup false`.
-        return true;
+        // Self-service signup is on by default unless configured otherwise in ServerSettings or disabled by admins.
+        return $this->serverSettings->allowSignup;
     }
 
     public function setAllowSignup(bool $allow): void
