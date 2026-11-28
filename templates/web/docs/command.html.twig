@@ -38,6 +38,11 @@
             {% if cmd.isGroup %}
                 <span class="doc-badge doc-badge-group">command group</span>
             {% endif %}
+            {% if cmd.wiki %}
+                <a href="{{ cmd.wiki.url }}" class="doc-badge doc-badge-wiki" title="Read Wiki Guide: {{ cmd.wiki.title }}">
+                    Wiki: {{ cmd.wiki.slug }} &rarr;
+                </a>
+            {% endif %}
         </div>
         <p class="doc-subtitle">{{ cmd.short }}</p>
     </div>
@@ -47,15 +52,6 @@
         <div class="doc-lead-card">
             <p class="doc-lead-text">{{ leadText }}</p>
         </div>
-    {% endif %}
-
-    {% if cmd.doc.scope %}
-        {% include 'components/callout.html.twig' with {
-            type: 'scope',
-            icon: '🔒',
-            title: 'Scope &amp; Access',
-            text: cmd.doc.scope
-        } only %}
     {% endif %}
 
     <section class="section" aria-label="Usage and Synopsis">
@@ -113,29 +109,6 @@
         </section>
     {% endif %}
 
-    {% if cmd.subcommands is not empty %}
-        <section class="section" aria-label="Subcommands">
-            <div class="section-header">
-                <h2>Subcommands</h2>
-                <span class="section-count">{{ cmd.subcommands|length }}</span>
-            </div>
-            <div class="cli-command-grid">
-                {% for sub in cmd.subcommands %}
-                    {% include 'components/command_card.html.twig' with {
-                        url: sub.url,
-                        title_text: sub.path ~ ' command details',
-                        name: sub.name,
-                        tier: sub.tier,
-                        description: sub.short,
-                        command: sshPrefix ~ ' ' ~ sub.path,
-                        btn_label: 'Copy',
-                        btn_title: 'Copy command'
-                    } only %}
-                {% endfor %}
-            </div>
-        </section>
-    {% endif %}
-
     {% if cmd.flags is not empty %}
         <section class="section" aria-label="Flags and options">
             <div class="section-header">
@@ -161,6 +134,38 @@
                         </li>
                     {% endfor %}
                 </ul>
+            </div>
+        </section>
+    {% endif %}
+
+    {% if cmd.doc.scope %}
+        {% include 'components/callout.html.twig' with {
+            type: 'scope',
+            icon: '🔒',
+            title: 'Scope &amp; Access',
+            text: cmd.doc.scope
+        } only %}
+    {% endif %}
+
+    {% if cmd.subcommands is not empty %}
+        <section class="section" aria-label="Subcommands">
+            <div class="section-header">
+                <h2>Subcommands</h2>
+                <span class="section-count">{{ cmd.subcommands|length }}</span>
+            </div>
+            <div class="cli-command-grid">
+                {% for sub in cmd.subcommands %}
+                    {% include 'components/command_card.html.twig' with {
+                        url: sub.url,
+                        title_text: sub.path ~ ' command details',
+                        name: sub.name,
+                        tier: sub.tier,
+                        description: sub.short,
+                        command: sshPrefix ~ ' ' ~ sub.path,
+                        btn_label: 'Copy',
+                        btn_title: 'Copy command'
+                    } only %}
+                {% endfor %}
             </div>
         </section>
     {% endif %}
@@ -205,6 +210,40 @@
             title: 'Output',
             text: cmd.doc.output
         } only %}
+    {% endif %}
+
+    {% if cmd.wiki %}
+        <section class="section" aria-label="Wiki Guide">
+            <div class="section-header">
+                <h2>Deep-Dive Guide &amp; Workflows</h2>
+                <span class="doc-badge doc-badge-category">{{ cmd.wiki.category }}</span>
+            </div>
+            <div class="doc-wiki-card">
+                <div class="doc-wiki-header">
+                    <div>
+                        <div class="doc-wiki-eyebrow">Wiki Article · <code>{{ cmd.wiki.slug }}</code></div>
+                        <h3 class="doc-wiki-title">{{ cmd.wiki.title }}</h3>
+                        <p class="doc-wiki-desc">Read extended functional walkthroughs, pipe recipes, integrations, and troubleshooting tips across Web, CLI, and TUI.</p>
+                    </div>
+                    <a href="{{ cmd.wiki.url }}" class="home-btn">Open Wiki Guide &rarr;</a>
+                </div>
+                <div class="doc-wiki-channels">
+                    <div class="doc-wiki-channel">
+                        <span class="doc-wiki-channel-label">Web</span>
+                        <a href="{{ cmd.wiki.url }}" class="doc-wiki-link"><code>{{ cmd.wiki.url }}</code></a>
+                    </div>
+                    <div class="doc-wiki-channel">
+                        <span class="doc-wiki-channel-label">CLI</span>
+                        <code class="doc-wiki-code">{{ cmd.wiki.cliCommand }}</code>
+                        {{ ui.copy_btn(cmd.wiki.cliCommand, 'Copy', 'copy-btn-sm', 'Copy SSH wiki command') }}
+                    </div>
+                    <div class="doc-wiki-channel">
+                        <span class="doc-wiki-channel-label">TUI</span>
+                        <code class="doc-wiki-code">{{ sshPrefix }} &rarr; {{ cmd.wiki.tuiPath }}</code>
+                    </div>
+                </div>
+            </div>
+        </section>
     {% endif %}
 {% endblock %}
 

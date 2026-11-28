@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\UI\Ssh\Help;
 
+use App\Shared\Infrastructure\Config\ServerSettings;
 use App\UI\Tui\Render\Theme;
 
 /**
  * Renders a {@see CommandSpec} for SSH CLI help output.
  *
- * In raw mode ($decorated = false), reproduces upstream Soft Serve's cobra
- * help output (custom UsageTemplate + pflag FlagUsages) byte-for-byte.
+ * In raw mode ($decorated = false), reproduces plain text help output.
  *
  * In decorated mode ($decorated = true), applies TokyoNight Theme styling
  * while maintaining exact column alignments and spacing.
@@ -20,16 +20,22 @@ final class HelpRenderer
     public function __construct(
         private readonly ?\Twig\Environment $twig = null,
         private readonly ?\App\UI\Tui\Render\TwigTuiRenderer $twigTui = null,
+        private readonly ?ServerSettings $serverSettings = null,
     ) {
     }
 
     public function renderTemplate(CommandSpec $command, string $sshCommand, int $width = 80): string
     {
+        $wikiSlug = $command->resolveWikiSlug();
+        $httpBase = self::httpBaseFromSsh($sshCommand, $this->serverSettings?->httpPublicUrl);
+
         if (null !== $this->twigTui) {
             return $this->twigTui->render('@cli/help/command.html.twig', [
                 'command' => $command,
                 'ssh_command' => $sshCommand,
                 'flags' => $command->flags,
+                'wiki_slug' => $wikiSlug,
+                'http_base' => $httpBase,
             ], $width);
         }
 
@@ -38,6 +44,8 @@ final class HelpRenderer
                 'command' => $command,
                 'ssh_command' => $sshCommand,
                 'flags' => $command->flags,
+                'wiki_slug' => $wikiSlug,
+                'http_base' => $httpBase,
             ]);
         }
 
@@ -47,7 +55,7 @@ final class HelpRenderer
     /**
      * @param string $sshCommand the "ssh [-p PORT] HOST" prefix, derived from the SSH public URL
      */
-    public function render(CommandSpec $command, string $sshCommand, bool $decorated = false): string
+    public function render(CommandSpec $command, string $sshCommand, bool $decorated = false, ?string $httpPublicUrl = null): string
     {
         $desc = '' !== $command->long ? $command->long : $command->short;
         $descriptionLines = [];
@@ -197,7 +205,7 @@ final class HelpRenderer
         // 6. Examples
         if ('' !== $command->example) {
             $examplesHeading = $decorated ? Theme::style('Examples:', Theme::BLUE, bold: true) : 'Examples:';
-            $exampleBody = self::interpolateSsh($command->example, $sshCommand);
+            $exampleBody = self::interpolateSsh($command->example, $sshCommand, $httpPublicUrl ?? $this->serverSettings?->httpPublicUrl);
             if ($decorated) {
                 $styledLines = [];
                 foreach (explode("\n", $exampleBody) as $line) {
@@ -206,6 +214,29 @@ final class HelpRenderer
                 $blocks[] = $examplesHeading . "\n" . implode("\n", $styledLines);
             } else {
                 $blocks[] = $examplesHeading . "\n" . $exampleBody;
+            }
+        }
+
+        // 7. Wiki guide links (Web / CLI / TUI)
+        $wikiSlug = $command->resolveWikiSlug();
+        if ('' !== $wikiSlug) {
+            $httpBase = self::httpBaseFromSsh($sshCommand, $httpPublicUrl ?? $this->serverSettings?->httpPublicUrl);
+            $webUrl = $httpBase . '/wiki/' . $wikiSlug;
+            $cliCmd = $sshCommand . ' wiki show ' . $wikiSlug;
+            $wikiHeading = $decorated ? Theme::style('Wiki:', Theme::BLUE, bold: true) : 'Wiki:';
+
+            if ($decorated) {
+                $blocks[] = $wikiHeading
+                    . "\n  " . Theme::style('Web:', Theme::TEAL, bold: true) . '  ' . Theme::style($webUrl, Theme::BLUE, underline: true)
+                    . "\n  " . Theme::style('CLI:', Theme::TEAL, bold: true) . '  ' . CliHighlighter::highlightLine($cliCmd)
+                    . "\n  " . Theme::style('TUI:', Theme::TEAL, bold: true) . '  ' . CliHighlighter::highlightLine($sshCommand)
+                    . Theme::style(' → ', Theme::MUTED) . Theme::style('Wiki', Theme::CYAN, bold: true)
+                    . Theme::style(' → ', Theme::MUTED) . Theme::style($wikiSlug, Theme::GREEN);
+            } else {
+                $blocks[] = $wikiHeading
+                    . "\n  Web:  " . $webUrl
+                    . "\n  CLI:  " . $cliCmd
+                    . "\n  TUI:  " . $sshCommand . ' → Wiki → ' . $wikiSlug;
             }
         }
 
@@ -433,12 +464,13 @@ final class HelpRenderer
     }
 
     /**
-     * Interpolates SSH command placeholders in example text:
+     * Interpolates SSH and HTTP command placeholders in example text:
      * - `{ssh}` -> Full SSH command for the current session (e.g. `ssh -p 2222 user@host` or `ssh host`)
      * - `{ssh-base}` -> SSH command without user prefix (e.g. `ssh -p 2222 host` or `ssh host`)
      * - `{ssh:<user>}` -> SSH command targeting a custom user (e.g. `ssh -p 2222 <user>@host` or `ssh <user>@host`)
+     * - `{http}` -> Public HTTP base URL (e.g. `https://gickers.sh`)
      */
-    public static function interpolateSsh(string $text, string $sshCommand): string
+    public static function interpolateSsh(string $text, string $sshCommand, ?string $httpPublicUrl = null): string
     {
         $trimmed = trim($sshCommand);
         if (1 === preg_match('/^(.*?\bssh(?:\s+-[a-zA-Z0-9]+(?:\s+[^\s]+)?)*)\s+(?:([^@\s]+)@)?([^\s]+)$/', $trimmed, $matches)) {
@@ -451,15 +483,40 @@ final class HelpRenderer
             $baseSsh = $sshCommand;
         }
 
+        $httpBase = self::httpBaseFromSsh($sshCommand, $httpPublicUrl);
+
         $result = str_replace(
-            ['{ssh-base}', '{ssh}'],
-            [$baseSsh, $sshCommand],
+            ['{ssh-base}', '{ssh}', '{http}'],
+            [$baseSsh, $sshCommand, $httpBase],
             ltrim(rtrim($text), "\r\n")
         );
 
         return (string) preg_replace_callback('/\{ssh:([^}]+)\}/', static function (array $m) use ($prefix, $host): string {
             return $prefix . ' ' . $m[1] . '@' . $host;
         }, $result);
+    }
+
+    /**
+     * Resolves the HTTP base URL from explicit settings or falls back cleanly from the SSH target.
+     */
+    public static function httpBaseFromSsh(string $sshCommand, ?string $httpPublicUrl = null): string
+    {
+        $explicit = trim((string) $httpPublicUrl);
+        if ('' !== $explicit) {
+            return rtrim($explicit, '/');
+        }
+
+        $trimmed = trim($sshCommand);
+        $host = 'gickers.sh';
+        if (1 === preg_match('/^(?:.*?\bssh(?:\s+-[a-zA-Z0-9]+(?:\s+[^\s]+)?)*)\s+(?:[^@\s]+@)?([^\s]+)$/', $trimmed, $matches)) {
+            $host = $matches[1];
+        }
+
+        if ('localhost' === $host || '127.0.0.1' === $host) {
+            return 'http://' . $host . ':23232';
+        }
+
+        return 'https://' . $host;
     }
 
     /**

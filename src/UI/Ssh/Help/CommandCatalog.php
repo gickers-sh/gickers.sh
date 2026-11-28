@@ -58,6 +58,7 @@ EX;
 
         $root = new CommandSpec('', '', '', $rootLong, [], [], false, example: $example);
         if ($canAnonRead) {
+            $root->withWiki('home');
             $root->addChild($this->aboutSpec());
         }
         $root->addChild($this->signupSpec());
@@ -65,6 +66,10 @@ EX;
         $root->addChild($this->installSpec());
         if ($canAnonRead) {
             $root->addChild($this->wiki(false));
+        } else {
+            foreach ($root->children as $child) {
+                $child->wikiSlug = '';
+            }
         }
 
         return $root;
@@ -161,7 +166,7 @@ DESC;
   {ssh} pubkey list
   {ssh} token create "ci-pipeline" --expires-in 30d
 EX;
-        $root = new CommandSpec('', '', '', $rootLong, [], [], false, false, $rootExample);
+        $root = (new CommandSpec('', '', '', $rootLong, [], [], false, false, $rootExample))->withWiki('home');
         $root->addUi(new CommandUiSpec('explore', 'read', 'TUI Interactive', 'Open the repository in the interactive terminal TUI', '-t {repo}', [], 'repo', 1));
         $root->addUi(new CommandUiSpec('explore', 'read', 'Terminal TUI', 'Explore repositories interactively with the terminal TUI', '', [], 'global', 1));
 
@@ -248,7 +253,7 @@ DESC;
   # Change your account username
   {ssh} set-username alice
 EX;
-        $root->addChild($this->leaf('set-username USERNAME', 'Set your username', $setUsernameLong, [], [], $setUsernameExample)->withUi(
+        $root->addChild($this->leaf('set-username USERNAME', 'Set your username', $setUsernameLong, [], [], $setUsernameExample)->withWiki('signup')->withUi(
             category: 'identity',
             title: 'Set Username',
             tier: 'read',
@@ -293,7 +298,7 @@ DESC;
   # Search across all wiki pages
   {ssh} wiki search "ssh key"
 EX;
-        $wiki = $this->group('wiki', 'Browse and manage the server wiki', [], $wikiLong, $wikiExample);
+        $wiki = $this->group('wiki', 'Browse and manage the server wiki', [], $wikiLong, $wikiExample)->withWiki('server-admin');
 
         $listLong = <<<'DESC'
 Lists all wiki pages ordered by position, category, and title.
@@ -456,12 +461,10 @@ EX;
     private function web(): CommandSpec
     {
         $webLong = <<<'DESC'
-Authenticate your browser against the web interface using your SSH key.
+Authenticate your browser against the web interface using a single-use SSH magic link.
 
 Scope:
   Any authenticated user.
-
-Because your SSH key already proves who you are, `web login` prints a short-lived magic link. Opening it in your browser sets a session cookie, after which repository pages reveal the full command palette you are authorized for (admin-only actions appear on repositories you administer). `web logout` revokes every active browser session.
 DESC;
         $webExample = <<<'EX'
   # Print a magic link to sign your browser in
@@ -470,8 +473,15 @@ DESC;
   # Revoke every active browser session
   {ssh} web logout
 EX;
-        $web = $this->group('web', 'Authenticate the web interface', [], $webLong, $webExample);
-        $web->addChild($this->leaf('login', 'Log your browser in and open the web interface')->withUi(
+        $web = $this->group('web', 'Authenticate the web interface', [], $webLong, $webExample)->withWiki('web-login');
+        $web->addChild($this->leaf(
+            'login',
+            'Log your browser in and open the web interface',
+            "Mints a single-use magic login link (valid 10 min) and copies it to your clipboard.\n\nScope:\n  Any authenticated user.",
+            [],
+            [],
+            "  # Print and copy a single-use web login URL\n  {ssh} web login",
+        )->withUi(
             category: 'identity',
             title: 'SSH Web Login',
             tier: 'read',
@@ -481,7 +491,14 @@ EX;
             scope: 'global',
             order: 10,
         ));
-        $web->addChild($this->leaf('logout', 'Sign out of every active browser session')->withUi(
+        $web->addChild($this->leaf(
+            'logout',
+            'Sign out of every active browser session',
+            "Revokes all active web session cookies associated with your account.\n\nScope:\n  Any authenticated user.",
+            [],
+            [],
+            "  # Invalidate every active browser session\n  {ssh} web logout",
+        )->withUi(
             category: 'identity',
             title: 'SSH Web Logout',
             tier: 'read',
@@ -563,7 +580,7 @@ EX;
             new FlagSpec('', 'key-path', 'string', 'predefined private key path'),
             new FlagSpec('', 'ps1', 'bool', 'force PowerShell installer script'),
             new FlagSpec('r', 'raw', 'bool', 'print raw ~/.ssh/config snippet only'),
-        ], $signupExample)->withUi(
+        ], $signupExample)->withWiki('signup')->withUi(
             category: 'identity',
             title: 'Sign Up',
             tier: 'read',
@@ -637,7 +654,7 @@ EX;
             new FlagSpec('', 'skip-docker', 'bool', 'skip Docker CE installation'),
             new FlagSpec('', 'skip-sshd-switch', 'bool', 'do not switch host OpenSSH port from 22'),
             new FlagSpec('y', 'yes', 'bool', 'non-interactive mode with defaults'),
-        ], $installExample)->withUi(
+        ], $installExample)->withWiki('server-admin')->withUi(
             category: 'system',
             title: 'Install & Deploy',
             tier: 'read',
@@ -667,7 +684,7 @@ EX;
 
         return $this->leaf('recover USERNAME', 'Recover account access with your backup password', $recoverLong, [], [
             new FlagSpec('k', 'key', 'string', 'public key to register instead of the one you connected with'),
-        ], $recoverExample)->withUi(
+        ], $recoverExample)->withWiki('signup')->withUi(
             category: 'identity',
             title: 'Recover Account',
             tier: 'read',
@@ -698,7 +715,7 @@ DESC;
   # Remove an obsolete SSH public key
   {ssh} pubkey remove "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... old-key"
 EX;
-        $pubkey = $this->group('pubkey', 'Manage your public keys', ['pubkeys', 'publickey', 'publickeys'], $pubkeyLong, $pubkeyExample);
+        $pubkey = $this->group('pubkey', 'Manage your public keys', ['pubkeys', 'publickey', 'publickeys'], $pubkeyLong, $pubkeyExample)->withWiki('ssh-keys');
 
         $addLong = <<<'DESC'
 Associates an additional OpenSSH public key with your user account.
@@ -789,7 +806,7 @@ Manage host server configuration, status metrics, and one-shot updates.
 Scope:
   Server Admin only.
 DESC;
-        $server = $this->group('server', 'Manage host server, status, settings, and updates', ['host'], $serverLong);
+        $server = $this->group('server', 'Manage host server, status, settings, and updates', ['host'], $serverLong)->withWiki('server-admin');
 
         $statusLong = <<<'DESC'
 Displays server health, system resources (disk usage, OS/kernel, PHP runtime), and platform metrics (users, repositories, active deployments).
@@ -848,7 +865,7 @@ Manage global gickers.sh server configuration, anonymous access permissions, key
 Scope:
   Server Admin only (hidden from non-admin users in command listings).
 DESC;
-        $settings = $this->group('settings', 'Manage server settings', [], $settingsLong);
+        $settings = $this->group('settings', 'Manage server settings', [], $settingsLong)->withWiki('server-admin');
 
         $allowKeylessLong = <<<'DESC'
 Gets or sets whether users without an SSH key can clone or read public repositories.
@@ -978,7 +995,7 @@ Manage personal access tokens (PAT). Tokens can be used for automated scripts, C
 Scope:
   Authenticated user.
 DESC;
-        $token = $this->group('token', 'Manage access tokens', ['access-token'], $tokenLong);
+        $token = $this->group('token', 'Manage access tokens', ['access-token'], $tokenLong)->withWiki('web-login');
 
         $createLong = <<<'DESC'
 Generates a new personal access token with optional lifetime expiration.
@@ -1074,7 +1091,7 @@ Manage user accounts, assign server administrator privileges, and add or remove 
 Scope:
   Server Admin only (hidden from non-admin users in command listings).
 DESC;
-        $user = $this->group('user', 'Manage users', ['users'], $userLong);
+        $user = $this->group('user', 'Manage users', ['users'], $userLong)->withWiki('server-admin');
 
         $addPubkeyLong = <<<'DESC'
 Adds an OpenSSH public key to a specified user account.
@@ -1361,7 +1378,7 @@ DESC;
   # Read a file directly from the repository
   {ssh} repo blob my-app main composer.json
 EX;
-        $repo = $this->group('repo', 'Manage repositories', ['repos', 'repository', 'repositories'], $repoLong, $repoExample);
+        $repo = $this->group('repo', 'Manage repositories', ['repos', 'repository', 'repositories'], $repoLong, $repoExample)->withWiki('repo-management');
 
         $blobLong = <<<'DESC'
 Displays the content of a file at a specific Git reference. Supports syntax highlighting, line numbers, or raw verbatim bytes.
@@ -1422,7 +1439,7 @@ DESC;
   # Protect the main branch against force pushes
   {ssh} repo branch protect my-app main --no-force --no-delete
 EX;
-        $branch = $this->group('branch', 'Manage repository branches', [], $branchLong, $branchExample);
+        $branch = $this->group('branch', 'Manage repository branches', [], $branchLong, $branchExample)->withWiki('branch-governance');
 
         $branchDefaultLong = <<<'DESC'
 Gets the current default branch (symbolic HEAD), or updates it to BRANCH if provided. The default branch is checked out by default when users clone without specifying a branch.
@@ -1588,7 +1605,7 @@ DESC;
   # Remove a collaborator
   {ssh} repo collab remove my-app bob
 EX;
-        $collab = $this->group('collab', 'Manage collaborators', ['collabs', 'collaborator', 'collaborators'], $collabLong, $collabExample);
+        $collab = $this->group('collab', 'Manage collaborators', ['collabs', 'collaborator', 'collaborators'], $collabLong, $collabExample)->withWiki('collaboration');
 
         $collabAddLong = <<<'DESC'
 Add a collaborator to a repo. LEVEL can be one of: no-access, read-only, read-write, or admin-access. Defaults to read-write.
@@ -2222,7 +2239,7 @@ DESC;
   # Delete an obsolete tag
   {ssh} repo tag delete my-app v1.0.0-rc1
 EX;
-        $tag = $this->group('tag', 'Manage repository tags', [], $tagLong, $tagExample);
+        $tag = $this->group('tag', 'Manage repository tags', [], $tagLong, $tagExample)->withWiki('branch-governance');
 
         $tagDeleteLong = <<<'DESC'
 Deletes a Git tag ref from the repository.
@@ -2329,7 +2346,7 @@ DESC;
   # Allow unsigned commits
   {ssh} repo signatures my-app false
 EX;
-        $signaturesLeaf = $this->leaf('signatures REPOSITORY [true|false]', 'Require or check verified signed commits on push', $signaturesLong, [], [], $signaturesExample);
+        $signaturesLeaf = $this->leaf('signatures REPOSITORY [true|false]', 'Require or check verified signed commits on push', $signaturesLong, [], [], $signaturesExample)->withWiki('branch-governance');
         $signaturesLeaf->addUi(new CommandUiSpec(
             category: 'git',
             tier: 'read',
@@ -2390,7 +2407,7 @@ DESC;
   # Delete a webhook by ID
   {ssh} repo webhook delete my-app 2
 EX;
-        $webhook = $this->group('webhook', 'Manage repository webhooks', ['webhooks'], $webhookLong, $webhookExample);
+        $webhook = $this->group('webhook', 'Manage repository webhooks', ['webhooks'], $webhookLong, $webhookExample)->withWiki('branch-governance');
 
         $createLong = <<<'DESC'
 Registers a new webhook endpoint. When subscribed Git events occur, gickers.sh sends an HTTP POST request with a signed payload to the target URL.
@@ -2514,7 +2531,7 @@ DESC;
   {ssh} repo deploy status my-app
   {ssh} repo deploy logs my-app main --follow
 EX;
-        $deploy = $this->group('deploy', 'Manage repository Docker deployments', ['deployments', 'deployment'], $deployLong, $deployExample);
+        $deploy = $this->group('deploy', 'Manage repository Docker deployments', ['deployments', 'deployment'], $deployLong, $deployExample)->withWiki('deploy-guide');
 
         $deploy->addChild($this->leaf(
             'enable REPOSITORY [REF]',
@@ -2617,6 +2634,10 @@ EX
         $deploy->addChild($this->leaf(
             'stop REPOSITORY REF',
             'Stop running containers for a deployed branch or tag',
+            "Stops running service containers for the specified branch or tag without removing configuration.\n\nScope:\n  Collaborator (RW) or Repository Admin.",
+            [],
+            [],
+            "  # Stop containers on main\n  {ssh} repo deploy stop my-app main",
         )->withUi(
             category: 'admin',
             title: 'Stop Deployment Containers',
@@ -2631,6 +2652,10 @@ EX
         $deploy->addChild($this->leaf(
             'restart REPOSITORY REF',
             'Restart containers for a deployed branch or tag',
+            "Restarts active service containers for the specified branch or tag without rebuilding.\n\nScope:\n  Collaborator (RW) or Repository Admin.",
+            [],
+            [],
+            "  # Restart containers on main\n  {ssh} repo deploy restart my-app main",
         )->withUi(
             category: 'admin',
             title: 'Restart Deployment Containers',
@@ -2645,13 +2670,14 @@ EX
         $deploy->addChild($this->leaf(
             'logs REPOSITORY REF',
             'Print build and container logs for a deployed branch or tag',
-            'Prints release build logs and service container logs.',
+            "Prints release build logs or live service container logs.\n\nScope:\n  Collaborator (RW) or Repository Admin.",
             [],
             [
                 new FlagSpec('s', 'service', 'string', 'filter container logs by service name'),
                 new FlagSpec('b', 'build', '', 'show only build logs of the latest release'),
                 new FlagSpec('f', 'follow', '', 'follow build logs until user stops (Ctrl+C)'),
             ],
+            "  # Follow logs for web service on main\n  {ssh} repo deploy logs my-app main -s web -f",
         )->withUi(
             category: 'git',
             title: 'Deployment Logs',
@@ -2671,15 +2697,16 @@ EX
         $deploy->addChild($this->leaf(
             'allow REPOSITORY [true|false]',
             'Allow or disallow deployments on a repository or ref pattern (Admin)',
-            'Server admin command to grant or revoke deployment rights on a repository or a specific branch/tag/glob pattern.',
+            "Grants or revokes deployment authorization on a repository or ref glob pattern.\n\nScope:\n  Server Admin.",
             [],
             [new FlagSpec('r', 'ref', 'string', 'branch, tag, or glob pattern (e.g. main, release/*, v*)')],
+            "  # Allow deployments on release/*\n  {ssh} repo deploy allow my-app true -r \"release/*\"",
         ));
 
         $deploy->addChild($this->leaf(
             'quota REPOSITORY',
             'Configure or view resource quotas for a repository or ref pattern (Admin)',
-            'Server admin command to set or inspect CPU, RAM, PIDs, max-envs, and max-services quotas per repository or branch/tag pattern.',
+            "Sets or inspects CPU, RAM, PIDs, and environment/service quotas per repository or ref pattern.\n\nScope:\n  Server Admin.",
             [],
             [
                 new FlagSpec('r', 'ref', 'string', 'branch, tag, or glob pattern'),
@@ -2689,15 +2716,33 @@ EX
                 new FlagSpec(null, 'max-envs', 'int', 'Max concurrent deployed environments'),
                 new FlagSpec(null, 'max-services', 'int', 'Max services allowed in compose.yaml'),
             ],
+            "  # Cap main deployment to 1.5 CPUs and 1 GB RAM\n  {ssh} repo deploy quota my-app -r main --cpus 1.5 --memory 1g",
         ));
 
         $deploy->addChild($this->leaf(
             'exec REPOSITORY REF SERVICE COMMAND...',
             'Execute a one-shot command inside a running service container (Admin)',
+            "Runs a non-interactive maintenance command inside a deployed service container.\n\nScope:\n  Server Admin.",
+            [],
+            [],
+            "  # Run database migrations inside web container\n  {ssh} repo deploy exec my-app main web php bin/console doctrine:migrations:migrate -n",
         ));
 
-        $envGroup = $this->group('env', 'Manage encrypted environment variables per deployed branch or tag');
-        $envGroup->addChild($this->leaf('set REPOSITORY REF KEY=VALUE...', 'Set encrypted environment variables')->withUi(
+        $envGroup = $this->group(
+            'env',
+            'Manage encrypted environment variables per deployed branch or tag',
+            [],
+            "Manage libsodium-encrypted environment variables injected into deployed containers.\n\nScope:\n  Collaborator (RW) or Repository Admin.",
+            "  # Set and list secrets\n  {ssh} repo deploy env set my-app main APP_ENV=prod\n  {ssh} repo deploy env list my-app main",
+        );
+        $envGroup->addChild($this->leaf(
+            'set REPOSITORY REF KEY=VALUE...',
+            'Set encrypted environment variables',
+            "Encrypts and stores one or more KEY=VALUE secrets for a deployed branch or tag.\n\nScope:\n  Collaborator (RW) or Repository Admin.",
+            [],
+            [],
+            "  # Set production secrets\n  {ssh} repo deploy env set my-app main APP_ENV=prod API_KEY=secret",
+        )->withUi(
             category: 'admin',
             title: 'Set Deploy Env Var',
             tier: 'write',
@@ -2710,24 +2755,52 @@ EX
             scope: 'repo',
             order: 47,
         ));
-        $envGroup->addChild($this->leaf('get REPOSITORY REF KEY', 'Get an environment variable', '', [], [
-            new FlagSpec(null, 'reveal', '', 'reveal the decrypted secret value'),
-        ]));
-        $envGroup->addChild($this->leaf('unset REPOSITORY REF KEY', 'Remove an environment variable', '', ['rm', 'delete']));
-        $envGroup->addChild($this->leaf('list REPOSITORY REF', 'List environment variable keys', '', ['ls']));
+        $envGroup->addChild($this->leaf(
+            'get REPOSITORY REF KEY',
+            'Get an environment variable',
+            "Checks whether a key is set, or reveals its decrypted value with --reveal.\n\nScope:\n  Collaborator (RW) or Repository Admin.",
+            [],
+            [
+                new FlagSpec(null, 'reveal', '', 'reveal the decrypted secret value'),
+            ],
+            "  # Reveal secret value\n  {ssh} repo deploy env get my-app main APP_ENV --reveal",
+        ));
+        $envGroup->addChild($this->leaf(
+            'unset REPOSITORY REF KEY',
+            'Remove an environment variable',
+            "Deletes an encrypted environment variable from a deployed branch or tag.\n\nScope:\n  Collaborator (RW) or Repository Admin.",
+            ['rm', 'delete'],
+            [],
+            "  # Remove obsolete variable\n  {ssh} repo deploy env unset my-app main LEGACY_KEY",
+        ));
+        $envGroup->addChild($this->leaf(
+            'list REPOSITORY REF',
+            'List environment variable keys',
+            "Lists all configured environment variable names (values stay masked).\n\nScope:\n  Collaborator (RW) or Repository Admin.",
+            ['ls'],
+            [],
+            "  # List configured env keys\n  {ssh} repo deploy env list my-app main",
+        ));
         $deploy->addChild($envGroup);
 
-        $domainGroup = $this->group('domain', 'Manage custom domains and Caddy service exposure per deployed branch or tag');
+        $domainGroup = $this->group(
+            'domain',
+            'Manage custom domains and Caddy service exposure per deployed branch or tag',
+            [],
+            "Attach, inspect, and remove custom domains routed via Caddy with automatic HTTPS.\n\nScope:\n  Collaborator (RW) or Repository Admin.",
+            "  # Attach and list domains\n  {ssh} repo deploy domain add my-app main app.example.com -s web -p 80\n  {ssh} repo deploy domain list my-app main",
+        );
         $domainGroup->addChild($this->leaf(
             'add REPOSITORY REF DOMAIN',
             'Attach a custom domain to an explicit service and internal port',
-            'Validates FQDN syntax, checks for collisions and public DNS resolution, attaches the service to Caddy, and runs an HTTP smoke test.',
+            "Validates FQDN syntax and DNS, binds Caddy TLS routing to a service port, and smoke-tests HTTP.\n\nScope:\n  Collaborator (RW) or Repository Admin.",
             [],
             [
                 new FlagSpec('s', 'service', 'string', 'target service name in compose.yaml (required)'),
                 new FlagSpec('p', 'port', 'int', 'target internal container port (required)'),
                 new FlagSpec(null, 'skip-dns-check', '', 'skip public DNS resolution check'),
             ],
+            "  # Route app.example.com to service web:80\n  {ssh} repo deploy domain add my-app main app.example.com --service web --port 80",
         )->withUi(
             category: 'admin',
             title: 'Add Deploy Domain',
@@ -2743,9 +2816,30 @@ EX
             scope: 'repo',
             order: 48,
         ));
-        $domainGroup->addChild($this->leaf('get REPOSITORY REF DOMAIN', 'Get details of an attached domain'));
-        $domainGroup->addChild($this->leaf('remove REPOSITORY REF DOMAIN', 'Remove an attached domain', '', ['rm', 'delete']));
-        $domainGroup->addChild($this->leaf('list REPOSITORY [REF]', 'List attached domains', '', ['ls']));
+        $domainGroup->addChild($this->leaf(
+            'get REPOSITORY REF DOMAIN',
+            'Get details of an attached domain',
+            "Displays routing target (service/port) and TLS status for an attached domain.\n\nScope:\n  Collaborator (RW) or Repository Admin.",
+            [],
+            [],
+            "  # Inspect attached domain\n  {ssh} repo deploy domain get my-app main app.example.com",
+        ));
+        $domainGroup->addChild($this->leaf(
+            'remove REPOSITORY REF DOMAIN',
+            'Remove an attached domain',
+            "Detaches a custom domain from Caddy routing for the specified environment.\n\nScope:\n  Collaborator (RW) or Repository Admin.",
+            ['rm', 'delete'],
+            [],
+            "  # Detach domain\n  {ssh} repo deploy domain remove my-app main app.example.com",
+        ));
+        $domainGroup->addChild($this->leaf(
+            'list REPOSITORY [REF]',
+            'List attached domains',
+            "Lists all custom domains attached to the repository or a specific branch/tag.\n\nScope:\n  Collaborator (RW) or Repository Admin.",
+            ['ls'],
+            [],
+            "  # List all domains for repository\n  {ssh} repo deploy domain list my-app",
+        ));
         $deploy->addChild($domainGroup);
 
         return $deploy;

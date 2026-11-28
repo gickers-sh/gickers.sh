@@ -39,6 +39,11 @@ Examples:
   ssh -p 2223 localhost pubkey list
   ssh -p 2223 localhost token create "ci-pipeline" --expires-in 30d
 
+Wiki:
+  Web:  http://localhost:23232/wiki/home
+  CLI:  ssh -p 2223 localhost wiki show home
+  TUI:  ssh -p 2223 localhost → Wiki → home
+
 Use "ssh -p 2223 localhost [command] --help" for more information about a command.
 ########## help about
 Displays the server about / README document (from the .soft-serve repository) rendered in the terminal using Termstrap.
@@ -59,6 +64,11 @@ Output:
 Examples:
   # Display server about page
   ssh -p 2223 localhost about
+
+Wiki:
+  Web:  http://localhost:23232/wiki/home
+  CLI:  ssh -p 2223 localhost wiki show home
+  TUI:  ssh -p 2223 localhost → Wiki → home
 ########## help info
 Displays identity information for the currently connected SSH session: username, global server administrator status, and all registered OpenSSH public keys.
 
@@ -77,6 +87,11 @@ Output:
 Examples:
   # Check your account profile and keys
   ssh -p 2223 localhost info
+
+Wiki:
+  Web:  http://localhost:23232/wiki/home
+  CLI:  ssh -p 2223 localhost wiki show home
+  TUI:  ssh -p 2223 localhost → Wiki → home
 ########## help install
 Generates a self-contained one-shot installer & deployment wizard for gickers.sh on your local machine or remote VPS.
 
@@ -121,6 +136,11 @@ Examples:
 
   # Automated non-interactive deployment
   ssh -p 2223 localhost install --domain code.example.com --yes | bash
+
+Wiki:
+  Web:  http://localhost:23232/wiki/server-admin
+  CLI:  ssh -p 2223 localhost wiki show server-admin
+  TUI:  ssh -p 2223 localhost → Wiki → server-admin
 ########## help pubkey
 Manage OpenSSH public keys linked to your user account. Registered keys authenticate SSH CLI commands, interactive TUI browsing, and Git push/pull operations.
 
@@ -151,6 +171,11 @@ Examples:
   # Remove an obsolete SSH public key
   ssh -p 2223 localhost pubkey remove "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... old-key"
 
+Wiki:
+  Web:  http://localhost:23232/wiki/ssh-keys
+  CLI:  ssh -p 2223 localhost wiki show ssh-keys
+  TUI:  ssh -p 2223 localhost → Wiki → ssh-keys
+
 Use "ssh -p 2223 localhost pubkey [command] --help" for more information about a command.
 ########## help pubkey add
 Associates an additional OpenSSH public key with your user account.
@@ -176,6 +201,11 @@ Examples:
 
   # Add an RSA public key
   ssh -p 2223 localhost pubkey add "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ... laptop"
+
+Wiki:
+  Web:  http://localhost:23232/wiki/ssh-keys
+  CLI:  ssh -p 2223 localhost wiki show ssh-keys
+  TUI:  ssh -p 2223 localhost → Wiki → ssh-keys
 ########## help pubkey list
 Displays all OpenSSH public keys registered under your user account, including key algorithm, base64 payload, and optional comment.
 
@@ -194,6 +224,11 @@ Scope:
 Examples:
   # List all your authorized keys
   ssh -p 2223 localhost pubkey list
+
+Wiki:
+  Web:  http://localhost:23232/wiki/ssh-keys
+  CLI:  ssh -p 2223 localhost wiki show ssh-keys
+  TUI:  ssh -p 2223 localhost → Wiki → ssh-keys
 ########## help pubkey remove
 Unlinks an existing OpenSSH public key from your account.
 
@@ -215,6 +250,11 @@ Notes:
 Examples:
   # Remove a key by its full public key line
   ssh -p 2223 localhost pubkey remove "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG... user@desktop"
+
+Wiki:
+  Web:  http://localhost:23232/wiki/ssh-keys
+  CLI:  ssh -p 2223 localhost wiki show ssh-keys
+  TUI:  ssh -p 2223 localhost → Wiki → ssh-keys
 ########## help repo
 Create, configure, inspect, and administer Git repositories hosted on gickers.sh.
 
@@ -269,6 +309,11 @@ Examples:
   # Read a file directly from the repository
   ssh -p 2223 localhost repo blob my-app main composer.json
 
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
+
 Use "ssh -p 2223 localhost repo [command] --help" for more information about a command.
 ########## help repo blob
 Displays the content of a file at a specific Git reference. Supports syntax highlighting, line numbers, or raw verbatim bytes.
@@ -299,6 +344,11 @@ Examples:
 
   # Extract raw file content for piping into a local file
   ssh -p 2223 localhost repo blob my-app main composer.json -r > composer.json
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo branch
 List, delete, configure the default branch, and enforce branch protection rules in a repository.
 
@@ -328,6 +378,11 @@ Examples:
   # Protect the main branch against force pushes
   ssh -p 2223 localhost repo branch protect my-app main --no-force --no-delete
 
+Wiki:
+  Web:  http://localhost:23232/wiki/branch-governance
+  CLI:  ssh -p 2223 localhost wiki show branch-governance
+  TUI:  ssh -p 2223 localhost → Wiki → branch-governance
+
 Use "ssh -p 2223 localhost repo branch [command] --help" for more information about a command.
 ########## help repo branch default
 Gets the current default branch (symbolic HEAD), or updates it to BRANCH if provided. The default branch is checked out by default when users clone without specifying a branch.
@@ -351,6 +406,11 @@ Examples:
 
   # Set default branch to main
   ssh -p 2223 localhost repo branch default my-app main
+
+Wiki:
+  Web:  http://localhost:23232/wiki/branch-governance
+  CLI:  ssh -p 2223 localhost wiki show branch-governance
+  TUI:  ssh -p 2223 localhost → Wiki → branch-governance
 ########## help repo branch delete
 Deletes a remote branch ref. Rejects deletion if the branch is currently the default branch or if a branch protection rule prohibits deletion.
 
@@ -373,6 +433,11 @@ Scope:
 Examples:
   # Delete a merged feature branch
   ssh -p 2223 localhost repo branch delete my-app feature-old
+
+Wiki:
+  Web:  http://localhost:23232/wiki/branch-governance
+  CLI:  ssh -p 2223 localhost wiki show branch-governance
+  TUI:  ssh -p 2223 localhost → Wiki → branch-governance
 ########## help repo branch list
 Displays all branch refs in the repository, marking the current default branch (HEAD).
 
@@ -391,6 +456,11 @@ Scope:
 Examples:
   # List all branches in a repository
   ssh -p 2223 localhost repo branch list my-app
+
+Wiki:
+  Web:  http://localhost:23232/wiki/branch-governance
+  CLI:  ssh -p 2223 localhost wiki show branch-governance
+  TUI:  ssh -p 2223 localhost → Wiki → branch-governance
 ########## help repo branch protect
 Enforces push safeguards on branches matching a glob pattern via the server pre-receive hook. Protects production branches against accidental force-pushes or deletion.
 
@@ -419,6 +489,11 @@ Examples:
 
   # Restrict pushes on all branches to administrators only
   ssh -p 2223 localhost repo branch protect my-app "*" --admins-only
+
+Wiki:
+  Web:  http://localhost:23232/wiki/branch-governance
+  CLI:  ssh -p 2223 localhost wiki show branch-governance
+  TUI:  ssh -p 2223 localhost → Wiki → branch-governance
 ########## help repo branch unprotect
 Removes a previously configured branch protection rule matching PATTERN.
 
@@ -438,6 +513,11 @@ Scope:
 Examples:
   # Remove protection from release branches
   ssh -p 2223 localhost repo branch unprotect my-app "release/*"
+
+Wiki:
+  Web:  http://localhost:23232/wiki/branch-governance
+  CLI:  ssh -p 2223 localhost wiki show branch-governance
+  TUI:  ssh -p 2223 localhost → Wiki → branch-governance
 ########## help repo collab
 Grant, inspect, or revoke access permissions for users on a specific repository.
 
@@ -467,6 +547,11 @@ Examples:
 
   # Remove a collaborator
   ssh -p 2223 localhost repo collab remove my-app bob
+
+Wiki:
+  Web:  http://localhost:23232/wiki/collaboration
+  CLI:  ssh -p 2223 localhost wiki show collaboration
+  TUI:  ssh -p 2223 localhost → Wiki → collaboration
 
 Use "ssh -p 2223 localhost repo collab [command] --help" for more information about a command.
 ########## help repo collab add
@@ -501,6 +586,11 @@ Examples:
 
   # Add a co-maintainer with admin access
   ssh -p 2223 localhost repo collab add my-app lead-dev admin-access
+
+Wiki:
+  Web:  http://localhost:23232/wiki/collaboration
+  CLI:  ssh -p 2223 localhost wiki show collaboration
+  TUI:  ssh -p 2223 localhost → Wiki → collaboration
 ########## help repo collab list
 Displays all collaborators explicitly assigned to the repository alongside their active access level.
 
@@ -519,6 +609,11 @@ Scope:
 Examples:
   # List all collaborators on a repository
   ssh -p 2223 localhost repo collab list my-app
+
+Wiki:
+  Web:  http://localhost:23232/wiki/collaboration
+  CLI:  ssh -p 2223 localhost wiki show collaboration
+  TUI:  ssh -p 2223 localhost → Wiki → collaboration
 ########## help repo collab remove
 Removes explicit collaboration permissions for a user from the repository.
 
@@ -538,6 +633,11 @@ Scope:
 Examples:
   # Remove a collaborator
   ssh -p 2223 localhost repo collab remove my-app bob
+
+Wiki:
+  Web:  http://localhost:23232/wiki/collaboration
+  CLI:  ssh -p 2223 localhost wiki show collaboration
+  TUI:  ssh -p 2223 localhost → Wiki → collaboration
 ########## help repo commit
 Displays commit details: author, committer, dates, commit message, and changed files. Can output full unified diff or colorized changes.
 
@@ -565,6 +665,11 @@ Examples:
 
   # Export commit as patch file
   ssh -p 2223 localhost repo commit my-app 8a3f12c -p > fix.patch
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo create
 Initializes a new bare Git repository on gickers.sh. The authenticated creator automatically becomes the repository owner with full admin permissions.
 
@@ -596,6 +701,11 @@ Examples:
 
   # Create a hidden repository
   ssh -p 2223 localhost repo create secret-tool --private --hidden
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo delete
 Permanently deletes a bare Git repository from disk, including all branches, tags, collaborator permissions, branch protection rules, and webhooks. Irreversible.
 
@@ -617,6 +727,11 @@ Scope:
 Examples:
   # Delete a repository
   ssh -p 2223 localhost repo delete obsolete-project
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo description
 Gets the repository description, or updates it if DESCRIPTION is provided.
 
@@ -642,6 +757,11 @@ Examples:
 
   # Set new description
   ssh -p 2223 localhost repo description my-app "High-performance distributed storage engine"
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo diff
 Generates a unified diff comparing two Git commits, branches, or tags. If TO is omitted, displays the changeset introduced by commit FROM relative to its parent.
 
@@ -668,6 +788,11 @@ Examples:
 
   # View changes introduced by a specific commit
   ssh -p 2223 localhost repo diff my-app HEAD~1
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo fork
 Creates a server-side fork of an existing Git repository or external Git URL. You become the owner and administrator of the newly created fork.
 
@@ -697,6 +822,11 @@ Examples:
 
   # Fork into a custom repository name and make it private
   ssh -p 2223 localhost repo fork upstream-project my-custom-fork --private
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo grep
 Searches tracked repository files using Git regular expressions at the specified Git reference.
 
@@ -726,6 +856,11 @@ Examples:
 
   # Search using a regex pattern on a release tag
   ssh -p 2223 localhost repo grep my-app "class [A-Z][a-zA-Z]+" v2.0.0
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo hidden
 Gets or sets whether the repository is hidden from the interactive TUI repository list and public web catalog. Does not alter Git clone or push permissions.
 
@@ -754,6 +889,11 @@ Examples:
 
   # Unhide repository
   ssh -p 2223 localhost repo hidden my-app false
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo import
 Imports an external Git repository from a remote URL over HTTP, HTTPS, or Git protocols. Can configure full mirror synchronization and download Git LFS objects.
 
@@ -786,6 +926,11 @@ Examples:
 
   # Import with Git LFS assets and make private
   ssh -p 2223 localhost repo import game-assets https://github.com/org/game.git --lfs --private
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo info
 Displays detailed metadata and statistics for a repository: visibility (public/private), hidden state, default branch, commit count, branch count, tag count, and clone URLs.
 
@@ -804,6 +949,11 @@ Scope:
 Examples:
   # Show metadata for a repository
   ssh -p 2223 localhost repo info my-app
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo list
 Lists repositories available on the server. Non-admin users see public repositories and private repositories where they are collaborators. Server administrators with --all see all repositories.
 
@@ -826,6 +976,11 @@ Examples:
 
   # List all server repositories including hidden/private (admins only)
   ssh -p 2223 localhost repo list -a
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo mirror
 Creates an exact Git mirror of a repository (external Git URL or another gickers.sh repository), or gets/sets whether an existing repository acts as a mirror.
 
@@ -861,6 +1016,11 @@ Examples:
 
   # Enable mirror property on an existing repository
   ssh -p 2223 localhost repo mirror my-app true
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo private
 Gets or sets whether the repository is private. Private repositories are hidden from public listings and can only be cloned or pushed by collaborators and server admins.
 
@@ -886,6 +1046,11 @@ Examples:
 
   # Make repository public
   ssh -p 2223 localhost repo private my-app false
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo project-name
 Gets the human-readable project title, or updates it if NAME is provided. Displayed in TUI and web interface headers.
 
@@ -911,6 +1076,11 @@ Examples:
 
   # Set display title
   ssh -p 2223 localhost repo project-name my-app "Storage Engine"
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo readme
 Locates and prints the repository README file (e.g. README.md, README.org, README.txt) at the specified Git reference.
 
@@ -936,6 +1106,11 @@ Examples:
 
   # Print README from a release tag
   ssh -p 2223 localhost repo readme my-app v1.0.0
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo rename
 Renames a repository and moves its bare Git directory on disk. SSH and HTTP clone URLs are immediately updated to the new name.
 
@@ -961,6 +1136,11 @@ Notes:
 Examples:
   # Rename a repository
   ssh -p 2223 localhost repo rename old-project new-project
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo signatures
 Enforces that all commits pushed to the repository must carry valid, cryptographically verified GPG or SSH signatures. Non-signed commits are rejected by the pre-receive server hook.
 
@@ -986,6 +1166,11 @@ Examples:
 
   # Allow unsigned commits
   ssh -p 2223 localhost repo signatures my-app false
+
+Wiki:
+  Web:  http://localhost:23232/wiki/branch-governance
+  CLI:  ssh -p 2223 localhost wiki show branch-governance
+  TUI:  ssh -p 2223 localhost → Wiki → branch-governance
 ########## help repo tag
 List and delete Git release and annotated tags in a repository.
 
@@ -1008,6 +1193,11 @@ Examples:
 
   # Delete an obsolete tag
   ssh -p 2223 localhost repo tag delete my-app v1.0.0-rc1
+
+Wiki:
+  Web:  http://localhost:23232/wiki/branch-governance
+  CLI:  ssh -p 2223 localhost wiki show branch-governance
+  TUI:  ssh -p 2223 localhost → Wiki → branch-governance
 
 Use "ssh -p 2223 localhost repo tag [command] --help" for more information about a command.
 ########## help repo tag delete
@@ -1032,6 +1222,11 @@ Scope:
 Examples:
   # Delete a tag
   ssh -p 2223 localhost repo tag delete my-app v1.0.0-rc1
+
+Wiki:
+  Web:  http://localhost:23232/wiki/branch-governance
+  CLI:  ssh -p 2223 localhost wiki show branch-governance
+  TUI:  ssh -p 2223 localhost → Wiki → branch-governance
 ########## help repo tag list
 Displays all Git tags (lightweight and annotated) existing in the repository.
 
@@ -1053,6 +1248,11 @@ Scope:
 Examples:
   # List all tags
   ssh -p 2223 localhost repo tag list my-app
+
+Wiki:
+  Web:  http://localhost:23232/wiki/branch-governance
+  CLI:  ssh -p 2223 localhost wiki show branch-governance
+  TUI:  ssh -p 2223 localhost → Wiki → branch-governance
 ########## help repo tree
 Lists files, directories, and symlinks at a given path and Git reference, displaying file mode, object type, SHA, and filename.
 
@@ -1079,6 +1279,11 @@ Examples:
 
   # List tree at specific commit
   ssh -p 2223 localhost repo tree my-app 8a3f12c config/
+
+Wiki:
+  Web:  http://localhost:23232/wiki/repo-management
+  CLI:  ssh -p 2223 localhost wiki show repo-management
+  TUI:  ssh -p 2223 localhost → Wiki → repo-management
 ########## help repo webhook
 Configure HTTP POST webhooks dispatched automatically upon repository events (push, branch creation, tag updates, collaborator changes).
 
@@ -1108,6 +1313,11 @@ Examples:
 
   # Delete a webhook by ID
   ssh -p 2223 localhost repo webhook delete my-app 2
+
+Wiki:
+  Web:  http://localhost:23232/wiki/branch-governance
+  CLI:  ssh -p 2223 localhost wiki show branch-governance
+  TUI:  ssh -p 2223 localhost → Wiki → branch-governance
 
 Use "ssh -p 2223 localhost repo webhook [command] --help" for more information about a command.
 ########## help repo webhook create
@@ -1139,6 +1349,11 @@ Examples:
 
   # Create a webhook for branch and tag creation
   ssh -p 2223 localhost repo webhook create my-app https://deploy.example.com/hook -e branch_tag_create,push -c json
+
+Wiki:
+  Web:  http://localhost:23232/wiki/branch-governance
+  CLI:  ssh -p 2223 localhost wiki show branch-governance
+  TUI:  ssh -p 2223 localhost → Wiki → branch-governance
 ########## help repo webhook delete
 Permanently deletes a repository webhook by its numeric identifier.
 
@@ -1158,6 +1373,11 @@ Scope:
 Examples:
   # Delete webhook #2
   ssh -p 2223 localhost repo webhook delete my-app 2
+
+Wiki:
+  Web:  http://localhost:23232/wiki/branch-governance
+  CLI:  ssh -p 2223 localhost wiki show branch-governance
+  TUI:  ssh -p 2223 localhost → Wiki → branch-governance
 ########## help repo webhook list
 Displays all configured webhooks for a repository, including webhook ID, target URL, subscribed events, payload format, and active status.
 
@@ -1176,6 +1396,11 @@ Scope:
 Examples:
   # List all webhooks for a repository
   ssh -p 2223 localhost repo webhook list my-app
+
+Wiki:
+  Web:  http://localhost:23232/wiki/branch-governance
+  CLI:  ssh -p 2223 localhost wiki show branch-governance
+  TUI:  ssh -p 2223 localhost → Wiki → branch-governance
 ########## help set-username
 Updates the username of your authenticated account.
 
@@ -1197,6 +1422,11 @@ Notes:
 Examples:
   # Change your account username
   ssh -p 2223 localhost set-username alice
+
+Wiki:
+  Web:  http://localhost:23232/wiki/signup
+  CLI:  ssh -p 2223 localhost wiki show signup
+  TUI:  ssh -p 2223 localhost → Wiki → signup
 ########## help settings
 Manage global gickers.sh server configuration, anonymous access permissions, keyless cloning, and self-registration policies.
 
@@ -1214,6 +1444,11 @@ Flags:
 
 Scope:
   Server Admin only (hidden from non-admin users in command listings).
+
+Wiki:
+  Web:  http://localhost:23232/wiki/server-admin
+  CLI:  ssh -p 2223 localhost wiki show server-admin
+  TUI:  ssh -p 2223 localhost → Wiki → server-admin
 
 Use "ssh -p 2223 localhost settings [command] --help" for more information about a command.
 ########## help settings allow-keyless
@@ -1240,6 +1475,11 @@ Examples:
 
   # Disable keyless access
   ssh -p 2223 localhost settings allow-keyless false
+
+Wiki:
+  Web:  http://localhost:23232/wiki/server-admin
+  CLI:  ssh -p 2223 localhost wiki show server-admin
+  TUI:  ssh -p 2223 localhost → Wiki → server-admin
 ########## help settings anon-access
 Gets or sets the default access level granted to anonymous (unauthenticated) users on public repositories.
 
@@ -1264,6 +1504,11 @@ Examples:
 
   # Completely forbid anonymous access
   ssh -p 2223 localhost settings anon-access no-access
+
+Wiki:
+  Web:  http://localhost:23232/wiki/server-admin
+  CLI:  ssh -p 2223 localhost wiki show server-admin
+  TUI:  ssh -p 2223 localhost → Wiki → server-admin
 ########## help token
 Manage personal access tokens (PAT). Tokens can be used for automated scripts, CI/CD runners, and HTTP authentication.
 
@@ -1283,6 +1528,11 @@ Flags:
 
 Scope:
   Authenticated user.
+
+Wiki:
+  Web:  http://localhost:23232/wiki/web-login
+  CLI:  ssh -p 2223 localhost wiki show web-login
+  TUI:  ssh -p 2223 localhost → Wiki → web-login
 
 Use "ssh -p 2223 localhost token [command] --help" for more information about a command.
 ########## help token create
@@ -1313,6 +1563,11 @@ Examples:
 
   # Create a short-lived token expiring in 2 hours
   ssh -p 2223 localhost token create "deploy-job" --expires-in 2h
+
+Wiki:
+  Web:  http://localhost:23232/wiki/web-login
+  CLI:  ssh -p 2223 localhost wiki show web-login
+  TUI:  ssh -p 2223 localhost → Wiki → web-login
 ########## help token delete
 Permanently revokes a personal access token by its numeric identifier. Any future request using this token is denied immediately.
 
@@ -1334,6 +1589,11 @@ Scope:
 Examples:
   # Revoke access token #42
   ssh -p 2223 localhost token delete 42
+
+Wiki:
+  Web:  http://localhost:23232/wiki/web-login
+  CLI:  ssh -p 2223 localhost wiki show web-login
+  TUI:  ssh -p 2223 localhost → Wiki → web-login
 ########## help token list
 Displays all active personal access tokens for your account, listing numeric token ID, label name, creation timestamp, and expiration date.
 
@@ -1352,6 +1612,11 @@ Scope:
 Examples:
   # List all your access tokens
   ssh -p 2223 localhost token list
+
+Wiki:
+  Web:  http://localhost:23232/wiki/web-login
+  CLI:  ssh -p 2223 localhost wiki show web-login
+  TUI:  ssh -p 2223 localhost → Wiki → web-login
 ########## help user
 Manage user accounts, assign server administrator privileges, and add or remove public keys for any user.
 
@@ -1379,6 +1644,11 @@ Flags:
 Scope:
   Server Admin only (hidden from non-admin users in command listings).
 
+Wiki:
+  Web:  http://localhost:23232/wiki/server-admin
+  CLI:  ssh -p 2223 localhost wiki show server-admin
+  TUI:  ssh -p 2223 localhost → Wiki → server-admin
+
 Use "ssh -p 2223 localhost user [command] --help" for more information about a command.
 ########## help user add-pubkey
 Adds an OpenSSH public key to a specified user account.
@@ -1399,6 +1669,11 @@ Scope:
 Examples:
   # Add a public key to alice's account
   ssh -p 2223 localhost user add-pubkey alice "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... alice@laptop"
+
+Wiki:
+  Web:  http://localhost:23232/wiki/server-admin
+  CLI:  ssh -p 2223 localhost wiki show server-admin
+  TUI:  ssh -p 2223 localhost → Wiki → server-admin
 ########## help user create
 Creates a new user account with optional server administrator status and an initial SSH public key.
 
@@ -1422,6 +1697,11 @@ Examples:
 
   # Create an administrator with an initial public key
   ssh -p 2223 localhost user create bob --admin -k "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... bob@work"
+
+Wiki:
+  Web:  http://localhost:23232/wiki/server-admin
+  CLI:  ssh -p 2223 localhost wiki show server-admin
+  TUI:  ssh -p 2223 localhost → Wiki → server-admin
 ########## help user delete
 Permanently deletes a user account, along with their registered public keys and access tokens.
 
@@ -1440,6 +1720,11 @@ Scope:
 Examples:
   # Delete a user account
   ssh -p 2223 localhost user delete alice
+
+Wiki:
+  Web:  http://localhost:23232/wiki/server-admin
+  CLI:  ssh -p 2223 localhost wiki show server-admin
+  TUI:  ssh -p 2223 localhost → Wiki → server-admin
 ########## help user info
 Displays detailed information about a user: username, administrator status, and all registered public keys.
 
@@ -1458,6 +1743,11 @@ Scope:
 Examples:
   # Inspect account details for user alice
   ssh -p 2223 localhost user info alice
+
+Wiki:
+  Web:  http://localhost:23232/wiki/server-admin
+  CLI:  ssh -p 2223 localhost wiki show server-admin
+  TUI:  ssh -p 2223 localhost → Wiki → server-admin
 ########## help user list
 Displays all registered user accounts on the server, showing administrator status and count of registered public keys.
 
@@ -1476,6 +1766,11 @@ Scope:
 Examples:
   # List all server users
   ssh -p 2223 localhost user list
+
+Wiki:
+  Web:  http://localhost:23232/wiki/server-admin
+  CLI:  ssh -p 2223 localhost wiki show server-admin
+  TUI:  ssh -p 2223 localhost → Wiki → server-admin
 ########## help user remove-pubkey
 Removes a registered OpenSSH public key from a specified user account.
 
@@ -1495,6 +1790,11 @@ Scope:
 Examples:
   # Remove a public key from alice's account
   ssh -p 2223 localhost user remove-pubkey alice "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... alice@laptop"
+
+Wiki:
+  Web:  http://localhost:23232/wiki/server-admin
+  CLI:  ssh -p 2223 localhost wiki show server-admin
+  TUI:  ssh -p 2223 localhost → Wiki → server-admin
 ########## help user set-admin
 Promotes a user to server administrator, or revokes administrator privileges.
 
@@ -1517,6 +1817,11 @@ Examples:
 
   # Demote user to standard account
   ssh -p 2223 localhost user set-admin alice false
+
+Wiki:
+  Web:  http://localhost:23232/wiki/server-admin
+  CLI:  ssh -p 2223 localhost wiki show server-admin
+  TUI:  ssh -p 2223 localhost → Wiki → server-admin
 ########## help user set-username
 Changes the username of an existing user account. Updates personal repository namespaces and paths.
 
@@ -1536,8 +1841,13 @@ Scope:
 Examples:
   # Rename a user account
   ssh -p 2223 localhost user set-username alice alice-new
+
+Wiki:
+  Web:  http://localhost:23232/wiki/server-admin
+  CLI:  ssh -p 2223 localhost wiki show server-admin
+  TUI:  ssh -p 2223 localhost → Wiki → server-admin
 ########## help web
-Authenticate your browser against the web interface using your SSH key.
+Authenticate your browser against the web interface using a single-use SSH magic link.
 
 Usage:
   ssh -p 2223 localhost web [command]
@@ -1552,8 +1862,6 @@ Flags:
 Scope:
   Any authenticated user.
 
-Because your SSH key already proves who you are, `web login` prints a short-lived magic link. Opening it in your browser sets a session cookie, after which repository pages reveal the full command palette you are authorized for (admin-only actions appear on repositories you administer). `web logout` revokes every active browser session.
-
 Examples:
   # Print a magic link to sign your browser in
   ssh -p 2223 localhost web login
@@ -1561,20 +1869,49 @@ Examples:
   # Revoke every active browser session
   ssh -p 2223 localhost web logout
 
+Wiki:
+  Web:  http://localhost:23232/wiki/web-login
+  CLI:  ssh -p 2223 localhost wiki show web-login
+  TUI:  ssh -p 2223 localhost → Wiki → web-login
+
 Use "ssh -p 2223 localhost web [command] --help" for more information about a command.
 ########## help web login
-Log your browser in and open the web interface
+Mints a single-use magic login link (valid 10 min) and copies it to your clipboard.
 
 Usage:
    web login [flags]
 
 Flags:
   -h, --help   help for login
+
+Scope:
+  Any authenticated user.
+
+Examples:
+  # Print and copy a single-use web login URL
+  ssh -p 2223 localhost web login
+
+Wiki:
+  Web:  http://localhost:23232/wiki/web-login
+  CLI:  ssh -p 2223 localhost wiki show web-login
+  TUI:  ssh -p 2223 localhost → Wiki → web-login
 ########## help web logout
-Sign out of every active browser session
+Revokes all active web session cookies associated with your account.
 
 Usage:
    web logout [flags]
 
 Flags:
   -h, --help   help for logout
+
+Scope:
+  Any authenticated user.
+
+Examples:
+  # Invalidate every active browser session
+  ssh -p 2223 localhost web logout
+
+Wiki:
+  Web:  http://localhost:23232/wiki/web-login
+  CLI:  ssh -p 2223 localhost wiki show web-login
+  TUI:  ssh -p 2223 localhost → Wiki → web-login

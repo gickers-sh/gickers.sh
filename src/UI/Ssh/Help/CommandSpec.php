@@ -30,6 +30,7 @@ final class CommandSpec
      * @param bool                $hidden   whether the command is hidden from help and listings
      * @param string              $example  example usage text (supports {ssh} substitution)
      * @param list<CommandUiSpec> $uiSpecs  optional web/interactive presentation definitions
+     * @param string              $wikiSlug associated wiki page slug for deep-dive documentation
      */
     public function __construct(
         public string $name,
@@ -42,8 +43,29 @@ final class CommandSpec
         public bool $hidden = false,
         public string $example = '',
         array $uiSpecs = [],
+        public string $wikiSlug = '',
     ) {
         $this->uiSpecs = $uiSpecs;
+    }
+
+    public function withWiki(string $wikiSlug): self
+    {
+        $this->wikiSlug = trim($wikiSlug);
+
+        return $this;
+    }
+
+    /**
+     * Returns this command's wiki slug, or inherits from the closest ancestor
+     * that declares one.
+     */
+    public function resolveWikiSlug(): string
+    {
+        if ('' !== $this->wikiSlug) {
+            return $this->wikiSlug;
+        }
+
+        return $this->parent?->resolveWikiSlug() ?? '';
     }
 
     public function addUi(CommandUiSpec $ui): self

@@ -259,4 +259,41 @@ final class HelpRendererTest extends TestCase
 
         $checkNode($root, $checkNode);
     }
+
+    public function testEveryVisibleCommandHasValidWikiArticleLinks(): void
+    {
+        $catalog = new CommandCatalog();
+        $renderer = new HelpRenderer();
+        $meta = \App\Wiki\Application\DefaultWikiPages::metadata();
+
+        $check = static function (CommandSpec $node, callable $check) use ($renderer, $meta): void {
+            if (!$node->hidden) {
+                $slug = $node->resolveWikiSlug();
+                self::assertNotSame('', $slug, sprintf('Command "%s" is missing a wiki slug', trim($node->commandPath())));
+                self::assertArrayHasKey($slug, $meta, sprintf('Wiki slug "%s" missing from DefaultWikiPages', $slug));
+
+                $raw = $renderer->render($node, 'ssh codes.sh', false, 'https://codes.sh');
+                self::assertStringContainsString("Wiki:\n", $raw);
+                self::assertStringContainsString('Web:  https://codes.sh/wiki/' . $slug, $raw);
+                self::assertStringContainsString('CLI:  ssh codes.sh wiki show ' . $slug, $raw);
+                self::assertStringContainsString('TUI:  ssh codes.sh → Wiki → ' . $slug, $raw);
+            }
+
+            foreach ($node->children as $child) {
+                $check($child, $check);
+            }
+        };
+
+        $check($catalog->root(true), $check);
+    }
+
+    public function testRestrictedRootWithoutAnonReadOmitsWikiLinks(): void
+    {
+        $catalog = new CommandCatalog();
+        $renderer = new HelpRenderer();
+        $restricted = $catalog->restrictedRootForUnknownKey(false);
+
+        $raw = $renderer->render($restricted, 'ssh codes.sh', false, 'https://codes.sh');
+        self::assertStringNotContainsString('wiki show', $raw);
+    }
 }

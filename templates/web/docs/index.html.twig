@@ -51,6 +51,7 @@
                         description: cmd.short,
                         action_title: 'Click to copy command',
                         command: cmd.synopsis,
+                        wiki: cmd.wiki|default(null),
                         btn_title: 'Copy command to clipboard'
                     } only %}
                 {% endfor %}

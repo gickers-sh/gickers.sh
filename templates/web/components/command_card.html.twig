@@ -14,6 +14,9 @@
     </a>
     <div class="cli-card-action"{% if action_title is defined and action_title %} title="{{ action_title }}"{% endif %}>
         <code class="cli-code">{{ command }}</code>
+        {% if wiki is defined and wiki %}
+            <a href="{{ wiki.url }}" class="cli-card-doc-pill" title="Wiki Guide: {{ wiki.title }}">wiki:{{ wiki.slug }}</a>
+        {% endif %}
         {{ ui.copy_btn(copy_command|default(command), btn_label|default('Copy'), 'copy-btn-sm', btn_title|default('Copy command to clipboard')) }}
     </div>
 </div>

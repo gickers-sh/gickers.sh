@@ -36,4 +36,15 @@
         </table>
     </div>
 {% endif %}
+
+{% if wiki_slug is defined and wiki_slug != '' %}
+    <div style="margin-bottom: 1em;">
+        <span style="color: #7aa2f7; font-weight: bold;">Wiki:</span>
+        <div style="padding-left: 2; color: #a9b1d6;">
+            <div><span style="color: #2ac3de;">Web:</span> {{ http_base }}/wiki/{{ wiki_slug }}</div>
+            <div><span style="color: #2ac3de;">CLI:</span> {{ ssh_command }} wiki show {{ wiki_slug }}</div>
+            <div><span style="color: #2ac3de;">TUI:</span> {{ ssh_command }} → Wiki → {{ wiki_slug }}</div>
+        </div>
+    </div>
+{% endif %}
 </div>

@@ -175,4 +175,29 @@ final class DocPageTest extends KernelTestCase
         $adminHtml = (string) $adminResponse->getContent();
         $this->assertStringContainsString('user set-admin', $adminHtml);
     }
+
+    public function testCommandDocumentationExposesWikiGuideLinksForWebCliAndTui(): void
+    {
+        $cases = [
+            '/docs/repo/branch/protect' => 'branch-governance',
+            '/docs/repo/deploy/quota' => 'deploy-guide',
+            '/docs/repo/fork' => 'repo-management',
+            '/docs/pubkey/add' => 'ssh-keys',
+            '/docs/token/create' => 'web-login',
+        ];
+
+        foreach ($cases as $uri => $wikiSlug) {
+            $response = $this->get($uri);
+            $this->assertSame(200, $response->getStatusCode(), "Failed asserting 200 for {$uri}");
+            $html = (string) $response->getContent();
+
+            $this->assertStringContainsString('Deep-Dive Guide &amp; Workflows', $html);
+            $this->assertStringContainsString('href="/wiki/' . $wikiSlug . '"', $html);
+            $this->assertStringContainsString('wiki show ' . $wikiSlug, $html);
+            $this->assertStringContainsString('Wiki → ' . $wikiSlug, $html);
+        }
+
+        $indexHtml = (string) $this->get('/docs')->getContent();
+        $this->assertStringContainsString('href="/wiki/repo-management"', $indexHtml);
+    }
 }

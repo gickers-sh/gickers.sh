@@ -380,7 +380,7 @@ final class SshEntrypointCommand extends Command
 
         $sshCommand = Help\HelpRenderer::sshCommandFromPublicUrl($this->serverSettings->sshPublicUrl, $targetUsername);
 
-        return $this->helpRenderer->render($node, $sshCommand, $decorated);
+        return $this->helpRenderer->render($node, $sshCommand, $decorated, $this->serverSettings->httpPublicUrl);
     }
 
     /**

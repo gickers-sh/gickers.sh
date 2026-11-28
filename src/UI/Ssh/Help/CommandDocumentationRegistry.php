@@ -6,6 +6,8 @@ namespace App\UI\Ssh\Help;
 
 use App\Access\Domain\AccessLevel;
 use App\Repo\Domain\RepoName;
+use App\Wiki\Application\DefaultWikiPages;
+use App\Wiki\Application\Query\WikiQuery;
 
 /**
  * Central documentation registry that transforms the unified CommandCatalog tree
@@ -16,6 +18,7 @@ final readonly class CommandDocumentationRegistry
 {
     public function __construct(
         private CommandCatalog $catalog,
+        private ?WikiQuery $wikiQuery = null,
     ) {}
 
     /**
@@ -29,6 +32,8 @@ final readonly class CommandDocumentationRegistry
      *     base: string,
      *     remote: string,
      *     command: string,
+     *     docsUrl: ?string,
+     *     wiki: ?array{slug: string, title: string, category: string, url: string, cliCommand: string, tuiPath: string},
      *     fields: list<array{kind: string, key: string, label: string, placeholder: string, required: bool, default: string, flag: string, choices: list<string>}>
      * }>
      */
@@ -39,11 +44,13 @@ final readonly class CommandDocumentationRegistry
         $repoName = $name->value;
 
         $root = $this->catalog->root($isAdmin);
-        $uiSpecs = $this->collectUiSpecs($root, 'repo');
-        usort($uiSpecs, static fn(CommandUiSpec $a, CommandUiSpec $b): int => $a->order <=> $b->order);
+        $entries = $this->collectUiEntries($root, 'repo');
+        usort($entries, static fn(array $a, array $b): int => $a['spec']->order <=> $b['spec']->order);
 
         $commands = [];
-        foreach ($uiSpecs as $spec) {
+        foreach ($entries as $entry) {
+            $node = $entry['node'];
+            $spec = $entry['spec'];
             if (('write' === $spec->tier && !$canWrite) || ('admin' === $spec->tier && !$isAdmin)) {
                 continue;
             }
@@ -51,6 +58,8 @@ final readonly class CommandDocumentationRegistry
             $base = str_replace('{repo}', $repoName, $spec->baseTemplate);
             $fields = array_map(static fn(FieldSpec $f): array => $f->toArray(), $spec->fields);
             $remote = $this->renderRemote($base, $fields);
+            $cmdPath = trim($node->commandPath());
+            $docsUrl = '' !== $cmdPath ? '/docs/' . str_replace(' ', '/', $cmdPath) : null;
 
             $commands[] = [
                 'category' => $spec->category,
@@ -61,6 +70,8 @@ final readonly class CommandDocumentationRegistry
                 'fields' => $fields,
                 'remote' => $remote,
                 'command' => trim($sshPrefix . ' ' . $remote),
+                'docsUrl' => $docsUrl,
+                'wiki' => $this->resolveWikiInfo($node, $sshPrefix),
             ];
         }
 
@@ -89,6 +100,7 @@ final readonly class CommandDocumentationRegistry
      *     category: string,
      *     tier: string,
      *     scope: string,
+     *     wiki: ?array{slug: string, title: string, category: string, url: string, cliCommand: string, tuiPath: string},
      *     isGroup: bool,
      *     subcommands: list<array{name: string, path: string, slug: string, url: string, short: string, tier: string}>,
      *     breadcrumbs: list<array{label: string, url: ?string}>,
@@ -135,6 +147,7 @@ final readonly class CommandDocumentationRegistry
      *     category: string,
      *     tier: string,
      *     scope: string,
+     *     wiki: ?array{slug: string, title: string, category: string, url: string, cliCommand: string, tuiPath: string},
      *     isGroup: bool,
      *     subcommands: list<array{name: string, path: string, slug: string, url: string, short: string, tier: string}>,
      *     breadcrumbs: list<array{label: string, url: ?string}>,
@@ -193,6 +206,7 @@ final readonly class CommandDocumentationRegistry
      *     category: string,
      *     tier: string,
      *     scope: string,
+     *     wiki: ?array{slug: string, title: string, category: string, url: string, cliCommand: string, tuiPath: string},
      *     isGroup: bool,
      *     subcommands: list<array{name: string, path: string, slug: string, url: string, short: string, tier: string}>,
      *     breadcrumbs: list<array{label: string, url: ?string}>,
@@ -280,9 +294,50 @@ final readonly class CommandDocumentationRegistry
             'category' => $category,
             'tier' => $tier,
             'scope' => $scope,
+            'wiki' => $this->resolveWikiInfo($node, $sshPrefix),
             'isGroup' => $node->hasChildren() && !$node->runnable,
             'subcommands' => $subcommands,
             'breadcrumbs' => $breadcrumbs,
+        ];
+    }
+
+    /**
+     * @return array{slug: string, title: string, category: string, url: string, cliCommand: string, tuiPath: string}|null
+     */
+    private function resolveWikiInfo(CommandSpec $node, string $sshPrefix): ?array
+    {
+        $wikiSlug = $node->resolveWikiSlug();
+        if ('' === $wikiSlug) {
+            return null;
+        }
+
+        $title = null;
+        $category = null;
+        if (null !== $this->wikiQuery) {
+            try {
+                $page = $this->wikiQuery->find($wikiSlug);
+                if (null !== $page) {
+                    $title = $page->title();
+                    $category = $page->category();
+                }
+            } catch (\Throwable) {
+                // Fall back to static DefaultWikiPages metadata when DB is unavailable
+            }
+        }
+
+        if (null === $title) {
+            $meta = DefaultWikiPages::metadata()[$wikiSlug] ?? null;
+            $title = $meta['title'] ?? ucwords(str_replace('-', ' ', $wikiSlug));
+            $category = $meta['category'] ?? 'Wiki';
+        }
+
+        return [
+            'slug' => $wikiSlug,
+            'title' => $title,
+            'category' => $category ?? 'Wiki',
+            'url' => '/wiki/' . $wikiSlug,
+            'cliCommand' => trim($sshPrefix . ' wiki show ' . $wikiSlug),
+            'tuiPath' => 'Wiki → ' . $wikiSlug,
         ];
     }
 
@@ -401,26 +456,26 @@ final readonly class CommandDocumentationRegistry
     }
 
     /**
-     * @return list<CommandUiSpec>
+     * @return list<array{node: CommandSpec, spec: CommandUiSpec}>
      */
-    private function collectUiSpecs(CommandSpec $node, string $scopeFilter): array
+    private function collectUiEntries(CommandSpec $node, string $scopeFilter): array
     {
-        $specs = [];
+        $entries = [];
         foreach ($node->uiSpecs as $spec) {
             if ('repo' === $scopeFilter && ('repo' === $spec->scope || 'both' === $spec->scope)) {
-                $specs[] = $spec;
+                $entries[] = ['node' => $node, 'spec' => $spec];
             } elseif ('global' === $scopeFilter && ('global' === $spec->scope || 'both' === $spec->scope)) {
-                $specs[] = $spec;
+                $entries[] = ['node' => $node, 'spec' => $spec];
             }
         }
 
         foreach ($node->children as $child) {
-            foreach ($this->collectUiSpecs($child, $scopeFilter) as $s) {
-                $specs[] = $s;
+            foreach ($this->collectUiEntries($child, $scopeFilter) as $entry) {
+                $entries[] = $entry;
             }
         }
 
-        return $specs;
+        return $entries;
     }
 
     /**
