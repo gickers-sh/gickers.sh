@@ -802,7 +802,7 @@ EOF
             ;;
     esac
 
-    DESC_SSHD="Déplacement du port OpenSSH hôte sur 2222 et libération du port standard 22 pour le serveur Git SSH de codes.sh (clones et push transparents sans port custom)."
+    DESC_SSHD="Déplacement du port OpenSSH hôte sur 2222 et libération du port standard 22 pour le serveur Git SSH de ${APP_NAME} (clones et push transparents sans port custom)."
     if [ "$INIT_SYSTEM" = "openrc" ]; then
         CMDS_SSHD=$(cat << 'EOF'
 ufw allow 2222/tcp comment 'OpenSSH System (moved from 22)'
@@ -856,7 +856,7 @@ EOF
             ;;
     esac
 
-    DESC_APP="Clonage du projet codes.sh, génération de l'environnement sécurisé (.env.docker), build des conteneurs isolés, initialisation Doctrine et démarrage des services."
+    DESC_APP="Clonage du projet ${APP_NAME}, génération de l'environnement sécurisé (.env.docker), build des conteneurs isolés, initialisation Doctrine et démarrage des services."
     CMDS_APP=$(cat << 'EOF'
 git clone --depth 1 https://github.com/gickerssh/gickers.sh.git "$INSTALL_DIR"
 cd "$INSTALL_DIR"
@@ -1805,59 +1805,66 @@ EOF
         # 7. Build et Déploiement Docker Compose
         # ----------------------------------------------------------------------
         deploy_log="/tmp/gickers_deploy.log"
-        : > "$deploy_log"
 
-        ( docker compose --env-file .env.docker build >> "$deploy_log" 2>&1 ) < /dev/null &
-        if ! gum_spin $! "Construction des conteneurs Docker (PHP, gickers-ssh, FrankenPHP)..."; then
-            printf "
-  %s✖%s %sÉchec de la construction des conteneurs Docker.%s
-" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
-            tail -n 25 "$deploy_log" | sed 's/^/    /'
-            printf "
-"
-            exit 1
-        fi
-
-        ( docker compose --env-file .env.docker up -d postgres >> "$deploy_log" 2>&1 ) < /dev/null &
-        if ! gum_spin $! "Démarrage de PostgreSQL..."; then
-            printf "
-  %s✖%s %sÉchec du démarrage de PostgreSQL.%s
-" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
-            tail -n 25 "$deploy_log" | sed 's/^/    /'
-            printf "
-"
-            exit 1
-        fi
-
-        # Wait for PostgreSQL readiness
-        RETRY=0
-        MAX_RETRY=30
-        until docker compose --env-file .env.docker exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" < /dev/null >/dev/null 2>&1 || [ $RETRY -eq $MAX_RETRY ]; do
-            sleep 1
-            RETRY=$((RETRY + 1))
+        # A. Build des conteneurs avec streaming dynamique des logs BuildKit
+        while true; do
+            : > "$deploy_log"
+            ( docker compose --env-file .env.docker build --progress=plain >> "$deploy_log" 2>&1 ) < /dev/null &
+            if gum_stream_spin $! "Construction des conteneurs Docker (PHP, gickers-ssh, FrankenPHP)..." "$deploy_log"; then
+                break
+            fi
+            if handle_step_error "Construction des conteneurs Docker" "$deploy_log" "$PWD"; then
+                break
+            fi
         done
 
-        ( docker compose --env-file .env.docker run -T --rm init < /dev/null >> "$deploy_log" 2>&1 ) &
-        if ! gum_spin $! "Exécution des migrations Doctrine & initialisation du serveur..."; then
-            printf "
-  %s✖%s %sÉchec de l'initialisation du serveur / migrations Doctrine.%s
-" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
-            tail -n 25 "$deploy_log" | sed 's/^/    /'
-            printf "
-"
-            exit 1
-        fi
+        # B. Démarrage de PostgreSQL
+        while true; do
+            : > "$deploy_log"
+            ( docker compose --env-file .env.docker up -d postgres >> "$deploy_log" 2>&1 ) < /dev/null &
+            if gum_stream_spin $! "Démarrage de PostgreSQL..." "$deploy_log"; then
+                break
+            fi
+            if handle_step_error "Démarrage de PostgreSQL" "$deploy_log" "$PWD"; then
+                break
+            fi
+        done
 
-        ( docker compose --env-file .env.docker up -d < /dev/null >> "$deploy_log" 2>&1 ) &
-        if ! gum_spin $! "Démarrage complet de la stack (HTTP, SSH, Worker, Deploy-Engine)..."; then
-            printf "
-  %s✖%s %sÉchec du démarrage complet de la stack Docker Compose.%s
-" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
-            tail -n 25 "$deploy_log" | sed 's/^/    /'
-            printf "
-"
-            exit 1
-        fi
+        # Wait for PostgreSQL readiness
+        (
+            RETRY=0
+            MAX_RETRY=30
+            until docker compose --env-file .env.docker exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" < /dev/null >/dev/null 2>&1 || [ $RETRY -eq $MAX_RETRY ]; do
+                sleep 1
+                RETRY=$((RETRY + 1))
+            done
+            [ $RETRY -lt $MAX_RETRY ]
+        ) < /dev/null &
+        gum_stream_spin $! "Attente de disponibilité de PostgreSQL..."
+
+        # C. Exécution des migrations Doctrine & initialisation
+        while true; do
+            : > "$deploy_log"
+            ( docker compose --env-file .env.docker run -T --rm init < /dev/null >> "$deploy_log" 2>&1 ) &
+            if gum_stream_spin $! "Exécution des migrations Doctrine & initialisation du serveur..." "$deploy_log"; then
+                break
+            fi
+            if handle_step_error "Initialisation Doctrine & Migrations" "$deploy_log" "$PWD"; then
+                break
+            fi
+        done
+
+        # D. Démarrage complet de la stack Docker Compose
+        while true; do
+            : > "$deploy_log"
+            ( docker compose --env-file .env.docker up -d < /dev/null >> "$deploy_log" 2>&1 ) &
+            if gum_stream_spin $! "Démarrage complet de la stack (HTTP, SSH, Worker, Deploy-Engine)..." "$deploy_log"; then
+                break
+            fi
+            if handle_step_error "Démarrage complet de la stack" "$deploy_log" "$PWD"; then
+                break
+            fi
+        done
     fi
 fi
 
@@ -1952,10 +1959,21 @@ fi
 # ------------------------------------------------------------------------------
 sleep 1
 echo ""
-cat << 'EOF'
-__SUCCESS_CARD__
-EOF
-echo ""
+
+FINAL_SSH_URL="ssh://${DOMAIN}"
+FINAL_SSH_CMD="ssh ${DOMAIN}"
+if [ "$SSH_PORT" != "22" ] && [ -n "$SSH_PORT" ]; then
+    FINAL_SSH_URL="ssh://${DOMAIN}:${SSH_PORT}"
+    FINAL_SSH_CMD="ssh -p ${SSH_PORT} ${DOMAIN}"
+fi
+
+printf "  %s%s✓ Installation et déploiement de %s terminés avec succès !%s\n" "$C_BOLD" "$C_GREEN" "$APP_NAME" "$C_RESET"
+printf "  %sVotre forge Git et plateforme de conteneurs est opérationnelle :%s\n" "$C_MUTED" "$C_RESET"
+printf "    • %sInterface Web :%s   https://%s\n" "$C_MUTED" "$C_RESET" "$DOMAIN"
+printf "    • %sClone SSH :%s       git clone %s/<user>/<repo>.git\n" "$C_MUTED" "$C_RESET" "$FINAL_SSH_URL"
+printf "    • %sClone HTTP :%s      https://%s/<user>/<repo>.git\n" "$C_MUTED" "$C_RESET" "$DOMAIN"
+printf "    • %sAccès CLI / TUI :%s %s\n" "$C_MUTED" "$C_RESET" "$FINAL_SSH_CMD"
+printf "    • %sInfo serveur :%s    %s info\n\n" "$C_MUTED" "$C_RESET" "$FINAL_SSH_CMD"
 
 if [ -n "$ADMIN_CLAIM_TOKEN" ]; then
     SSH_PORT_CMD_OPT=""

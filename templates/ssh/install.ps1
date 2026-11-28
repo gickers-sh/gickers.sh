@@ -318,10 +318,16 @@ docker compose --env-file .env.docker run -T --rm init
 docker compose --env-file .env.docker up -d
 
 Write-Host ""
-@'
-__SUCCESS_CARD__
-'@ | Write-Host
-Write-Host ""
+$finalSshUrl = if ($sshPort -ne "22" -and -not [string]::IsNullOrEmpty($sshPort)) { "ssh://${domain}:${sshPort}" } else { "ssh://${domain}" }
+$finalSshCmd = if ($sshPort -ne "22" -and -not [string]::IsNullOrEmpty($sshPort)) { "ssh -p $sshPort $domain" } else { "ssh $domain" }
+
+Write-Host "  $escBold${escGreen}✓ Installation et déploiement de $appName terminés avec succès !$escReset"
+Write-Host "  ${escMuted}Votre forge Git et plateforme de conteneurs est opérationnelle :$escReset"
+Write-Host "    • Interface Web :   https://$domain"
+Write-Host "    • Clone SSH :       git clone $finalSshUrl/<user>/<repo>.git"
+Write-Host "    • Clone HTTP :      https://$domain/<user>/<repo>.git"
+Write-Host "    • Accès CLI / TUI : $finalSshCmd"
+Write-Host "    • Info serveur :    $finalSshCmd info`n"
 
 if (-not [string]::IsNullOrEmpty($adminClaimToken)) {
     $sshPortOpt = if ($sshPort -ne "22") { "-p $sshPort " } else { "" }

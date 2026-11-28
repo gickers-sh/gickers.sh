@@ -601,17 +601,16 @@ docker compose --env-file .env.docker run -T --rm init
 docker compose --env-file .env.docker up -d
 
 Write-Host ""
-@'
-[38;2;158;206;106m[38;2;158;206;106m✓ Installation et déploiement de Gickers.sh terminés avec succès ![m[m        
-[38;2;86;95;137m[38;2;86;95;137mVotre forge Git et plateforme de conteneurs est opérationnelle :[m[m          
-    • Interface Web : https://codes.sh                                    
-    • Clone SSH : git clone ssh://codes.sh/<user>/<repo>.git              
-    • Clone HTTP : https://codes.sh/<user>/<repo>.git                     
-    • Accès CLI / TUI : ssh codes.sh                                      
-    • Info serveur : ssh codes.sh info                                    
-                                                                          
-'@ | Write-Host
-Write-Host ""
+$finalSshUrl = if ($sshPort -ne "22" -and -not [string]::IsNullOrEmpty($sshPort)) { "ssh://${domain}:${sshPort}" } else { "ssh://${domain}" }
+$finalSshCmd = if ($sshPort -ne "22" -and -not [string]::IsNullOrEmpty($sshPort)) { "ssh -p $sshPort $domain" } else { "ssh $domain" }
+
+Write-Host "  $escBold${escGreen}✓ Installation et déploiement de $appName terminés avec succès !$escReset"
+Write-Host "  ${escMuted}Votre forge Git et plateforme de conteneurs est opérationnelle :$escReset"
+Write-Host "    • Interface Web :   https://$domain"
+Write-Host "    • Clone SSH :       git clone $finalSshUrl/<user>/<repo>.git"
+Write-Host "    • Clone HTTP :      https://$domain/<user>/<repo>.git"
+Write-Host "    • Accès CLI / TUI : $finalSshCmd"
+Write-Host "    • Info serveur :    $finalSshCmd info`n"
 
 if (-not [string]::IsNullOrEmpty($adminClaimToken)) {
     $sshPortOpt = if ($sshPort -ne "22") { "-p $sshPort " } else { "" }
