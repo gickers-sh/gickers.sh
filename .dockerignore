@@ -7,6 +7,7 @@ vendor
 bin/codes-ssh
 
 # Local secrets / overrides (port 80, dev admin key, sqlite DSN).
+.env
 .env.local
 .env.*.local
 .env.docker
