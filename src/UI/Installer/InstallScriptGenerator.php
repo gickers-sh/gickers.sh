@@ -104,6 +104,7 @@ final class InstallScriptGenerator
         $nonInteractive = (bool) ($options['non_interactive'] ?? false) ? '1' : '0';
         $dryRun = (bool) ($options['dry_run'] ?? false) ? '1' : '0';
         $useSudo = (bool) ($options['sudo'] ?? false) ? '1' : '0';
+        $systemOnly = (bool) ($options['system_only'] ?? false) ? '1' : '0';
         $stepDocker = (string) ($options['step_docker'] ?? ((bool) ($options['skip_docker'] ?? false) ? 'skip' : 'auto'));
         $stepSshd = (string) ($options['step_sshd'] ?? ((bool) ($options['skip_sshd_switch'] ?? false) ? 'skip' : 'auto'));
         $stepFirewall = (string) ($options['step_firewall'] ?? ((bool) ($options['skip_firewall'] ?? false) ? 'skip' : 'auto'));
@@ -136,6 +137,7 @@ final class InstallScriptGenerator
             '__NON_INTERACTIVE__' => $nonInteractive,
             '__DRY_RUN__' => $dryRun,
             '__USE_SUDO__' => $useSudo,
+            '__SYSTEM_ONLY__' => $systemOnly,
             '__STEP_DOCKER__' => $stepDocker,
             '__STEP_SSHD__' => $stepSshd,
             '__STEP_FIREWALL__' => $stepFirewall,
@@ -171,6 +173,7 @@ final class InstallScriptGenerator
         $nonInteractive = (bool) ($options['non_interactive'] ?? false) ? '1' : '0';
         $dryRun = (bool) ($options['dry_run'] ?? false) ? '1' : '0';
         $useSudo = (bool) ($options['sudo'] ?? false) ? '1' : '0';
+        $systemOnly = (bool) ($options['system_only'] ?? false) ? '1' : '0';
         $stepDocker = (string) ($options['step_docker'] ?? ((bool) ($options['skip_docker'] ?? false) ? 'skip' : 'auto'));
         $stepSshd = (string) ($options['step_sshd'] ?? ((bool) ($options['skip_sshd_switch'] ?? false) ? 'skip' : 'auto'));
         $stepFirewall = (string) ($options['step_firewall'] ?? ((bool) ($options['skip_firewall'] ?? false) ? 'skip' : 'auto'));
@@ -203,6 +206,7 @@ final class InstallScriptGenerator
             '__NON_INTERACTIVE__' => $nonInteractive,
             '__DRY_RUN__' => $dryRun,
             '__USE_SUDO__' => $useSudo,
+            '__SYSTEM_ONLY__' => $systemOnly,
             '__STEP_DOCKER__' => $stepDocker,
             '__STEP_SSHD__' => $stepSshd,
             '__STEP_FIREWALL__' => $stepFirewall,

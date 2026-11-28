@@ -56,7 +56,8 @@ final class InstallCommand extends Command
             ->addOption('step-sshd', null, InputOption::VALUE_REQUIRED, 'SSH switch step mode: auto, skip, or show')
             ->addOption('step-firewall', null, InputOption::VALUE_REQUIRED, 'Firewall step mode: auto, skip, or show')
             ->addOption('step-systemd', null, InputOption::VALUE_REQUIRED, 'Systemd step mode: auto, skip, or show')
-            ->addOption('system-user', null, InputOption::VALUE_REQUIRED, 'Dedicated host system user for running gickers.sh');
+            ->addOption('system-user', null, InputOption::VALUE_REQUIRED, 'Dedicated host system user for running gickers.sh')
+            ->addOption('system-only', null, InputOption::VALUE_NONE, 'Run only host system integration steps (Docker, SSHD 22, UFW, systemd)');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -195,6 +196,7 @@ final class InstallCommand extends Command
             'non_interactive' => (bool) $input->getOption('yes'),
             'dry_run' => (bool) $input->getOption('dry-run'),
             'sudo' => (bool) $input->getOption('sudo'),
+            'system_only' => (bool) $input->getOption('system-only'),
             'skip_docker' => (bool) $input->getOption('skip-docker'),
             'skip_sshd_switch' => (bool) $input->getOption('skip-sshd-switch'),
             'skip_firewall' => (bool) $input->getOption('skip-firewall'),

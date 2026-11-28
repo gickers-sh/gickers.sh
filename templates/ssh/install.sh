@@ -50,6 +50,7 @@ STEP_SSHD="__STEP_SSHD__"
 STEP_FIREWALL="__STEP_FIREWALL__"
 STEP_SYSTEMD="__STEP_SYSTEMD__"
 SYSTEM_USER="__SYSTEM_USER__"
+SYSTEM_ONLY="__SYSTEM_ONLY__"
 
 # Auto-detect root vs non-root
 if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
@@ -84,6 +85,7 @@ while [ $# -gt 0 ]; do
         --step-firewall) STEP_FIREWALL="$2"; shift 2 ;;
         --step-systemd) STEP_SYSTEMD="$2"; shift 2 ;;
         --system-user) SYSTEM_USER="$2"; shift 2 ;;
+        --system-only) SYSTEM_ONLY=1; shift ;;
         --skip-docker) STEP_DOCKER="skip"; shift ;;
         --skip-sshd-switch) STEP_SSHD="skip"; shift ;;
         --skip-firewall) STEP_FIREWALL="skip"; shift ;;
@@ -110,6 +112,7 @@ while [ $# -gt 0 ]; do
             echo "  --allow-keyless <bool>    Allow keyless connections (true/false)"
             echo "  --lfs <bool>              Enable Git LFS (true/false)"
             echo "  --sudo                    Enable sudo mode for system operations"
+            echo "  --system-only             Configure only host system steps (Docker, SSH 22, UFW, systemd)"
             echo "  --step-docker <mode>      Docker step: auto, skip, or show"
             echo "  --step-sshd <mode>        SSH switch step: auto, skip, or show"
             echo "  --step-firewall <mode>    Firewall step: auto, skip, or show"
@@ -217,8 +220,243 @@ if [ -f "$INSTALL_DIR/.env.docker" ] || [ -f "./.env.docker" ]; then
 fi
 
 # ------------------------------------------------------------------------------
+# Routine Dédiée : Intégration Système Hôte & Sudoers (--system-only)
+# ------------------------------------------------------------------------------
+run_system_only() {
+    printf "\n"
+    cat << 'EOF'
+  ╭────────────────────────────────────────────────────────────────────────╮
+  │ 🚀 Gickers.sh — Intégration Système Hôte & Sudoers                     │
+  ├────────────────────────────────────────────────────────────────────────┤
+  │ Configuration exclusive de l'infrastructure hôte (ports, Docker, OS) : │
+  │   • Dépendances & Docker CE officiel (si manquant)                     │
+  │   • Libération port 22 pour Git & bascule OpenSSH vers 2222            │
+  │   • Règles de pare-feu UFW (80, 443, 22, 2222)                         │
+  │   • Service systemd /etc/systemd/system/gickers.service au boot        │
+  │                                                                        │
+  │ ✔ Les conteneurs, base de données et données restent inchangés.        │
+  ╰────────────────────────────────────────────────────────────────────────╯
+EOF
+    printf "\n"
+
+    local EXEC_SUDO=""
+    if [ "$IS_ROOT" -eq 1 ]; then
+        EXEC_SUDO=""
+    else
+        if command -v sudo >/dev/null 2>&1; then
+            local sudo_out
+            sudo_out=$(sudo -v 2>&1) && local sudo_res=0 || local sudo_res=$?
+            if [ "$sudo_res" -eq 0 ]; then
+                EXEC_SUDO="sudo"
+            else
+                if echo "$sudo_out" | grep -qiE 'not in sudoers|may not run sudo'; then
+                    printf "  %s✖%s %sL'utilisateur '%s' n'est pas dans les sudoers sur ce serveur.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$CURRENT_USER" "$C_RESET"
+                else
+                    printf "  %s✖%s %sAuthentification sudo échouée.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
+                fi
+                printf "    %sExécutez cette commande avec un compte administrateur :%s\n" "$C_MUTED" "$C_RESET"
+                printf "    %scurl -fsSL https://.../install.sh | sudo bash -s -- --system-only%s\n\n" "$C_CYAN" "$C_RESET"
+                exit 1
+            fi
+        else
+            printf "  %s✖%s %sPrivilèges root requis (sudo absent).%s\n\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
+            exit 1
+        fi
+    fi
+
+    # Localisation du répertoire applicatif
+    if [ -z "$INSTALL_DIR" ] || [ ! -f "$INSTALL_DIR/compose.yaml" ]; then
+        if [ -f "$PWD/compose.yaml" ]; then
+            INSTALL_DIR="$PWD"
+        elif [ -n "${SUDO_USER:-}" ] && [ -f "/home/$SUDO_USER/gickers.sh/compose.yaml" ]; then
+            INSTALL_DIR="/home/$SUDO_USER/gickers.sh"
+        elif [ -f "/var/www/gickers/compose.yaml" ]; then
+            INSTALL_DIR="/var/www/gickers"
+        else
+            local candidate
+            candidate=$(find /home -maxdepth 3 -name "compose.yaml" 2>/dev/null | grep -i "gickers" | head -n 1 || true)
+            if [ -n "$candidate" ]; then
+                INSTALL_DIR="$(dirname "$candidate")"
+            fi
+        fi
+    fi
+
+    if [ -z "$INSTALL_DIR" ] || [ ! -f "$INSTALL_DIR/compose.yaml" ]; then
+        if [ "$NON_INTERACTIVE" -eq 0 ]; then
+            gum_input "Répertoire de l'application gickers.sh existante" INSTALL_DIR "${INSTALL_DIR:-/home/${SUDO_USER:-$CURRENT_USER}/gickers.sh}"
+        fi
+    fi
+
+    if [ ! -f "$INSTALL_DIR/compose.yaml" ]; then
+        printf "  %s✖%s %sFichier compose.yaml introuvable dans '%s'.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$INSTALL_DIR" "$C_RESET"
+        printf "    %sPrécisez le chemin avec : --dir <chemin>%s\n\n" "$C_MUTED" "$C_RESET"
+        exit 1
+    fi
+
+    printf "  %s✔%s %sApplication détectée dans : ${C_BOLD}${C_GOLD}%s${C_RESET}\n" "$C_GREEN" "$C_RESET" "$C_WHITE" "$INSTALL_DIR"
+
+    # Charger APP_DOMAIN depuis .env.docker
+    if [ -f "$INSTALL_DIR/.env.docker" ]; then
+        local cfg_domain
+        cfg_domain=$(grep -E '^APP_DOMAIN=' "$INSTALL_DIR/.env.docker" | cut -d '=' -f2- | tr -d ' "' || true)
+        [ -n "$cfg_domain" ] && DOMAIN="$cfg_domain"
+    fi
+
+    local app_owner
+    app_owner=$(stat -c '%U' "$INSTALL_DIR" 2>/dev/null || stat -f '%Su' "$INSTALL_DIR" 2>/dev/null || echo "${SUDO_USER:-$CURRENT_USER}")
+    [ "$app_owner" = "root" ] && [ -n "${SUDO_USER:-}" ] && app_owner="$SUDO_USER"
+    SYSTEM_USER="$app_owner"
+    SSH_PORT="22"
+
+    if [ "$NON_INTERACTIVE" -eq 0 ]; then
+        gum_confirm "Appliquer la configuration système hôte pour $DOMAIN ($INSTALL_DIR) ?" 1 || {
+            printf "\n  %sℹ%s %sOpération annulée.%s\n\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_RESET"
+            exit 0
+        }
+    fi
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        printf "\n  %s✔%s %s[DRY-RUN] Validation réussie. Aucune modification système effectuée.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
+        exit 0
+    fi
+
+    # 1. Groupe docker
+    if id -u "$SYSTEM_USER" >/dev/null 2>&1; then
+        $EXEC_SUDO usermod -aG docker "$SYSTEM_USER" 2>/dev/null || true
+    fi
+
+    # 2. Docker CE si non installé
+    if ! command -v docker >/dev/null 2>&1; then
+        if [ -d /etc/apt ]; then
+            (
+                $EXEC_SUDO apt-get update -y >/dev/null 2>&1
+                $EXEC_SUDO apt-get install -y --no-install-recommends ca-certificates curl gnupg git jq ufw >/dev/null 2>&1
+                $EXEC_SUDO install -m 0755 -d /etc/apt/keyrings
+                curl -fsSL "https://download.docker.com/linux/$OS_NAME/gpg" | $EXEC_SUDO gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes >/dev/null 2>&1
+                $EXEC_SUDO chmod a+r /etc/apt/keyrings/docker.gpg
+                local codename
+                codename=$(. /etc/os-release 2>/dev/null && echo "$VERSION_CODENAME" || echo "stable")
+                [ -z "$codename" ] && codename="stable"
+                echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$OS_NAME $codename stable" \
+                    | $EXEC_SUDO tee /etc/apt/sources.list.d/docker.list >/dev/null
+                $EXEC_SUDO apt-get update -y >/dev/null 2>&1
+                $EXEC_SUDO apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1
+                $EXEC_SUDO systemctl enable --now docker >/dev/null 2>&1 || true
+            ) &
+            gum_spin $! "Installation officielle de Docker CE & Compose..."
+        fi
+    else
+        printf "  %s✔%s %sDocker CE : déjà opérationnel sur l'hôte%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+    fi
+
+    # 3. Bascule OpenSSH vers 2222
+    (
+        if command -v ufw >/dev/null 2>&1; then
+            $EXEC_SUDO ufw allow 2222/tcp comment 'OpenSSH System (moved from 22)' >/dev/null 2>&1 || true
+        fi
+        if [ -d /etc/ssh/sshd_config.d ]; then
+            echo "Port 2222" | $EXEC_SUDO tee /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf >/dev/null
+            $EXEC_SUDO chmod 644 /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf
+        fi
+        if [ -f /etc/ssh/sshd_config ]; then
+            $EXEC_SUDO sed -i -E 's/^[#[:space:]]*Port[[:space:]]+22[[:space:]]*$/Port 2222/' /etc/ssh/sshd_config
+        fi
+        if systemctl is-active --quiet ssh.socket 2>/dev/null; then
+            $EXEC_SUDO mkdir -p /etc/systemd/system/ssh.socket.d
+            echo -e "[Socket]\nListenStream=\nListenStream=2222" | $EXEC_SUDO tee /etc/systemd/system/ssh.socket.d/listen-2222.conf >/dev/null
+            $EXEC_SUDO systemctl daemon-reload >/dev/null 2>&1
+            $EXEC_SUDO systemctl restart ssh.socket >/dev/null 2>&1 || true
+        else
+            $EXEC_SUDO systemctl restart ssh >/dev/null 2>&1 || $EXEC_SUDO systemctl restart sshd >/dev/null 2>&1 || true
+        fi
+    ) &
+    gum_spin $! "Bascule de OpenSSH hôte sur le port 2222 (port 22 libéré)..."
+
+    # Mise à jour du port dans .env.docker
+    if [ -f "$INSTALL_DIR/.env.docker" ]; then
+        sed -i -E 's/^SOFT_SERVE_SSH_PORT=.*/SOFT_SERVE_SSH_PORT=22/' "$INSTALL_DIR/.env.docker" 2>/dev/null || true
+        sed -i -E "s|^SOFT_SERVE_SSH_URL=.*|SOFT_SERVE_SSH_URL=ssh://${DOMAIN}|" "$INSTALL_DIR/.env.docker" 2>/dev/null || true
+    fi
+
+    # 4. Pare-feu UFW
+    if command -v ufw >/dev/null 2>&1; then
+        (
+            $EXEC_SUDO ufw allow 2222/tcp comment 'Host SSH daemon' >/dev/null 2>&1 || true
+            $EXEC_SUDO ufw allow 80/tcp comment 'Gickers HTTP' >/dev/null 2>&1 || true
+            $EXEC_SUDO ufw allow 443/tcp comment 'Gickers HTTPS' >/dev/null 2>&1 || true
+            $EXEC_SUDO ufw allow 22/tcp comment 'Gickers Git SSH' >/dev/null 2>&1 || true
+            $EXEC_SUDO ufw --force enable >/dev/null 2>&1 || true
+        ) &
+        gum_spin $! "Application des règles de pare-feu UFW (80, 443, 22, 2222)..."
+    fi
+
+    # 5. Service systemd
+    local systemd_user_line=""
+    if [ "$SYSTEM_USER" != "root" ] && id -u "$SYSTEM_USER" >/dev/null 2>&1; then
+        systemd_user_line="User=${SYSTEM_USER}
+Group=${SYSTEM_USER}"
+    fi
+
+    (
+        echo "[Unit]
+Description=Gickers.sh Git Forge & Container Platform
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+${systemd_user_line}
+WorkingDirectory=${INSTALL_DIR}
+ExecStart=/usr/bin/docker compose --env-file .env.docker up -d
+ExecStop=/usr/bin/docker compose --env-file .env.docker down
+ExecReload=/usr/bin/docker compose --env-file .env.docker restart
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target" | $EXEC_SUDO tee /etc/systemd/system/gickers.service >/dev/null
+
+        $EXEC_SUDO systemctl daemon-reload >/dev/null 2>&1 || true
+        $EXEC_SUDO systemctl enable gickers.service >/dev/null 2>&1 || true
+    ) &
+    gum_spin $! "Enregistrement et activation de gickers.service..."
+
+    # Recharger les conteneurs pour appliquer le port 22
+    if command -v docker >/dev/null 2>&1; then
+        (
+            cd "$INSTALL_DIR" && docker compose --env-file .env.docker up -d >/dev/null 2>&1 || true
+        ) &
+        gum_spin $! "Actualisation des conteneurs pour le port 22..."
+    fi
+
+    # Bannière finale de succès
+    printf "\n"
+    cat << EOF
+  ╭────────────────────────────────────────────────────────────────────────╮
+  │ ✔ Gickers.sh — Intégration Système Hôte & Sudoers Terminée             │
+  ├────────────────────────────────────────────────────────────────────────┤
+  │ Les privilèges et services hôte sont désormais configurés :            │
+  │   • Port Git SSH     : Port 22 réservé pour Git                        │
+  │   • OpenSSH Système  : Port 2222 (ssh -p 2222 user@host)               │
+  │   • Pare-feu UFW     : Ports 80, 443, 22 et 2222 autorisés             │
+  │   • Service systemd  : /etc/systemd/system/gickers.service au boot     │
+  │                                                                        │
+  │ Répertoire applicatif : $INSTALL_DIR
+  │ Vos données, base de données et utilisateurs sont restés intacts.      │
+  ╰────────────────────────────────────────────────────────────────────────╯
+EOF
+    printf "\n"
+    exit 0
+}
+
+# ------------------------------------------------------------------------------
 # 2. Gestion et Avertissements Privilèges (Sudo vs Non-Sudo)
 # ------------------------------------------------------------------------------
+if [ "$SYSTEM_ONLY" -eq 1 ]; then
+    run_system_only
+fi
+
 if [ "$IS_ROOT" -eq 1 ]; then
     printf "  %s✔%s %sPrivilèges : ${C_BOLD}${C_GREEN}root${C_RESET} %s(%s, accès complet au système hôte)%s\n" "$C_GREEN" "$C_RESET" "$C_WHITE" "$C_MUTED" "$OS_PRETTY" "$C_RESET"
 else
@@ -228,11 +466,16 @@ else
     fi
 
     if [ "$USE_SUDO" = "1" ] && [ "$CAN_SUDO" -eq 1 ]; then
-        if sudo -v 2>/dev/null; then
+        sudo_out=$(sudo -v 2>&1) && sudo_res=0 || sudo_res=$?
+        if [ "$sudo_res" -eq 0 ]; then
             SUDO_CMD="sudo"
             printf "  %s✔%s %sPrivilèges : ${C_BOLD}${C_GREEN}%s (mode sudo activé)${C_RESET} %s(%s)%s\n" "$C_GREEN" "$C_RESET" "$C_WHITE" "$CURRENT_USER" "$C_MUTED" "$OS_PRETTY" "$C_RESET"
         else
-            printf "  %s!%s %sÉchec de l'authentification sudo. Bascule en mode applicatif utilisateur.%s\n" "$C_GOLD" "$C_RESET" "$C_MUTED" "$C_RESET"
+            if echo "$sudo_out" | grep -qiE 'not in sudoers|may not run sudo'; then
+                printf "  %s✖%s %sL'utilisateur '%s' n'est pas sudoer sur ce serveur.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$CURRENT_USER" "$C_RESET"
+            else
+                printf "  %s!%s %sÉchec de l'authentification sudo. Poursuite en mode applicatif utilisateur.%s\n" "$C_GOLD" "$C_RESET" "$C_MUTED" "$C_RESET"
+            fi
             USE_SUDO="0"
             SUDO_CMD=""
         fi
@@ -246,10 +489,10 @@ else
 
         SUDO_OPTIONS=()
         if [ "$CAN_SUDO" -eq 1 ]; then
-            SUDO_OPTIONS+=("Activer le mode sudo (Recommandé VPS : Docker, UFW, SSH 22, systemd)")
+            SUDO_OPTIONS+=("Activer le mode sudo (Recommandé : Docker, UFW, SSH 22, systemd)")
         fi
         SUDO_OPTIONS+=(
-            "Continuer en mode applicatif utilisateur (Docker sans modifier l'hôte)"
+            "Continuer en mode applicatif utilisateur (Docker sans sudo)"
             "Afficher les conseils d'usage et les impacts de sécurité"
         )
 
@@ -259,13 +502,21 @@ else
             if [ "$CAN_SUDO" -eq 1 ]; then
                 case "$SUDO_CHOICE" in
                     0)
-                        if sudo -v; then
+                        sudo_out=$(sudo -v 2>&1) && sudo_res=0 || sudo_res=$?
+                        if [ "$sudo_res" -eq 0 ]; then
                             SUDO_CMD="sudo"
                             USE_SUDO="1"
                             SHOW_EXPLANATION=0
                             printf "  %s✔%s %sMode sudo activé avec succès.%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
                         else
-                            printf "  %s✖%s %sMot de passe sudo invalide. Poursuite en mode applicatif.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
+                            if echo "$sudo_out" | grep -qiE 'not in sudoers|may not run sudo'; then
+                                printf "  %s✖%s %sL'utilisateur '%s' n'a pas les droits sudo sur ce serveur (non-sudoer).%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$CURRENT_USER" "$C_RESET"
+                                printf "    %sLes étapes d'administration système hôte seront ignorées pour cette session.%s\n" "$C_MUTED" "$C_RESET"
+                            else
+                                printf "  %s✖%s %sMot de passe sudo invalide ou annulé. Poursuite en mode applicatif.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
+                            fi
+                            USE_SUDO="0"
+                            SUDO_CMD=""
                             SHOW_EXPLANATION=0
                         fi
                         ;;
@@ -299,6 +550,38 @@ else
     fi
 fi
 
+# Si l'utilisateur est non-root et non-sudo, avertir sur les étapes ignorées
+if [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" != "1" ]; then
+    printf "\n"
+    cat << 'EOF'
+  ╭────────────────────────────────────────────────────────────────────────╮
+  │ ℹ Mode Applicatif Utilisateur — Privilèges hôte non activés            │
+  ├────────────────────────────────────────────────────────────────────────┤
+  │ Sans privilèges root/sudo, les étapes système suivantes sont ignorées :│
+  │   • Installation de Docker CE hôte (apt-get)                           │
+  │   • Déplacement OpenSSH et réservation du port 22 pour Git             │
+  │   • Configuration du pare-feu UFW de l'hôte                            │
+  │   • Service systemd /etc/systemd/system/gickers.service au boot        │
+  │                                                                        │
+  │ ➜ Pour exécuter uniquement ces étapes plus tard en root ou sudo :      │
+  │   curl -fsSL https://.../install.sh | sudo bash -s -- --system-only    │
+  ╰────────────────────────────────────────────────────────────────────────╯
+EOF
+    printf "\n"
+fi
+
+# Détection d'une installation existante pour proposition rapide
+if [ -f "$INSTALL_DIR/compose.yaml" ] && [ "$NON_INTERACTIVE" -eq 0 ] && [ "$IS_ROOT" -eq 1 -o "$USE_SUDO" = "1" ]; then
+    EXISTING_OPTS=(
+        "Mettre à jour uniquement l'infrastructure hôte (Port 22 SSH, UFW, Systemd)"
+        "Réinstaller ou reconfigurer l'application complète"
+    )
+    gum_choose "Une installation existante a été détectée dans $INSTALL_DIR" "${EXISTING_OPTS[@]}" && EXIST_SELECTION=$? || EXIST_SELECTION=$?
+    if [ "$EXIST_SELECTION" -eq 0 ]; then
+        run_system_only
+    fi
+fi
+
 # Auto-detect existing Admin SSH Public Key
 DETECTED_ADMIN_KEY=""
 if [ -z "$ADMIN_SSH_KEY" ]; then
@@ -322,13 +605,42 @@ if [ "$NON_INTERACTIVE" -eq 0 ]; then
     # --------------------------------------------------------------------------
     if [ "$DOCKER_AVAILABLE" -eq 1 ]; then
         DOCKER_VER=$(docker --version 2>/dev/null | awk '{print $3}' | tr -d ',' || echo "ok")
-        printf "  %s✔%s %sDocker est déjà installé et opérationnel : ${C_BOLD}${C_GREEN}Docker %s & Compose${C_RESET}\n" "$C_GREEN" "$C_RESET" "$C_WHITE" "$DOCKER_VER"
+        printf "  %s✔%s %sDocker est déjà accessible pour %s : ${C_BOLD}${C_GREEN}Docker %s & Compose${C_RESET}\n" "$C_GREEN" "$C_RESET" "$C_WHITE" "$CURRENT_USER" "$DOCKER_VER"
         STEP_DOCKER="skip"
+    elif [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" != "1" ]; then
+        printf "\n  %s!%s %sDocker CE n'est pas disponible pour votre utilisateur et sudo est absent.%s\n" "$C_GOLD" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+        DOCKER_NO_SUDO_MENU=(
+            "[Afficher les commandes] Voir les commandes d'installation Docker pour l'administrateur"
+            "[Ignorer cette étape] Poursuivre (je configure Docker moi-même)"
+        )
+        gum_choose "Dépendances système & Docker CE" "${DOCKER_NO_SUDO_MENU[@]}" && DOCKER_SELECTION=$? || DOCKER_SELECTION=$?
+        if [ "$DOCKER_SELECTION" -eq 0 ]; then
+            STEP_DOCKER="show"
+            DOCKER_CMDS=$(cat << 'EOF'
+# 1. Mise à jour des paquets et prérequis
+sudo apt-get update -y && sudo apt-get install -y ca-certificates curl gnupg git git-lfs jq ufw
+# 2. Clé GPG officielle Docker
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+# 3. Dépôt Docker CE
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list
+# 4. Installation de Docker et du plugin Compose
+sudo apt-get update -y && sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+# 5. Démarrage et ajout au groupe docker
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER
+EOF
+)
+            print_manual_commands_box "Commandes manuelles : Installation Docker CE & Compose" "$DOCKER_CMDS"
+        else
+            STEP_DOCKER="skip"
+        fi
     elif [ "$STEP_DOCKER" = "auto" ]; then
         DOCKER_MENU=(
-            "[Exécution auto] Installer Docker CE officiel & Docker Compose (Recommandé)"
-            "[Ignorer cette étape] Je gère l'installation de Docker moi-même"
-            "[Afficher les commandes] Voir les commandes d'installation manuelles annotées"
+            "[Auto] Installer Docker CE officiel & Compose (Recommandé)"
+            "[Ignorer] Je gère l'installation de Docker moi-même"
+            "[Manuel] Voir les commandes d'installation Docker annotées"
         )
         gum_choose "Dépendances système & Docker CE" "${DOCKER_MENU[@]}" && DOCKER_SELECTION=$? || DOCKER_SELECTION=$?
         case "$DOCKER_SELECTION" in
@@ -360,13 +672,19 @@ EOF
     # --------------------------------------------------------------------------
     # ÉTAPE SYSTÈME 2 : Port SSH Git et Bascule OpenSSH
     # --------------------------------------------------------------------------
-    if [ "$SSHD_ON_PORT_22" -eq 1 ]; then
+    if [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" != "1" ]; then
+        if [ "$SSHD_ON_PORT_22" -eq 1 ]; then
+            printf "  %sℹ%s %sPort 22 occupé par OpenSSH : sans sudo, gickers.sh utilisera le port non-privilégié 2223.%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
+            SSH_PORT="2223"
+        fi
+        STEP_SSHD="skip"
+    elif [ "$SSHD_ON_PORT_22" -eq 1 ]; then
         printf "\n  %s!%s %sLe port 22 est actuellement occupé par le serveur OpenSSH hôte (sshd).%s\n" "$C_GOLD" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
         SSHD_MENU=(
-            "[Exécution auto] Basculer OpenSSH hôte vers le port 2222 (Port 22 réservé à Git)"
-            "[Port alternatif] Conserver OpenSSH sur 22 et utiliser le port 2223 pour gickers.sh"
-            "[Ignorer cette étape] Ne pas modifier la configuration OpenSSH"
-            "[Afficher les commandes] Voir les commandes manuelles de migration de port OpenSSH"
+            "[Auto] Basculer OpenSSH hôte sur le port 2222 (Port 22 pour Git)"
+            "[Port alternatif] Garder OpenSSH sur 22 et utiliser 2223 pour Git"
+            "[Ignorer] Ne pas modifier la configuration OpenSSH"
+            "[Manuel] Voir les commandes de migration de port OpenSSH"
         )
         gum_choose "Transition du port SSH hôte (Libération du port 22 pour Git)" "${SSHD_MENU[@]}" && SSHD_SELECTION=$? || SSHD_SELECTION=$?
         case "$SSHD_SELECTION" in
@@ -409,12 +727,15 @@ EOF
     # --------------------------------------------------------------------------
     # ÉTAPE SYSTÈME 3 : Pare-feu UFW
     # --------------------------------------------------------------------------
-    if [ "$UFW_ACTIVE" -eq 1 ]; then
+    if [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" != "1" ]; then
+        printf "  %sℹ%s %sPare-feu UFW : ignoré en mode applicatif utilisateur (sudo requis pour modifier les règles).%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_RESET"
+        STEP_FIREWALL="skip"
+    elif [ "$UFW_ACTIVE" -eq 1 ]; then
         if [ "$STEP_FIREWALL" = "auto" ]; then
             UFW_MENU=(
-                "[Exécution auto] Autoriser les ports Web (80, 443), Git ($SSH_PORT) et hôte dans UFW"
-                "[Ignorer cette étape] Je gère mes règles de pare-feu moi-même"
-                "[Afficher les commandes] Voir les règles de pare-feu UFW à appliquer manuellement"
+                "[Auto] Ouvrir ports Web (80, 443), Git ($SSH_PORT) et hôte dans UFW"
+                "[Ignorer] Je gère mes règles de pare-feu moi-même"
+                "[Manuel] Voir les règles de pare-feu UFW à appliquer"
             )
             gum_choose "Configuration du pare-feu hôte (UFW actif détecté)" "${UFW_MENU[@]}" && UFW_SELECTION=$? || UFW_SELECTION=$?
             case "$UFW_SELECTION" in
@@ -446,14 +767,17 @@ EOF
     # --------------------------------------------------------------------------
     # ÉTAPE SYSTÈME 4 : Service Systemd (gickers.service)
     # --------------------------------------------------------------------------
-    if [ "$SYSTEMD_GICKERS_EXISTS" -eq 1 ]; then
+    if [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" != "1" ]; then
+        printf "  %sℹ%s %sService systemd : ignoré en mode applicatif (sudo requis pour /etc/systemd/system).%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_RESET"
+        STEP_SYSTEMD="skip"
+    elif [ "$SYSTEMD_GICKERS_EXISTS" -eq 1 ]; then
         printf "  %s✔%s %sService systemd : ${C_BOLD}${C_GREEN}gickers.service déjà présent${C_RESET}\n" "$C_GREEN" "$C_RESET" "$C_WHITE"
         STEP_SYSTEMD="skip"
     elif [ "$STEP_SYSTEMD" = "auto" ]; then
         SYSTEMD_MENU=(
-            "[Exécution auto] Créer et activer gickers.service pour redémarrage auto au boot"
-            "[Ignorer cette étape] Gérer les conteneurs manuellement via docker compose"
-            "[Afficher les commandes] Voir le fichier d'unité systemd et les commandes systemctl"
+            "[Auto] Créer et activer gickers.service (redémarrage au boot)"
+            "[Ignorer] Gérer les conteneurs manuellement via compose"
+            "[Manuel] Voir l'unité systemd et commandes systemctl"
         )
         gum_choose "Intégration systemd (démarrage automatique au boot du VPS)" "${SYSTEMD_MENU[@]}" && SYSTEMD_SELECTION=$? || SYSTEMD_SELECTION=$?
         case "$SYSTEMD_SELECTION" in
@@ -500,7 +824,7 @@ EOF
     USER_OPTS=()
     if [ "$IS_ROOT" -eq 1 ] || [ "$USE_SUDO" = "1" ]; then
         USER_OPTS+=(
-            "[Recommandé] Créer ou utiliser l'utilisateur système dédié non-root (gickers)"
+            "[Recommandé] Créer l'utilisateur système dédié (gickers)"
             "Utiliser l'utilisateur actuel ($CURRENT_USER)"
             "Spécifier un autre utilisateur système..."
         )
@@ -544,8 +868,8 @@ EOF
 
     # 4. Web Ports (HTTP / HTTPS)
     HTTP_OPTS=(
-        "Standard (Ports 80 & 443 avec certificats Let's Encrypt automatiques par Caddy)"
-        "Personnaliser les ports Web (ex: derrière un reverse-proxy existant)"
+        "Ports standard 80 & 443 (Certificats SSL auto Let's Encrypt / Caddy)"
+        "Personnaliser les ports Web (ex: reverse-proxy existant)"
     )
     gum_choose "Configuration des ports Web" "${HTTP_OPTS[@]}" && WEB_CHOICE=$? || WEB_CHOICE=$?
     if [ "$WEB_CHOICE" -eq 1 ]; then
@@ -560,9 +884,9 @@ EOF
         KEY_OPTS+=("Utiliser la clé détectée localement (${KEY_SHORT})")
     fi
     KEY_OPTS+=(
-        "Générer une nouvelle clé SSH admin dédiée (ed25519)"
-        "Coller le contenu d'une clé publique SSH (.pub)"
-        "Configurer plus tard (le premier utilisateur connecté deviendra admin)"
+        "Générer une clé SSH admin dédiée (ed25519)"
+        "Coller une clé publique SSH (.pub)"
+        "Configurer plus tard (premier utilisateur connecté = admin)"
     )
 
     gum_choose "Clé SSH de l'administrateur initial" "${KEY_OPTS[@]}" && KEY_CHOICE=$? || KEY_CHOICE=$?
@@ -607,9 +931,9 @@ EOF
 
     # 7. Server Access Policy
     POLICY_OPTS=(
-        "Lecture seule publique (read-only) [Recommandé: dépôts publics visibles, écriture par SSH authentifié]"
-        "Privé strict (no-access) [Tout accès anonyme interdit]"
-        "Public complet (public)"
+        "Lecture seule publique (read-only) [Dépôts publics visibles]"
+        "Privé strict (no-access) [Authentification SSH requise]"
+        "Public complet (public) [Dépôts et création ouverts]"
     )
     gum_choose "Politique d'accès anonyme" "${POLICY_OPTS[@]}" && POL_CHOICE=$? || POL_CHOICE=$?
     case "$POL_CHOICE" in
@@ -620,7 +944,7 @@ EOF
 
     SIGNUP_OPTS=(
         "Inscriptions en libre-service activées (true) [Recommandé]"
-        "Inscriptions fermées (false) [Serveur privé sur invitation]"
+        "Inscriptions fermées (false) [Serveur privé]"
     )
     gum_choose "Inscriptions de nouveaux utilisateurs" "${SIGNUP_OPTS[@]}" && SIGN_CHOICE=$? || SIGN_CHOICE=$?
     [ "$SIGN_CHOICE" -eq 0 ] && ALLOW_SIGNUP="true" || ALLOW_SIGNUP="false"

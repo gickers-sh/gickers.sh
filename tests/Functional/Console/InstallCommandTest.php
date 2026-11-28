@@ -62,4 +62,18 @@ final class InstallCommandTest extends KernelTestCase
 
         self::assertStringContainsString('gickers.sh — One-Shot Production Installer', $out);
     }
+
+    public function testInstallBashWithSystemOnlyOutputsFlag(): void
+    {
+        $command = $this->application->find('install');
+        $tester = new CommandTester($command);
+
+        $tester->execute(['--bash' => true, '--system-only' => true]);
+
+        self::assertSame(0, $tester->getStatusCode());
+        $out = $tester->getDisplay();
+
+        self::assertStringContainsString('SYSTEM_ONLY="1"', $out);
+        self::assertStringContainsString('run_system_only', $out);
+    }
 }

@@ -45,10 +45,14 @@ gum_choose() {
         esac
     fi
 
-    local term_cols
-    term_cols=$(tput cols 2>/dev/null || echo 80)
-    [ -z "$term_cols" ] && term_cols=80
-    local max_width=$(( term_cols - 8 ))
+    local term_cols=""
+    if [ -n "$TTY_INPUT" ] && [ -r "$TTY_INPUT" ]; then
+        term_cols=$(stty size < "$TTY_INPUT" 2>/dev/null | awk '{print $2}')
+        [ -z "$term_cols" ] && term_cols=$(tput cols < "$TTY_INPUT" 2>/dev/null || true)
+    fi
+    [ -z "$term_cols" ] && term_cols=$(tput cols 2>/dev/null || echo 80)
+    [ -z "$term_cols" ] || [ "$term_cols" -le 0 ] && term_cols=80
+    local max_width=$(( term_cols - 6 ))
     [ "$max_width" -lt 30 ] && max_width=30
 
     printf "\n  %s?%s %s%s%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$prompt_title" "$C_RESET"
