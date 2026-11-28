@@ -607,13 +607,73 @@ fi
 # 3. Formulaire Interactif et Sélection Granulaire par Étape
 # ------------------------------------------------------------------------------
 if [ "$NON_INTERACTIVE" -eq 0 ]; then
+    # Préparation des descriptions et commandes pour chaque étape du checklist
+    DESC_DOCKER="Installe les paquets de base (curl, git, jq), le dépôt officiel Docker CE et le plugin Docker Compose."
+    CMDS_DOCKER=$(cat << 'EOF'
+apt-get update -y && apt-get install -y ca-certificates curl gnupg git jq ufw
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+systemctl enable --now docker && usermod -aG docker $USER
+EOF
+)
+
+    DESC_SSHD="Migre le serveur OpenSSH hôte sur le port 2222 afin de libérer le port 22 pour le service Git SSH."
+    CMDS_SSHD=$(cat << 'EOF'
+ufw allow 2222/tcp comment 'OpenSSH System (moved from 22)'
+echo "Port 2222" > /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf
+systemctl daemon-reload && systemctl restart ssh.socket || systemctl restart sshd
+EOF
+)
+
+    DESC_UFW="Installe UFW (si absent) et autorise le trafic Web (80, 443), Git SSH (22) et OpenSSH hôte (2222)."
+    CMDS_UFW=$(cat << 'EOF'
+apt-get install -y ufw
+ufw allow 80/tcp comment 'Gickers HTTP / ACME'
+ufw allow 443/tcp comment 'Gickers HTTPS'
+ufw allow 22/tcp comment 'Gickers Git SSH'
+ufw allow 2222/tcp comment 'System OpenSSH'
+ufw --force enable
+EOF
+)
+
+    DESC_APP="Télécharge ou synchronise le code source, configure .env.docker et démarre la stack complète Docker."
+    CMDS_APP=$(cat << 'EOF'
+git clone --depth 1 https://github.com/gickerssh/gickers.sh.git
+docker compose --env-file .env.docker build
+docker compose --env-file .env.docker up -d postgres
+docker compose --env-file .env.docker run --rm init
+docker compose --env-file .env.docker up -d
+EOF
+)
+
+    DESC_SYSTEMD="Crée une unité systemd gickers.service pour lancer automatiquement l'infrastructure au boot du serveur."
+    CMDS_SYSTEMD=$(cat << 'EOF'
+tee /etc/systemd/system/gickers.service << 'UNIT'
+[Unit]
+Description=Gickers.sh Git Forge & Container Platform
+Requires=docker.service
+After=docker.service network-online.target
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/gickers/gickers.sh
+ExecStart=/usr/bin/docker compose --env-file .env.docker up -d
+ExecStop=/usr/bin/docker compose --env-file .env.docker down
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload && systemctl enable gickers.service
+EOF
+)
+
     # Sélection des étapes à exécuter au lancement
     CHECKLIST_ITEMS=(
-        "Dépendances système & Docker CE:1"
-        "Port SSH Git 22 (Bascule OpenSSH vers 2222):1"
-        "Pare-feu hôte UFW (Installation & règles de sécurité):1"
-        "Déploiement applicatif (Conteneurs Docker, Postgres, Caddy):1"
-        "Service systemd gickers.service (Démarrage au boot):1"
+        "Dépendances système & Docker CE|1|${DESC_DOCKER}|${CMDS_DOCKER}"
+        "Port SSH Git 22 (Bascule OpenSSH vers 2222)|1|${DESC_SSHD}|${CMDS_SSHD}"
+        "Pare-feu hôte UFW (Installation & règles)|1|${DESC_UFW}|${CMDS_UFW}"
+        "Déploiement applicatif (Conteneurs Docker)|1|${DESC_APP}|${CMDS_APP}"
+        "Service systemd gickers.service (Boot VPS)|1|${DESC_SYSTEMD}|${CMDS_SYSTEMD}"
     )
     gum_checklist "Sélectionnez les étapes à exécuter sur cette machine" SELECTED_STEPS "${CHECKLIST_ITEMS[@]}"
 

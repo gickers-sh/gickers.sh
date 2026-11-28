@@ -120,8 +120,8 @@ gum_choose() {
     return "$selected"
 }
 
-# Gum-styled checklist / multi-select component with checkboxes
-# Usage: gum_checklist "Titre" out_var "Item 1:1" "Item 2:1" "Item 3:0" ...
+# Gum-styled checklist / multi-select component with checkboxes and preview info box
+# Usage: gum_checklist "Titre" out_var "Label:checked[:description[:commands]]" ...
 # Returns an array in $out_var containing 1 or 0 for each item.
 gum_checklist() {
     local prompt_title="$1"
@@ -130,14 +130,16 @@ gum_checklist() {
 
     local labels=()
     local checked=()
+    local descs=()
+    local cmds=()
     for item in "$@"; do
-        if [[ "$item" =~ ^(.*):([01])$ ]]; then
-            labels+=("${BASH_REMATCH[1]}")
-            checked+=("${BASH_REMATCH[2]}")
-        else
-            labels+=("$item")
-            checked+=(1)
-        fi
+        local IFS='|'
+        local parts=()
+        read -ra parts <<< "$item"
+        labels+=("${parts[0]}")
+        checked+=("${parts[1]:-1}")
+        descs+=("${parts[2]:-}")
+        cmds+=("${parts[3]:-}")
     done
 
     local count=${#labels[@]}
@@ -161,10 +163,18 @@ gum_checklist() {
     local max_width=$(( term_cols - 10 ))
     [ "$max_width" -lt 30 ] && max_width=30
 
-    printf "\n  %s?%s %s%s%s %s(Espace: cocher/décocher • Entrée: valider)%s\n" \
+    local box_width=$(( term_cols - 6 ))
+    [ "$box_width" -gt 74 ] && box_width=74
+    [ "$box_width" -lt 40 ] && box_width=40
+    local inner_width=$(( box_width - 4 ))
+
+    printf "\n  %s?%s %s%s%s %s(Espace: cocher/décocher • a: tout basculer • Entrée: valider)%s\n" \
         "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$prompt_title" "$C_RESET" "$C_DIM" "$C_RESET"
 
-    draw_checklist() {
+    local last_rendered_lines=0
+
+    draw_checklist_and_box() {
+        local rendered=0
         for i in "${!labels[@]}"; do
             local opt_text="${labels[i]}"
             if [ "${#opt_text}" -gt "$max_width" ]; then
@@ -185,11 +195,77 @@ gum_checklist() {
                 printf "\r${ESC}[2K      %s %s%s%s\n" \
                     "$box_icon" "$C_MUTED" "$opt_text" "$C_RESET"
             fi
+            rendered=$((rendered + 1))
         done
+
+        # Affichage du bloc d'informations et des commandes de l'élément focus
+        local cur_desc="${descs[selected]:-}"
+        local cur_cmd="${cmds[selected]:-}"
+
+        if [ -n "$cur_desc" ] || [ -n "$cur_cmd" ]; then
+            printf "\r${ESC}[2K\n"
+            rendered=$((rendered + 1))
+
+            local top_line="╭─"
+            local sep_line="├─"
+            local bot_line="╰─"
+            for (( w=0; w<inner_width; w++ )); do
+                top_line+="─"
+                sep_line+="─"
+                bot_line+="─"
+            done
+            top_line+="╮"
+            sep_line+="┤"
+            bot_line+="╯"
+
+            printf "\r${ESC}[2K    %s%s%s\n" "$C_DIM" "$top_line" "$C_RESET"
+            rendered=$((rendered + 1))
+
+            if [ -n "$cur_desc" ]; then
+                # Découpage du texte description sur inner_width
+                local desc_clean
+                desc_clean=$(echo "$cur_desc" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+                while IFS= read -r dline; do
+                    [ -z "$dline" ] && continue
+                    while [ "${#dline}" -gt "$inner_width" ]; do
+                        local chunk="${dline:0:$inner_width}"
+                        printf "\r${ESC}[2K    %s│%s %s%-*s%s %s│%s\n" "$C_DIM" "$C_RESET" "$C_WHITE" "$inner_width" "$chunk" "$C_RESET" "$C_DIM" "$C_RESET"
+                        rendered=$((rendered + 1))
+                        dline="${dline:$inner_width}"
+                    done
+                    printf "\r${ESC}[2K    %s│%s %s%-*s%s %s│%s\n" "$C_DIM" "$C_RESET" "$C_WHITE" "$inner_width" "$dline" "$C_RESET" "$C_DIM" "$C_RESET"
+                    rendered=$((rendered + 1))
+                done <<< "$desc_clean"
+            fi
+
+            if [ -n "$cur_cmd" ]; then
+                if [ -n "$cur_desc" ]; then
+                    printf "\r${ESC}[2K    %s%s%s\n" "$C_DIM" "$sep_line" "$C_RESET"
+                    rendered=$((rendered + 1))
+                fi
+                while IFS= read -r cline; do
+                    local disp_cline="$cline"
+                    if [ "${#disp_cline}" -gt "$inner_width" ]; then
+                        disp_cline="${disp_cline:0:$((inner_width - 3))}..."
+                    fi
+                    local color_cline="$C_GOLD"
+                    if [[ "$cline" =~ ^# ]]; then
+                        color_cline="$C_DIM"
+                    fi
+                    printf "\r${ESC}[2K    %s│%s %s%-*s%s %s│%s\n" "$C_DIM" "$C_RESET" "$color_cline" "$inner_width" "$disp_cline" "$C_RESET" "$C_DIM" "$C_RESET"
+                    rendered=$((rendered + 1))
+                done <<< "$cur_cmd"
+            fi
+
+            printf "\r${ESC}[2K    %s%s%s\n" "$C_DIM" "$bot_line" "$C_RESET"
+            rendered=$((rendered + 1))
+        fi
+
+        last_rendered_lines=$rendered
     }
 
     printf "${ESC}[?25l"
-    draw_checklist
+    draw_checklist_and_box
 
     while true; do
         IFS= read -rsn1 key < "$TTY_INPUT" || break
@@ -198,31 +274,31 @@ gum_checklist() {
             case "$rest" in
                 "[A"|"OA")
                     selected=$(( (selected - 1 + count) % count ))
-                    printf "\r${ESC}[%dA" "$count"
-                    draw_checklist
+                    printf "\r${ESC}[%dA" "$last_rendered_lines"
+                    draw_checklist_and_box
                     ;;
                 "[B"|"OB")
                     selected=$(( (selected + 1) % count ))
-                    printf "\r${ESC}[%dA" "$count"
-                    draw_checklist
+                    printf "\r${ESC}[%dA" "$last_rendered_lines"
+                    draw_checklist_and_box
                     ;;
             esac
         elif [[ $key == "k" ]]; then
             selected=$(( (selected - 1 + count) % count ))
-            printf "\r${ESC}[%dA" "$count"
-            draw_checklist
+            printf "\r${ESC}[%dA" "$last_rendered_lines"
+            draw_checklist_and_box
         elif [[ $key == "j" ]]; then
             selected=$(( (selected + 1) % count ))
-            printf "\r${ESC}[%dA" "$count"
-            draw_checklist
+            printf "\r${ESC}[%dA" "$last_rendered_lines"
+            draw_checklist_and_box
         elif [[ $key == " " ]]; then
             if [ "${checked[selected]}" -eq 1 ]; then
                 checked[selected]=0
             else
                 checked[selected]=1
             fi
-            printf "\r${ESC}[%dA" "$count"
-            draw_checklist
+            printf "\r${ESC}[%dA" "$last_rendered_lines"
+            draw_checklist_and_box
         elif [[ $key == "a" ]]; then
             local all_on=1
             for c in "${checked[@]}"; do
@@ -232,8 +308,8 @@ gum_checklist() {
             for i in "${!checked[@]}"; do
                 checked[i]=$target_state
             done
-            printf "\r${ESC}[%dA" "$count"
-            draw_checklist
+            printf "\r${ESC}[%dA" "$last_rendered_lines"
+            draw_checklist_and_box
         elif [[ $key == "" ]]; then
             break
         elif [[ $key == "q" ]]; then
@@ -243,9 +319,8 @@ gum_checklist() {
         fi
     done
 
-    # Effacement et affichage confirmé
-    local total_lines=$(( count + 1 ))
-    printf "\r${ESC}[%dA${ESC}[J" "$total_lines"
+    # Effacement complet du menu et de la boîte de détails
+    printf "\r${ESC}[%dA${ESC}[J" "$last_rendered_lines"
     printf "${ESC}[?25h"
 
     local selected_count=0
