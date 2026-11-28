@@ -80,6 +80,12 @@
                                 {% endif %}
                                 <div class="cli-card-action" title="Click to copy command">
                                     <code class="cli-code">{{ item.command }}</code>
+                                    {% if item.docsUrl is defined and item.docsUrl %}
+                                        <a href="{{ item.docsUrl }}" class="cli-card-doc-pill" title="View CLI command reference">Docs</a>
+                                    {% endif %}
+                                    {% if item.wiki is defined and item.wiki %}
+                                        <a href="{{ item.wiki.url }}" class="cli-card-doc-pill cli-card-wiki-pill" title="Read Wiki Guide: {{ item.wiki.title }}">Wiki</a>
+                                    {% endif %}
                                     {{ ui.copy_btn(item.command, 'Copy', '', 'Copy to clipboard', 'Copy ' ~ item.title ~ ' command') }}
                                 </div>
                             </div>

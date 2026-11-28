@@ -441,4 +441,16 @@ final class RepoWebPageTest extends KernelTestCase
         $controller = $router->match('/demo')['_controller'] ?? null;
         $this->assertTrue(\is_string($controller) && str_contains($controller, 'RepoWebController'));
     }
+
+    public function testRepoPaletteCardsLinkToDocsAndWiki(): void
+    {
+        $owner = $this->user('palette');
+        $name = $this->repo($owner, false, 'Palette test');
+        \App\Tests\GitTestHelper::writeFile($this->git($name), 'main', 'README.md', "# Demo\n", 'init');
+
+        $html = (string) $this->get('/' . $name)->getContent();
+        $this->assertStringContainsString('href="/docs/repo/tree"', $html);
+        $this->assertStringContainsString('href="/wiki/repo-management"', $html);
+        $this->assertStringContainsString('href="/wiki/branch-governance"', $html);
+    }
 }
