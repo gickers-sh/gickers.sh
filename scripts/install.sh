@@ -2077,6 +2077,15 @@ if [ "${SKIP_APP_DEPLOY:-0}" -eq 0 ]; then
     mkdir -p .data .data/caddy/sites var var/cache var/log
     chmod 755 .data .data/caddy/sites var 2>/dev/null || true
 
+    # Si l'utilisateur actuel peut sudo ou si root, s'assurer que le répertoire appartient à CURRENT_USER
+    if [ "$IS_ROOT" -eq 1 ]; then
+        if [ "$SYSTEM_USER" != "root" ] && id -u "$SYSTEM_USER" >/dev/null 2>&1; then
+            chown -R "$SYSTEM_USER":"$SYSTEM_USER" "$INSTALL_DIR" 2>/dev/null || true
+        fi
+    elif [ -n "$EXEC_SUDO" ]; then
+        $EXEC_SUDO chown -R "$CURRENT_USER" "$INSTALL_DIR" 2>/dev/null || true
+    fi
+
     # --------------------------------------------------------------------------
     # 6. Configuration de Production (.env.docker)
     # --------------------------------------------------------------------------
@@ -2086,14 +2095,26 @@ if [ "${SKIP_APP_DEPLOY:-0}" -eq 0 ]; then
     fi
 
     if [ -f .env.docker ]; then
-        cp .env.docker .env.docker.bak
-        EXISTING_SECRET=$(grep -E '^APP_SECRET=' .env.docker | cut -d '=' -f2- || true)
-        EXISTING_PG_PASS=$(grep -E '^POSTGRES_PASSWORD=' .env.docker | cut -d '=' -f2- || true)
-        if [ -n "$EXISTING_SECRET" ] && [ "$EXISTING_SECRET" != "change-me" ]; then
-            APP_SECRET="$EXISTING_SECRET"
+        # Assurer les droits de lecture si le fichier appartient à l'utilisateur ou via sudo
+        if [ ! -r .env.docker ]; then
+            if [ -n "$EXEC_SUDO" ]; then
+                $EXEC_SUDO chmod 644 .env.docker 2>/dev/null || true
+                $EXEC_SUDO chown "$CURRENT_USER" .env.docker 2>/dev/null || true
+            else
+                chmod 644 .env.docker 2>/dev/null || true
+            fi
         fi
-        if [ -n "$EXISTING_PG_PASS" ] && [ "$EXISTING_PG_PASS" != "gickers" ]; then
-            POSTGRES_PASSWORD="$EXISTING_PG_PASS"
+
+        if [ -r .env.docker ]; then
+            cp .env.docker .env.docker.bak 2>/dev/null || true
+            EXISTING_SECRET=$(grep -E '^APP_SECRET=' .env.docker 2>/dev/null | cut -d '=' -f2- || true)
+            EXISTING_PG_PASS=$(grep -E '^POSTGRES_PASSWORD=' .env.docker 2>/dev/null | cut -d '=' -f2- || true)
+            if [ -n "$EXISTING_SECRET" ] && [ "$EXISTING_SECRET" != "change-me" ]; then
+                APP_SECRET="$EXISTING_SECRET"
+            fi
+            if [ -n "$EXISTING_PG_PASS" ] && [ "$EXISTING_PG_PASS" != "gickers" ]; then
+                POSTGRES_PASSWORD="$EXISTING_PG_PASS"
+            fi
         fi
     fi
 
@@ -2103,7 +2124,8 @@ if [ "${SKIP_APP_DEPLOY:-0}" -eq 0 ]; then
         SOFT_SERVE_SSH_URL="ssh://${DOMAIN}:${SSH_PORT}"
     fi
 
-    cat > .env.docker << EOF
+    if [ -w . ] || [ -w .env.docker 2>/dev/null ]; then
+        cat > .env.docker << EOF
 # ==============================================================================
 # Production Environment for Gickers.sh (Domain: ${DOMAIN})
 # Generated automatically on $(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date)
@@ -2145,6 +2167,53 @@ DEPLOY_GATEWAY_HOST=deploy-dockerd
 DEPLOY_DOCKER_RUNTIME=runsc
 DEPLOY_GVISOR_PLATFORM=systrap
 EOF
+    else
+        cat << EOF | $EXEC_SUDO tee .env.docker >/dev/null
+# ==============================================================================
+# Production Environment for Gickers.sh (Domain: ${DOMAIN})
+# Generated automatically on $(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date)
+# ==============================================================================
+
+APP_ENV=prod
+APP_DEBUG=0
+APP_SECRET=${APP_SECRET}
+
+# Database
+POSTGRES_USER=${POSTGRES_USER}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+POSTGRES_DB=${POSTGRES_DB}
+
+# Host Ports
+HTTP_PORT=${HTTP_PORT}
+HTTPS_PORT=${HTTPS_PORT}
+SSH_PORT=${SSH_PORT}
+
+# Public Host & URLs (Production Target: ${DOMAIN})
+APP_DOMAIN=${DOMAIN}
+SOFT_SERVE_HTTP_PUBLIC_URL=https://${DOMAIN}
+SOFT_SERVE_SSH_PUBLIC_URL=${SOFT_SERVE_SSH_URL}
+
+# TLS (Empty for automated Let's Encrypt certificates managed by Caddy)
+CADDY_TLS=""
+
+# Server branding & policy
+SOFT_SERVE_NAME=${APP_NAME}
+SOFT_SERVE_LFS_ENABLED=${LFS_ENABLED}
+SOFT_SERVE_ANON_ACCESS=${ANON_ACCESS}
+SOFT_SERVE_ALLOW_KEYLESS=${ALLOW_KEYLESS}
+SOFT_SERVE_INITIAL_ADMIN_KEYS="${ADMIN_SSH_KEY}"
+SOFT_SERVE_WEBHOOK_ALLOW_LIST=
+
+# Isolated Deploy Engine (Docker-in-Docker with gVisor sandbox & anti-SSRF)
+DOCKER_HOST=tcp://deploy-dockerd:2375
+DEPLOY_GATEWAY_HOST=deploy-dockerd
+DEPLOY_DOCKER_RUNTIME=runsc
+DEPLOY_GVISOR_PLATFORM=systrap
+EOF
+        if [ -n "$EXEC_SUDO" ]; then
+            $EXEC_SUDO chown "$CURRENT_USER" .env.docker 2>/dev/null || true
+        fi
+    fi
 
     chmod 600 .env.docker 2>/dev/null || true
     printf "  %s✔%s %sConfiguration .env.docker initialisée.%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
