@@ -77,7 +77,14 @@ gum_choose() {
     while true; do
         IFS= read -rsn1 key < "$TTY_INPUT" || break
         if [[ $key == $'\x1b' ]]; then
-            read -rsn2 -t 0.2 rest < "$TTY_INPUT" || true
+            read -rsn2 -t 0.05 rest < "$TTY_INPUT" || true
+            if [ -z "$rest" ]; then
+                # Touche ESC seule : signal retour (BACK = 255)
+                local total_lines=$(( count + 1 ))
+                printf "\r${ESC}[%dA${ESC}[J" "$total_lines"
+                printf "${ESC}[?25h"
+                return 255
+            fi
             case "$rest" in
                 "[A"|"OA")
                     selected=$(( (selected - 1 + count) % count ))
@@ -468,7 +475,14 @@ gum_checklist() {
     while true; do
         IFS= read -rsn1 key < "$TTY_INPUT" || break
         if [[ $key == $'\x1b' ]]; then
-            read -rsn2 -t 0.2 rest < "$TTY_INPUT" || true
+            read -rsn2 -t 0.05 rest < "$TTY_INPUT" || true
+            if [ -z "$rest" ]; then
+                # Touche ESC seule : signal retour (BACK = 255)
+                local total_lines=$(( count + 1 ))
+                printf "\r${ESC}[%dA${ESC}[J" "$total_lines"
+                printf "${ESC}[?25h"
+                return 255
+            fi
             case "$rest" in
                 "[A"|"OA")
                     selected=$(( (selected - 1 + count) % count ))
@@ -575,6 +589,10 @@ gum_input() {
             redraw_in
         elif [[ $char == $'\x1b' ]]; then
             read -rsn2 -t 0.05 _r < "$TTY_INPUT" || true
+            if [ -z "$_r" ]; then
+                printf "\r${ESC}[2K"
+                return 255
+            fi
         else
             input+="$char"
             redraw_in
@@ -629,6 +647,10 @@ gum_password() {
             redraw_pw
         elif [[ $char == $'\x1b' ]]; then
             read -rsn2 -t 0.05 _r < "$TTY_INPUT" || true
+            if [ -z "$_r" ]; then
+                printf "\r${ESC}[2K"
+                return 255
+            fi
         else
             input+="$char"
             redraw_pw
@@ -661,6 +683,9 @@ gum_confirm() {
     fi
 
     gum_choose "$prompt_title" "${opts[@]}" && local idx=$? || local idx=$?
+    if [ "$idx" -eq 255 ]; then
+        return 255
+    fi
     if [ "$default_yes" -eq 1 ]; then
         [ "$idx" -eq 0 ] && return 0 || return 1
     else
@@ -806,27 +831,217 @@ gum_paste_pubkey() {
     printf -v "$var_name" '%s' "$pasted"
 }
 
-# Gum-styled braille spinner
+format_duration() {
+    local s=$1
+    if [ "$s" -ge 60 ]; then
+        local m=$((s / 60))
+        local rem=$((s % 60))
+        printf "%dm %02ds" "$m" "$rem"
+    else
+        printf "%ds" "$s"
+    fi
+}
+
+detect_error_cause() {
+    local log_file="$1"
+    [ ! -f "$log_file" ] && return 0
+    if grep -iqE "bind: address already in use|port is already allocated" "$log_file" 2>/dev/null; then
+        echo "Port réseau en conflit (un service occupe déjà le port demandé)"
+    elif grep -iqE "no space left on device" "$log_file" 2>/dev/null; then
+        echo "Espace disque insuffisant sur la partition hôte"
+    elif grep -iqE "postmaster\.pid.*already exists" "$log_file" 2>/dev/null; then
+        echo "Fichier verrou PostgreSQL résiduel détecté dans les données"
+    elif grep -iqE "failed to solve.*process.*returned non-zero exit code" "$log_file" 2>/dev/null; then
+        echo "Échec d'une étape de compilation ou dépendance dans le conteneur Docker"
+    elif grep -iqE "Could not resolve host|Temporary failure in name resolution" "$log_file" 2>/dev/null; then
+        echo "Erreur réseau ou échec de résolution DNS"
+    elif grep -iqE "Killed|signal: 9" "$log_file" 2>/dev/null; then
+        echo "Processus arrêté par l'OOM Killer (mémoire RAM insuffisante)"
+    elif grep -iqE "Permission denied \(publickey\)" "$log_file" 2>/dev/null; then
+        echo "Authentification SSH refusée : la clé SSH n'est pas reconnue par le serveur"
+    elif grep -iqE "Connection refused" "$log_file" 2>/dev/null; then
+        echo "Connexion SSH refusée : vérifiez que le serveur écoute bien sur ce port"
+    elif grep -iqE "permission denied" "$log_file" 2>/dev/null; then
+        echo "Erreur de permissions d'accès au fichier ou au socket"
+    fi
+}
+
+# Gum-styled dynamic streaming spinner with rolling log viewport
+gum_stream_spin() {
+    local pid=$1
+    local title="$2"
+    local log_file="${3:-}"
+    local spin_chars=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+    local spin_len=${#spin_chars[@]}
+    local spin_idx=0
+    local max_log_lines=3
+    local start_time
+    start_time=$(date +%s)
+    local prev_rendered_lines=0
+
+    if [ -z "$TTY_INPUT" ] || [ ! -t 1 ]; then
+        printf "  %s%s...%s\n" "$C_BOLD$C_WHITE" "$title" "$C_RESET"
+        local exit_code=0
+        wait "$pid" || exit_code=$?
+        if [ "$exit_code" -eq 0 ]; then
+            printf "  %s✔%s %s%s%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$title" "$C_RESET"
+        else
+            printf "  %s✖%s %s%s%s %s(code %d)%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$title" "$C_RESET" "$C_DIM" "$exit_code" "$C_RESET"
+        fi
+        return "$exit_code"
+    fi
+
+    local term_cols
+    term_cols=$(tput cols 2>/dev/null || echo 80)
+    [ -z "$term_cols" ] || [ "$term_cols" -le 0 ] && term_cols=80
+    local log_col_max=$(( term_cols - 10 ))
+    [ "$log_col_max" -lt 30 ] && log_col_max=30
+
+    printf "${ESC}[?25l"
+
+    while kill -0 "$pid" 2>/dev/null; do
+        local now
+        now=$(date +%s)
+        local elapsed=$(( now - start_time ))
+        local duration_str
+        duration_str=$(format_duration "$elapsed")
+
+        # 1. Effacer les lignes précédentes du viewport
+        if [ "$prev_rendered_lines" -gt 0 ]; then
+            printf "\r${ESC}[%dA" "$prev_rendered_lines"
+            for ((l=0; l<prev_rendered_lines; l++)); do
+                printf "\r${ESC}[2K\n"
+            done
+            printf "\r${ESC}[%dA" "$prev_rendered_lines"
+        fi
+
+        # 2. Afficher la ligne d'en-tête fixe
+        local spinner="${spin_chars[spin_idx]}"
+        printf "\r${ESC}[2K  %s%s%s %s%s%s %s[%s]%s\n" \
+            "$C_PINK" "$spinner" "$C_RESET" \
+            "$C_BOLD$C_WHITE" "$title" "$C_RESET" \
+            "$C_DIM" "$duration_str" "$C_RESET"
+
+        # 3. Récupérer les dernières lignes de log si disponible
+        local lines=()
+        if [ -n "$log_file" ] && [ -s "$log_file" ]; then
+            while IFS= read -r rline; do
+                [ -n "$rline" ] && lines+=("$rline")
+            done < <(tail -n "$max_log_lines" "$log_file" 2>/dev/null)
+        fi
+
+        # 4. Afficher les lignes de log en continu (borderless, indentées)
+        local rendered=0
+        for rline in "${lines[@]}"; do
+            local clean_line
+            clean_line=$(echo "$rline" | tr -d '\r' | cut -c 1-"$log_col_max")
+            printf "\r${ESC}[2K      %s%s%s\n" "$C_DIM" "$clean_line" "$C_RESET"
+            rendered=$((rendered + 1))
+        done
+
+        prev_rendered_lines=$(( rendered + 1 ))
+        spin_idx=$(( (spin_idx + 1) % spin_len ))
+        sleep 0.08
+    done
+
+    local exit_code=0
+    wait "$pid" || exit_code=$?
+    local end_time
+    end_time=$(date +%s)
+    local total_duration
+    total_duration=$(format_duration "$(( end_time - start_time ))")
+
+    # Nettoyer le viewport dynamique
+    if [ "$prev_rendered_lines" -gt 0 ]; then
+        printf "\r${ESC}[%dA" "$prev_rendered_lines"
+        for ((l=0; l<prev_rendered_lines; l++)); do
+            printf "\r${ESC}[2K\n"
+        done
+        printf "\r${ESC}[%dA" "$prev_rendered_lines"
+    fi
+
+    printf "${ESC}[?25h"
+
+    if [ "$exit_code" -eq 0 ]; then
+        printf "\r${ESC}[2K  %s✔%s %s%s%s %s(%s)%s\n" \
+            "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$title" "$C_RESET" "$C_DIM" "$total_duration" "$C_RESET"
+    else
+        printf "\r${ESC}[2K  %s✖%s %s%s%s %s(Échec, code %d après %s)%s\n" \
+            "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$title" "$C_RESET" "$C_PINK" "$exit_code" "$total_duration" "$C_RESET"
+    fi
+    return "$exit_code"
+}
+
+# Gestionnaire d'erreur interactif & sans bordure (Borderless TokyoNight)
+handle_step_error() {
+    local step_title="$1"
+    local log_file="$2"
+    local work_dir="${3:-$PWD}"
+
+    printf "\n"
+    if [ -f "$log_file" ] && [ -s "$log_file" ]; then
+        local cause
+        cause=$(detect_error_cause "$log_file")
+        if [ -n "$cause" ]; then
+            printf "  %sℹ%s %sDiagnostic : %s%s%s\n" "$C_GOLD" "$C_RESET" "$C_BOLD$C_WHITE" "$C_GOLD" "$cause" "$C_RESET"
+        fi
+
+        printf "  %s•%s %sDernières lignes du journal :%s\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
+        tail -n 12 "$log_file" | while IFS= read -r eline; do
+            local clean_eline
+            clean_eline=$(echo "$eline" | tr -d '\r' | cut -c 1-85)
+            printf "      %s%s%s\n" "$C_DIM" "$clean_eline" "$C_RESET"
+        done
+        printf "\n"
+        printf "  %sℹ%s %sJournal complet enregistré dans : %s%s%s\n\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_BOLD$C_WHITE" "$log_file" "$C_RESET"
+    fi
+
+    local actions=(
+        "[Rétenter] Relancer immédiatement cette étape"
+        "[Shell de secours] Ouvrir un sous-shell de débogage (bash)"
+        "[Voir le journal] Parcourir les logs complets (less)"
+        "[Ignorer] Poursuivre l'installation malgré l'erreur"
+        "[Abandonner] Quitter l'installation"
+    )
+
+    while true; do
+        gum_choose "Action souhaitée pour résoudre cette erreur" "${actions[@]}"
+        local choice=$?
+
+        case "$choice" in
+            0) # Rétenter
+                return 1 # Code 1 = l'appelant relance son exécution
+                ;;
+            1) # Shell de secours
+                printf "\n  %sℹ Entrée dans le shell de secours dans : %s%s%s\n" "$C_CYAN" "$C_BOLD$C_WHITE" "$work_dir" "$C_RESET"
+                printf "  %s  Tapez 'exit' pour revenir au menu d'installation.%s\n\n" "$C_MUTED" "$C_RESET"
+                ( cd "$work_dir" && bash < /dev/tty > /dev/tty 2>&1 ) || true
+                ;;
+            2) # Voir le journal
+                if command -v less >/dev/null 2>&1; then
+                    less "$log_file" < /dev/tty > /dev/tty || true
+                else
+                    cat "$log_file"
+                fi
+                ;;
+            3) # Ignorer
+                printf "  %s!%s %sÉtape ignorée par l'administrateur.%s\n" "$C_GOLD" "$C_RESET" "$C_MUTED" "$C_RESET"
+                return 0 # Code 0 = continuer
+                ;;
+            4|255|*) # Abandonner
+                printf "\n  %s✖%s %sOpération interrompue par l'utilisateur.%s\n\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+                exit 1
+                ;;
+        esac
+    done
+}
+
+# Gum-styled braille spinner (alias vers gum_stream_spin)
 gum_spin() {
     local pid=$1
     local msg="$2"
-    local spin_chars=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-    local i=0
-    printf "${ESC}[?25l"
-    while kill -0 "$pid" 2>/dev/null; do
-        printf "\r  %s%s%s %s%s%s" "$C_PINK" "${spin_chars[i]}" "$C_RESET" "$C_BOLD$C_WHITE" "$msg" "$C_RESET"
-        i=$(( (i + 1) % 10 ))
-        sleep 0.07
-    done
-    wait "$pid"
-    local exit_code=$?
-    printf "${ESC}[?25h"
-    if [ "$exit_code" -eq 0 ]; then
-        printf "\r${ESC}[2K  %s✔%s %s%s%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$msg" "$C_RESET"
-    else
-        printf "\r${ESC}[2K  %s✖%s %s%s%s %s(Échec, code %d)%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$msg" "$C_RESET" "$C_DIM" "$exit_code" "$C_RESET"
-    fi
-    return "$exit_code"
+    local log_file="${3:-}"
+    gum_stream_spin "$pid" "$msg" "$log_file"
 }
 
 # Backwards compatibility aliases
