@@ -67,46 +67,205 @@ if ([string]::IsNullOrEmpty($adminSshKey)) {
     }
 }
 
-if (-not $nonInteractive) {
-    if ((Test-Path "compose.yaml") -or (Test-Path ".env.docker") -or (Test-Path (Join-Path $installDir "compose.yaml"))) {
-        $existOpts = @(
-            "Conserver les données et mettre à jour l'application (Idempotent - Recommandé)",
-            "Réinitialisation complète / Hard Reset (⚠️  Supprime base de données, volumes et dépôts)"
-        )
-        $existChoice = Gum-Choose -Title "Une installation existante a été détectée dans $installDir" -Options $existOpts
-        if ($existChoice -eq 1) {
-            $hardReset = $true
-        } else {
-            $hardReset = $false
-            Write-Host "  $escGreen✔$escReset $escBold${escWhite}Mode idempotent : vos données et configurations existantes seront conservées.$escReset`n"
-        }
-    }
+# ==============================================================================
+# INVENTAIRE EN AMONT DES INSTANCES GICKERS.SH & CHOIX D'ACTION
+# ==============================================================================
+$existingInstall = $false
+$existingDomain = ""
+$createNewInstance = $false
 
-    if ($hardReset) {
-        Write-Host "`n  $escPink⚠️  ATTENTION : DEMANDE DE RÉINITIALISATION COMPLÈTE (HARD RESET)$escReset"
-        Write-Host "  $escPink Cette action est IRRÉVERSIBLE et va supprimer définitivement :$escReset"
-        Write-Host "    • Tous les dépôts Git et volumes Docker (gickers-data, gickers-db)"
-        Write-Host "    • La base de données PostgreSQL (comptes, clés SSH, tickets)`n"
+$detectedDirs = [System.Collections.Generic.List[string]]::new()
+$candidatePaths = [System.Collections.Generic.List[string]]::new()
 
-        $confirmOpts = @(
-            "Non, annuler et conserver mes données intactes (Recommandé)",
-            "Oui, je confirme vouloir supprimer TOUTES les données"
-        )
-        $confirm1 = Gum-Choose -Title "Confirmation 1/2 : Souhaitez-vous continuer la réinitialisation ?" -Options $confirmOpts
-        if ($confirm1 -ne 1) {
-            Write-Host "  $escGreen✔$escReset $escBold${escWhite}Réinitialisation annulée. Vos données sont préservées.$escReset`n"
-            $hardReset = $false
-        } else {
-            $resetConfirm = Gum-Input -PromptLabel "Confirmation 2/2 : Tapez 'RESET' en majuscules pour confirmer" -DefaultValue "" -Placeholder "RESET"
-            if ($resetConfirm -eq "RESET") {
-                $hardReset = $true
-                Write-Host "  $escPink✔$escReset $escBold${escWhite}Double confirmation validée. Hard reset enclenché.$escReset`n"
-            } else {
-                Write-Host "  $escGreen✔$escReset $escBold${escWhite}Saisie non conforme. Réinitialisation annulée, données préservées.$escReset`n"
-                $hardReset = $false
+if (-not [string]::IsNullOrEmpty($installDir)) { $candidatePaths.Add($installDir) }
+$candidatePaths.Add((Get-Location).Path)
+$candidatePaths.Add((Join-Path $HOME "gickers.sh"))
+$candidatePaths.Add("C:\gickers")
+$candidatePaths.Add("C:\codes.sh")
+
+# Détection Docker Compose via labels de conteneurs et images officielles
+if ($dockerInstalled -eq 1) {
+    try {
+        $dockerDirs = docker ps -a --filter "ancestor=gickers-sh:latest" --format '{{ index .Labels "com.docker.compose.project.working_dir" }}' 2>$null
+        if ($dockerDirs) {
+            foreach ($d in ($dockerDirs -split "`r?`n")) {
+                if (-not [string]::IsNullOrWhiteSpace($d) -and (Test-Path $d)) {
+                    $candidatePaths.Add($d.Trim())
+                }
             }
         }
+        $dockerDirs2 = docker ps -a --filter "label=com.docker.compose.project=gickers-sh" --format '{{ index .Labels "com.docker.compose.project.working_dir" }}' 2>$null
+        if ($dockerDirs2) {
+            foreach ($d in ($dockerDirs2 -split "`r?`n")) {
+                if (-not [string]::IsNullOrWhiteSpace($d) -and (Test-Path $d)) {
+                    $candidatePaths.Add($d.Trim())
+                }
+            }
+        }
+    } catch {}
+}
+
+# Filtrage et déduplication
+foreach ($cDir in $candidatePaths) {
+    if ([string]::IsNullOrWhiteSpace($cDir) -or -not (Test-Path $cDir)) { continue }
+    $hasCompose = (Test-Path (Join-Path $cDir "compose.yaml")) -or (Test-Path (Join-Path $cDir "docker-compose.yml"))
+    $hasEnv = (Test-Path (Join-Path $cDir ".env.docker")) -or (Test-Path (Join-Path $cDir ".env.local"))
+    if ($hasCompose -or $hasEnv) {
+        $fullPath = (Get-Item $cDir).FullName
+        if (-not $detectedDirs.Contains($fullPath)) {
+            $detectedDirs.Add($fullPath)
+        }
     }
+}
+
+# Collecte des métadonnées et runtime state pour chaque instance
+$detectedDomains = [System.Collections.Generic.List[string]]::new()
+$detectedLabels = [System.Collections.Generic.List[string]]::new()
+
+foreach ($dPath in $detectedDirs) {
+    $instDom = ""
+    $envDocker = Join-Path $dPath ".env.docker"
+    $envLocal = Join-Path $dPath ".env.local"
+    if (Test-Path $envDocker) {
+        $m = (Get-Content $envDocker | Where-Object { $_ -match '^APP_DOMAIN=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+        if ($m) { $instDom = $m }
+    } elseif (Test-Path $envLocal) {
+        $m = (Get-Content $envLocal | Where-Object { $_ -match '^APP_DOMAIN=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+        if ($m) { $instDom = $m }
+    }
+    if ([string]::IsNullOrEmpty($instDom)) { $instDom = "domaine non spécifié" }
+    $detectedDomains.Add($instDom)
+
+    $instState = "Arrêté"
+    if ($dockerInstalled -eq 1) {
+        try {
+            $cList = docker ps -a --filter "label=com.docker.compose.project.working_dir=$dPath" -q 2>$null
+            if ($cList) {
+                $totalCnt = ($cList -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count
+                $rList = docker ps --filter "label=com.docker.compose.project.working_dir=$dPath" -q 2>$null
+                $runningCnt = if ($rList) { ($rList -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count } else { 0 }
+                if ($totalCnt -gt 0) {
+                    if ($runningCnt -gt 0) {
+                        $instState = "Docker actif (${runningCnt}/${totalCnt} UP)"
+                    } else {
+                        $instState = "Docker arrêté (0/${totalCnt})"
+                    }
+                }
+            }
+        } catch {}
+    }
+
+    $instSsh = "22"
+    if (Test-Path $envDocker) {
+        $s = (Get-Content $envDocker | Where-Object { $_ -match '^SSH_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+        if ($s) { $instSsh = $s }
+    }
+
+    $detectedLabels.Add("$dPath • $instDom [$instState] (SSH: $instSsh)")
+}
+
+if ($detectedDirs.Count -gt 0 -and -not $nonInteractive) {
+    $targetIndex = 0
+    if ($detectedDirs.Count -gt 1) {
+        $instPickerOpts = @()
+        for ($i = 0; $i -lt $detectedDirs.Count; $i++) {
+            if ($i -eq 0) {
+                $instPickerOpts += "Gérer l'instance : $($detectedLabels[$i]) [Recommandé]"
+            } else {
+                $instPickerOpts += "Gérer l'instance : $($detectedLabels[$i])"
+            }
+        }
+        $instPickerOpts += "Créer et déployer une NOUVELLE instance gickers.sh indépendante"
+
+        $targetIndex = Gum-Choose -Title "Instances gickers.sh détectées sur cette machine" -Options $instPickerOpts
+        if ($targetIndex -ge $detectedDirs.Count) {
+            $existingInstall = $false
+            $createNewInstance = $true
+            $installDir = ""
+        } else {
+            $existingInstall = $true
+            $installDir = $detectedDirs[$targetIndex]
+            $existingDomain = $detectedDomains[$targetIndex]
+            $domain = $existingDomain
+        }
+    } else {
+        $existingInstall = $true
+        $installDir = $detectedDirs[0]
+        $existingDomain = $detectedDomains[0]
+        $domain = $existingDomain
+    }
+
+    if ($existingInstall) {
+        $actionOpts = @(
+            "Mettre à jour l'application (Update) [Recommandé]",
+            "Redémarrer les services (Restart)",
+            "Reconstruire les conteneurs (Rebuild)",
+            "Redéployer / Réappliquer migrations & cache (Redeploy)",
+            "Éditer la configuration (.env.docker / domaine / ports)",
+            "Réinitialisation complète / Hard Reset (⚠️  Supprime base de données et dépôts)",
+            "Supprimer définitivement cette instance / Delete (⚠️  Détruit conteneurs, volumes et dossier)",
+            "Créer et déployer une NOUVELLE instance gickers.sh indépendante"
+        )
+        $actionTitle = "Gestion de l'instance : $existingDomain ($installDir)"
+        $actionSel = Gum-Choose -Title $actionTitle -Options $actionOpts
+        $selectedAction = $actionOpts[$actionSel]
+
+        if ($selectedAction -match "Update") {
+            Manage-InstanceUpdate -Dir $installDir
+        } elseif ($selectedAction -match "Restart") {
+            Manage-InstanceRestart -Dir $installDir
+        } elseif ($selectedAction -match "Rebuild") {
+            Manage-InstanceRebuild -Dir $installDir
+        } elseif ($selectedAction -match "Redeploy") {
+            Manage-InstanceRedeploy -Dir $installDir
+        } elseif ($selectedAction -match "Éditer") {
+            Manage-InstanceEdit -Dir $installDir
+        } elseif ($selectedAction -match "Hard Reset") {
+            $hardReset = $true
+        } elseif ($selectedAction -match "Delete") {
+            Manage-InstanceDelete -Dir $installDir -Domain $existingDomain
+        } elseif ($selectedAction -match "NOUVELLE instance") {
+            $existingInstall = $false
+            $createNewInstance = $true
+            $installDir = ""
+            $existingDomain = ""
+        }
+    }
+}
+
+if ($hardReset -and -not $nonInteractive) {
+    $targetResetDomain = if (-not [string]::IsNullOrEmpty($existingDomain)) { $existingDomain } else { $domain }
+    $expectedConfirmPhrase = "HARD RESET $targetResetDomain"
+
+    Write-Host "`n  $escPink⚠️  ATTENTION : DEMANDE DE RÉINITIALISATION COMPLÈTE (HARD RESET)$escReset"
+    Write-Host "  ${escMuted}Cible : $escBold$escWhite$targetResetDomain$escReset (Répertoire : $escCyan$installDir$escReset)$escReset"
+    Write-Host "  $escPink Cette action est IRRÉVERSIBLE et va détruire définitivement :$escReset"
+    Write-Host "    • Tous les dépôts Git hébergés et objets Git LFS de cette instance"
+    Write-Host "    • La base PostgreSQL (utilisateurs, comptes, clés SSH, tickets)"
+    Write-Host "    • Les conteneurs et volumes Docker associés à cette instance"
+    Write-Host "    • La configuration de production .env.docker actuelle`n"
+
+    $confirmOpts = @(
+        "Non, annuler et conserver mes données intactes (Recommandé)",
+        "Oui, je comprends les risques et souhaite réinitialiser"
+    )
+    $confirm1 = Gum-Choose -Title "Confirmation 1/2 : Êtes-vous sûr de vouloir supprimer TOUTES les données de $targetResetDomain ?" -Options $confirmOpts
+    if ($confirm1 -ne 1) {
+        Write-Host "  $escGreen✔$escReset $escBold${escWhite}Réinitialisation annulée. Vos données sont préservées intactes.$escReset`n"
+        $hardReset = $false
+        exit 0
+    } else {
+        $resetConfirm = Gum-Input -PromptLabel "Confirmation 2/2 : Tapez '$expectedConfirmPhrase' pour confirmer" -DefaultValue "" -Placeholder $expectedConfirmPhrase
+        if ($resetConfirm -eq $expectedConfirmPhrase) {
+            $hardReset = $true
+            Write-Host "  $escPink✔$escReset $escBold${escWhite}Double confirmation validée. Hard reset enclenché pour $targetResetDomain.$escReset`n"
+        } else {
+            Write-Host "  $escGreen✔$escReset $escBold${escWhite}Saisie non conforme ('$resetConfirm' != '$expectedConfirmPhrase'). Réinitialisation annulée, données préservées.$escReset`n"
+            $hardReset = $false
+            exit 0
+        }
+    }
+}
 
     # 0. User & Isolation choice
     $userOpts = @(
@@ -247,11 +406,17 @@ if ($hardReset) {
     Write-Host "  $escGreen✔$escReset $escBold${escWhite}Hard reset terminé. L'environnement est maintenant vierge.$escReset`n"
 }
 
+$deployLog = Join-Path $env:TEMP "gickers_deploy.log"
+
 if (Test-Path ".git") {
-    git fetch --depth 1 origin main 2>$null
-    git reset --hard origin/main 2>$null
+    Run-LoggedStep -StepLabel "Mise à jour du projet gickers.sh vers la dernière version" -LogFile $deployLog -WorkDir $installDir -CommandBlock {
+        git fetch --depth 1 origin main 2>$null
+        git reset --hard origin/main 2>$null
+    }
 } elseif (-not (Test-Path "compose.yaml")) {
-    git clone --depth 1 https://github.com/gickerssh/gickers.sh.git .
+    Run-LoggedStep -StepLabel "Téléchargement du projet gickers.sh" -LogFile $deployLog -WorkDir $installDir -CommandBlock {
+        git clone --depth 1 https://github.com/gickerssh/gickers.sh.git .
+    }
 }
 
 New-Item -ItemType Directory -Force -Path ".data", ".data/caddy/sites", "var", "var/cache", "var/log" | Out-Null
@@ -310,12 +475,20 @@ Set-Content -Path ".env.docker" -Value $envContent -Encoding UTF8
 
 Write-Host "  $escGreen✔$escReset $escBold$escWhite Configuration .env.docker initialisée.$escReset"
 
-docker compose --env-file .env.docker build
-docker compose --env-file .env.docker up -d postgres
+Run-LoggedStep -StepLabel "Construction des conteneurs Docker (PHP, gickers-ssh, FrankenPHP)" -LogFile $deployLog -WorkDir $installDir -CommandBlock {
+    docker compose --env-file .env.docker build
+}
+Run-LoggedStep -StepLabel "Démarrage de PostgreSQL" -LogFile $deployLog -WorkDir $installDir -CommandBlock {
+    docker compose --env-file .env.docker up -d postgres
+}
 
 Start-Sleep -Seconds 3
-docker compose --env-file .env.docker run -T --rm init
-docker compose --env-file .env.docker up -d
+Run-LoggedStep -StepLabel "Exécution des migrations Doctrine & initialisation du serveur" -LogFile $deployLog -WorkDir $installDir -CommandBlock {
+    docker compose --env-file .env.docker run -T --rm init
+}
+Run-LoggedStep -StepLabel "Démarrage complet de la stack (HTTP, SSH, Worker, Deploy-Engine)" -LogFile $deployLog -WorkDir $installDir -CommandBlock {
+    docker compose --env-file .env.docker up -d
+}
 
 Write-Host ""
 $finalSshUrl = if ($sshPort -ne "22" -and -not [string]::IsNullOrEmpty($sshPort)) { "ssh://${domain}:${sshPort}" } else { "ssh://${domain}" }
