@@ -75,6 +75,7 @@ final class InstallCommand extends AbstractSshCommand
             ->addOption('step-firewall', null, InputOption::VALUE_REQUIRED, 'Firewall step mode: auto, skip, or show')
             ->addOption('step-systemd', null, InputOption::VALUE_REQUIRED, 'Systemd step mode: auto, skip, or show')
             ->addOption('system-user', null, InputOption::VALUE_REQUIRED, 'Dedicated host system user for running gickers.sh')
+            ->addOption('mode', 'm', InputOption::VALUE_REQUIRED, 'Deployment mode: docker or native (default: docker)')
             ->addOption('hard-reset', null, InputOption::VALUE_NONE, 'Hard reset: destroy all existing Docker volumes, database, and repository data');
     }
 
@@ -93,6 +94,7 @@ final class InstallCommand extends AbstractSshCommand
         }
 
         $options = [
+            'mode' => $this->nullableStringOption($input, 'mode') ?? 'docker',
             'domain' => $this->nullableStringOption($input, 'domain'),
             'dir' => $this->nullableStringOption($input, 'dir'),
             'ssh_port' => $this->nullableStringOption($input, 'ssh-port') ? (int) $this->nullableStringOption($input, 'ssh-port') : null,

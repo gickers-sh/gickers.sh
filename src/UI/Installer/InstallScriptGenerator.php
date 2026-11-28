@@ -111,6 +111,7 @@ final class InstallScriptGenerator
         $stepSystemd = (string) ($options['step_systemd'] ?? ((bool) ($options['skip_systemd'] ?? false) ? 'skip' : 'auto'));
         $systemUser = (string) ($options['system_user'] ?? '');
         $hardReset = (bool) ($options['hard_reset'] ?? false) ? '1' : '0';
+        $mode = (string) ($options['mode'] ?? 'docker');
 
         $headerCard = $this->renderHeaderCard($domain, $appName);
         $successCard = $this->renderSuccessCard($domain, $appName, $sshPort);
@@ -119,6 +120,7 @@ final class InstallScriptGenerator
 
         return $this->renderScript($templatePath, [
             '__GUM_LIB__' => $this->terminalFormHandler->getBashLibrary(),
+            '__MODE__' => $mode,
             '__DOMAIN__' => $domain,
             '__APP_NAME__' => $appName,
             '__SSH_PORT__' => (string) $sshPort,
@@ -182,6 +184,7 @@ final class InstallScriptGenerator
         $stepSystemd = (string) ($options['step_systemd'] ?? ((bool) ($options['skip_systemd'] ?? false) ? 'skip' : 'auto'));
         $systemUser = (string) ($options['system_user'] ?? '');
         $hardReset = (bool) ($options['hard_reset'] ?? false) ? '1' : '0';
+        $mode = (string) ($options['mode'] ?? 'docker');
 
         $headerCard = $this->renderHeaderCard($domain, $appName);
         $successCard = $this->renderSuccessCard($domain, $appName, $sshPort);
@@ -190,6 +193,7 @@ final class InstallScriptGenerator
 
         return $this->renderScript($templatePath, [
             '__GUM_LIB__' => $this->terminalFormHandler->getPowerShellLibrary(),
+            '__MODE__' => $mode,
             '__DOMAIN__' => $domain,
             '__APP_NAME__' => $appName,
             '__SSH_PORT__' => (string) $sshPort,

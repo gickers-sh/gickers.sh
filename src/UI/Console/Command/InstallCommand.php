@@ -57,6 +57,7 @@ final class InstallCommand extends Command
             ->addOption('step-firewall', null, InputOption::VALUE_REQUIRED, 'Firewall step mode: auto, skip, or show')
             ->addOption('step-systemd', null, InputOption::VALUE_REQUIRED, 'Systemd step mode: auto, skip, or show')
             ->addOption('system-user', null, InputOption::VALUE_REQUIRED, 'Dedicated host system user for running gickers.sh')
+            ->addOption('mode', 'm', InputOption::VALUE_REQUIRED, 'Deployment mode: docker or native (default: docker)')
             ->addOption('system-only', null, InputOption::VALUE_NONE, 'Run only host system integration steps (Docker, SSHD 22, UFW, systemd)')
             ->addOption('hard-reset', null, InputOption::VALUE_NONE, 'Hard reset: destroy all existing Docker volumes, database, and repository data');
     }
@@ -137,6 +138,11 @@ final class InstallCommand extends Command
                 $cmdArgs[] = '--system-user';
                 $cmdArgs[] = trim($systemUser);
             }
+            $mode = $input->getOption('mode');
+            if (is_string($mode) && '' !== trim($mode)) {
+                $cmdArgs[] = '--mode';
+                $cmdArgs[] = trim($mode);
+            }
 
             if ((bool) $input->getOption('hard-reset')) {
                 $cmdArgs[] = '--hard-reset';
@@ -181,8 +187,10 @@ final class InstallCommand extends Command
         $stepSshd = $input->getOption('step-sshd');
         $stepFirewall = $input->getOption('step-firewall');
         $stepSystemd = $input->getOption('step-systemd');
+        $mode = $input->getOption('mode');
 
         return [
+            'mode' => is_string($mode) && '' !== trim($mode) ? trim($mode) : 'docker',
             'domain' => is_string($domain) && '' !== trim($domain) ? trim($domain) : null,
             'dir' => is_string($dir) && '' !== trim($dir) ? trim($dir) : null,
             'ssh_port' => is_numeric($sshPort) ? (int) $sshPort : null,

@@ -724,6 +724,7 @@ SSH_PORT="22"
 HTTP_PORT="80"
 HTTPS_PORT="443"
 INSTALL_DIR=""
+MODE="docker"
 ADMIN_SSH_KEY=""
 ADMIN_USER="admin"
 POSTGRES_USER="gickers"
@@ -759,6 +760,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --domain) DOMAIN="$2"; shift 2 ;;
         --dir) INSTALL_DIR="$2"; shift 2 ;;
+        --mode|-m) MODE="$2"; shift 2 ;;
         --ssh-port) SSH_PORT="$2"; shift 2 ;;
         --http-port) HTTP_PORT="$2"; shift 2 ;;
         --https-port) HTTPS_PORT="$2"; shift 2 ;;
@@ -1383,8 +1385,29 @@ fi
 
 # Détection d'une installation existante et choix du mode
 EXISTING_INSTALL=0
-if [ -f "$INSTALL_DIR/compose.yaml" ] || [ -f "$PWD/compose.yaml" ] || [ -f "$INSTALL_DIR/.env.docker" ] || [ -f "$PWD/.env.docker" ]; then
+if [ -f "$INSTALL_DIR/compose.yaml" ] || [ -f "$PWD/compose.yaml" ] || [ -f "$INSTALL_DIR/.env.docker" ] || [ -f "$PWD/.env.docker" ] || [ -f "$INSTALL_DIR/.env.local" ] || [ -f "$PWD/.env.local" ]; then
     EXISTING_INSTALL=1
+fi
+
+# Choix interactif du mode de déploiement (Docker vs Natif Host)
+if [ "$NON_INTERACTIVE" -eq 0 ]; then
+    MODE_OPTS=(
+        "Production VPS — Docker & Conteneurs Isolés (Let's Encrypt SSL, Postgres, gVisor) [Recommandé]"
+        "Instance Légère — Natif Host / Sans Docker (PHP + SQLite + gickers-ssh autonome) [Idéal dev / machine perso]"
+    )
+    gum_choose "Mode d'exécution de gickers.sh sur cette machine" "${MODE_OPTS[@]}" && MODE_CHOICE=$? || MODE_CHOICE=$?
+    if [ "$MODE_CHOICE" -eq 1 ]; then
+        MODE="native"
+        STEP_DOCKER="skip"
+        if [ "$SSH_PORT" = "22" ]; then
+            SSH_PORT="2223"
+        fi
+        if [ "$HTTP_PORT" = "80" ]; then
+            HTTP_PORT="23232"
+        fi
+    else
+        MODE="docker"
+    fi
 fi
 
 if [ "$EXISTING_INSTALL" -eq 1 ] && [ "$NON_INTERACTIVE" -eq 0 ]; then
@@ -1605,32 +1628,81 @@ EOF
 )
     fi
 
-    # Sélection des étapes à exécuter au lancement
-    CHECKLIST_ITEMS=(
-        "Dépendances système & Docker CE|1|${DESC_DOCKER}|${CMDS_DOCKER}"
-        "Port SSH Git 22 (Bascule OpenSSH vers 2222)|1|${DESC_SSHD}|${CMDS_SSHD}"
-        "Pare-feu hôte UFW (Installation & règles)|1|${DESC_UFW}|${CMDS_UFW}"
-        "Déploiement applicatif (Conteneurs Docker)|1|${DESC_APP}|${CMDS_APP}"
-        "Service système au démarrage (Boot VPS)|1|${DESC_SYSTEMD}|${CMDS_SYSTEMD}"
-    )
-    gum_checklist "Sélectionnez les étapes à exécuter sur cette machine" SELECTED_STEPS "${CHECKLIST_ITEMS[@]}"
+    if [ "$MODE" = "native" ]; then
+        DESC_NATIVE="Installation des outils de développement hôte (PHP >= 8.2, Composer, Go >= 1.22, Git), compilation de bin/gickers-ssh et migration SQLite."
+        CMDS_NATIVE=$(cat << 'EOF'
+$(pkg_install_cmd php php-cli php-mbstring php-xml php-sqlite3 composer git golang)
+make setup && make build
+./bin/soft doctrine:migrations:migrate --allow-no-migration --no-interaction
+EOF
+)
+        DESC_NATIVE_SYSTEMD="Service systemd gickers.service pour lancer ./bin/soft serve automatiquement au boot."
+        CMDS_NATIVE_SYSTEMD=$(cat << 'EOF'
+tee /etc/systemd/system/gickers.service << 'UNIT'
+[Unit]
+Description=Gickers.sh Native Git Forge & Platform
+After=network.target
+[Service]
+Type=simple
+User=$SYSTEM_USER
+WorkingDirectory=$INSTALL_DIR
+ExecStart=$INSTALL_DIR/bin/soft serve
+Restart=always
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload && systemctl enable --now gickers.service
+EOF
+)
+        CHECKLIST_ITEMS=(
+            "Outils de base & Compilation native|1|${DESC_NATIVE}|${CMDS_NATIVE}"
+            "Pare-feu hôte UFW (Installation & règles)|0|${DESC_UFW}|${CMDS_UFW}"
+            "Déploiement applicatif (Sources & Dépendances)|1|${DESC_NATIVE}|${CMDS_NATIVE}"
+            "Service système au démarrage (Boot VPS)|0|${DESC_NATIVE_SYSTEMD}|${CMDS_NATIVE_SYSTEMD}"
+        )
+        gum_checklist "Sélectionnez les étapes à exécuter sur cette machine" SELECTED_STEPS "${CHECKLIST_ITEMS[@]}"
 
-    if [ "${SELECTED_STEPS[0]:-1}" -eq 0 ]; then
         STEP_DOCKER="skip"
-    fi
-    if [ "${SELECTED_STEPS[1]:-1}" -eq 0 ]; then
         STEP_SSHD="skip"
-    fi
-    if [ "${SELECTED_STEPS[2]:-1}" -eq 0 ]; then
-        STEP_FIREWALL="skip"
-    fi
-    if [ "${SELECTED_STEPS[3]:-1}" -eq 0 ]; then
-        SKIP_APP_DEPLOY=1
+        if [ "${SELECTED_STEPS[1]:-0}" -eq 0 ]; then
+            STEP_FIREWALL="skip"
+        fi
+        if [ "${SELECTED_STEPS[2]:-1}" -eq 0 ]; then
+            SKIP_APP_DEPLOY=1
+        else
+            SKIP_APP_DEPLOY=0
+        fi
+        if [ "${SELECTED_STEPS[3]:-0}" -eq 0 ]; then
+            STEP_SYSTEMD="skip"
+        fi
     else
-        SKIP_APP_DEPLOY=0
-    fi
-    if [ "${SELECTED_STEPS[4]:-1}" -eq 0 ]; then
-        STEP_SYSTEMD="skip"
+        # Sélection des étapes à exécuter au lancement (mode Docker)
+        CHECKLIST_ITEMS=(
+            "Dépendances système & Docker CE|1|${DESC_DOCKER}|${CMDS_DOCKER}"
+            "Port SSH Git 22 (Bascule OpenSSH vers 2222)|1|${DESC_SSHD}|${CMDS_SSHD}"
+            "Pare-feu hôte UFW (Installation & règles)|1|${DESC_UFW}|${CMDS_UFW}"
+            "Déploiement applicatif (Conteneurs Docker)|1|${DESC_APP}|${CMDS_APP}"
+            "Service système au démarrage (Boot VPS)|1|${DESC_SYSTEMD}|${CMDS_SYSTEMD}"
+        )
+        gum_checklist "Sélectionnez les étapes à exécuter sur cette machine" SELECTED_STEPS "${CHECKLIST_ITEMS[@]}"
+
+        if [ "${SELECTED_STEPS[0]:-1}" -eq 0 ]; then
+            STEP_DOCKER="skip"
+        fi
+        if [ "${SELECTED_STEPS[1]:-1}" -eq 0 ]; then
+            STEP_SSHD="skip"
+        fi
+        if [ "${SELECTED_STEPS[2]:-1}" -eq 0 ]; then
+            STEP_FIREWALL="skip"
+        fi
+        if [ "${SELECTED_STEPS[3]:-1}" -eq 0 ]; then
+            SKIP_APP_DEPLOY=1
+        else
+            SKIP_APP_DEPLOY=0
+        fi
+        if [ "${SELECTED_STEPS[4]:-1}" -eq 0 ]; then
+            STEP_SYSTEMD="skip"
+        fi
     fi
 
     # --------------------------------------------------------------------------
@@ -1940,17 +2012,77 @@ EOF
         )
         gum_choose "Inscriptions de nouveaux utilisateurs" "${SIGNUP_OPTS[@]}" && SIGN_CHOICE=$? || SIGN_CHOICE=$?
         [ "$SIGN_CHOICE" -eq 0 ] && ALLOW_SIGNUP="true" || ALLOW_SIGNUP="false"
+
+        # 8. Personnalisation avancée des variables d'environnement (Smart Defaults UI)
+        ENV_FILE_DETECTED=""
+        if [ -f "$INSTALL_DIR/.env.docker" ]; then
+            ENV_FILE_DETECTED="$INSTALL_DIR/.env.docker"
+        elif [ -f "./.env.docker" ]; then
+            ENV_FILE_DETECTED="./.env.docker"
+        elif [ -f "$INSTALL_DIR/.env.local" ]; then
+            ENV_FILE_DETECTED="$INSTALL_DIR/.env.local"
+        fi
+
+        if [ -n "$ENV_FILE_DETECTED" ] && [ -r "$ENV_FILE_DETECTED" ]; then
+            PREV_SECRET=$(grep -E '^APP_SECRET=' "$ENV_FILE_DETECTED" 2>/dev/null | cut -d '=' -f2- || true)
+            PREV_PASS=$(grep -E '^POSTGRES_PASSWORD=' "$ENV_FILE_DETECTED" 2>/dev/null | cut -d '=' -f2- || true)
+            PREV_USER=$(grep -E '^POSTGRES_USER=' "$ENV_FILE_DETECTED" 2>/dev/null | cut -d '=' -f2- || true)
+            PREV_DB=$(grep -E '^POSTGRES_DB=' "$ENV_FILE_DETECTED" 2>/dev/null | cut -d '=' -f2- || true)
+            [ -n "$PREV_SECRET" ] && APP_SECRET="$PREV_SECRET"
+            [ -n "$PREV_PASS" ] && POSTGRES_PASSWORD="$PREV_PASS"
+            [ -n "$PREV_USER" ] && POSTGRES_USER="$PREV_USER"
+            [ -n "$PREV_DB" ] && POSTGRES_DB="$PREV_DB"
+        fi
+
+        [ -z "${APP_SECRET:-}" ] && APP_SECRET=$(openssl rand -hex 16 2>/dev/null || date +%s%N | sha256sum | head -c 32)
+        [ -z "${POSTGRES_PASSWORD:-}" ] && POSTGRES_PASSWORD=$(openssl rand -base64 24 2>/dev/null | tr -dc 'a-zA-Z0-9' | head -c 24 || echo "gickers_db_pass_$(date +%s)")
+
+        printf "\n"
+        printf "  %s╭────────────────────────────────────────────────────────────────────────╮%s\n" "$C_BOLD$C_CYAN" "$C_RESET"
+        printf "  %s│%s %s⚙️  Variables d'environnement & Secrets (Valeurs intelligentes)           %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
+        printf "  %s├────────────────────────────────────────────────────────────────────────┤%s\n" "$C_BOLD$C_CYAN" "$C_RESET"
+        if [ "$MODE" = "native" ]; then
+            printf "  %s│%s  • APP_SECRET : %s%s...%s (Clé secrète Symfony)               %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_BOLD$C_GOLD" "${APP_SECRET:0:12}" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
+            printf "  %s│%s  • Base de données : %ssqlite:///%s/.data/gickers-sh.db%s              %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_GREEN" "%kernel.project_dir%" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
+            printf "  %s│%s  • Git LFS : %s%s%s • Inscriptions : %s%s%s                           %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_CYAN" "$LFS_ENABLED" "$C_RESET" "$C_CYAN" "$ALLOW_SIGNUP" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
+        else
+            printf "  %s│%s  • APP_SECRET : %s%s...%s (Clé secrète Symfony)               %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_BOLD$C_GOLD" "${APP_SECRET:0:12}" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
+            printf "  %s│%s  • Base PostgreSQL : %s%s@postgres:5432/%s%s (Pass auto fort)       %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_GREEN" "$POSTGRES_USER" "$POSTGRES_DB" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
+            printf "  %s│%s  • Git LFS : %s%s%s • Inscriptions : %s%s%s                           %s│%s\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_CYAN" "$LFS_ENABLED" "$C_RESET" "$C_CYAN" "$ALLOW_SIGNUP" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET"
+        fi
+        printf "  %s╰────────────────────────────────────────────────────────────────────────╯%s\n\n" "$C_BOLD$C_CYAN" "$C_RESET"
+
+        ENV_MENU=(
+            "Conserver ces valeurs recommandées (Automatique & Sécurisé - Entrée rapide)"
+            "Personnaliser les variables d'environnement (Base de données, Secret, LFS)..."
+        )
+        gum_choose "Personnalisation des variables d'environnement" "${ENV_MENU[@]}" && ENV_CHOICE=$? || ENV_CHOICE=$?
+        if [ "$ENV_CHOICE" -eq 1 ]; then
+            gum_input "Clé APP_SECRET (Symfony)" APP_SECRET "$APP_SECRET" "ex: clé secrète aléatoire de 32 caractères"
+            if [ "$MODE" != "native" ]; then
+                gum_input "Utilisateur PostgreSQL" POSTGRES_USER "$POSTGRES_USER"
+                gum_input "Nom de la base PostgreSQL" POSTGRES_DB "$POSTGRES_DB"
+                gum_input "Mot de passe PostgreSQL" POSTGRES_PASSWORD "$POSTGRES_PASSWORD"
+            fi
+            LFS_OPTS=(
+                "Activer Git LFS (true) [Recommandé pour gros fichiers]"
+                "Désactiver Git LFS (false)"
+            )
+            gum_choose "Support de Git LFS (Large File Storage)" "${LFS_OPTS[@]}" && LFS_CHOICE=$? || LFS_CHOICE=$?
+            [ "$LFS_CHOICE" -eq 0 ] && LFS_ENABLED="true" || LFS_ENABLED="false"
+        fi
     fi
 
     # 8. Summary & Confirmation
     printf "\n"
     printf "  %s%sConfiguration finale du déploiement :%s\n" "$C_BOLD" "$C_CYAN" "$C_RESET"
-    printf "    • %sUtilisateur hôte :%s     %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_BOLD$C_GREEN" "$SYSTEM_USER" "$C_RESET"
-    printf "    • %sDomaine public :%s       %shttps://%s%s\n" "$C_MUTED" "$C_RESET" "$C_BOLD$C_WHITE" "$DOMAIN" "$C_RESET"
-    printf "    • %sNom d'usage :%s          %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_BOLD$C_WHITE" "$APP_NAME" "$C_RESET"
-    printf "    • %sRépertoire cible :%s     %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_GOLD" "$INSTALL_DIR" "$C_RESET"
-    printf "    • %sPort SSH Git :%s         %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_CYAN" "$SSH_PORT" "$C_RESET"
-    printf "    • %sPorts Web :%s            %s%s / %s%s\n" "$C_MUTED" "$C_RESET" "$C_CYAN" "$HTTP_PORT" "$HTTPS_PORT" "$C_RESET"
+    printf "    • %sMode d'exécution :%s   %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_BOLD$C_WHITE" "$MODE" "$C_RESET"
+    printf "    • %sUtilisateur hôte :%s   %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_BOLD$C_GREEN" "$SYSTEM_USER" "$C_RESET"
+    printf "    • %sDomaine public :%s     %shttps://%s%s\n" "$C_MUTED" "$C_RESET" "$C_BOLD$C_WHITE" "$DOMAIN" "$C_RESET"
+    printf "    • %sNom d'usage :%s        %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_BOLD$C_WHITE" "$APP_NAME" "$C_RESET"
+    printf "    • %sRépertoire cible :%s   %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_GOLD" "$INSTALL_DIR" "$C_RESET"
+    printf "    • %sPort SSH Git :%s       %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_CYAN" "$SSH_PORT" "$C_RESET"
+    printf "    • %sPorts Web :%s          %s%s / %s%s\n" "$C_MUTED" "$C_RESET" "$C_CYAN" "$HTTP_PORT" "$HTTPS_PORT" "$C_RESET"
     if [ -n "$ADMIN_SSH_KEY" ]; then
         printf "    • %sAdmin initial :%s        %s@%s%s\n" "$C_MUTED" "$C_RESET" "$C_GREEN" "$ADMIN_USER" "$C_RESET"
     else
@@ -2183,47 +2315,17 @@ if [ "${SKIP_APP_DEPLOY:-0}" -eq 0 ]; then
     fi
 
     # --------------------------------------------------------------------------
-    # 6. Configuration de Production (.env.docker)
+    # 6. Configuration de l'Environnement (.env.docker ou .env.local)
     # --------------------------------------------------------------------------
-    APP_SECRET=$(openssl rand -hex 16 2>/dev/null || date +%s%N | sha256sum | head -c 32)
-    if [ -z "$POSTGRES_PASSWORD" ]; then
+    if [ -z "${APP_SECRET:-}" ]; then
+        APP_SECRET=$(openssl rand -hex 16 2>/dev/null || date +%s%N | sha256sum | head -c 32)
+    fi
+    if [ -z "${POSTGRES_PASSWORD:-}" ]; then
         POSTGRES_PASSWORD=$(openssl rand -base64 24 2>/dev/null | tr -dc 'a-zA-Z0-9' | head -c 24 || echo "gickers_secret_pass_$(date +%s)")
     fi
     ADMIN_CLAIM_TOKEN=""
     if [ -z "$ADMIN_SSH_KEY" ]; then
         ADMIN_CLAIM_TOKEN=$(openssl rand -hex 16 2>/dev/null || date +%s%N | sha256sum | head -c 32)
-    fi
-
-    if [ -f .env.docker ]; then
-        # Assurer les droits de lecture si le fichier appartient à l'utilisateur ou via sudo
-        if [ ! -r .env.docker ]; then
-            if [ -n "$EXEC_SUDO" ]; then
-                $EXEC_SUDO chmod 644 .env.docker 2>/dev/null || true
-                $EXEC_SUDO chown "$CURRENT_USER" .env.docker 2>/dev/null || true
-            else
-                chmod 644 .env.docker 2>/dev/null || true
-            fi
-        fi
-
-        if [ -r .env.docker ]; then
-            cp .env.docker .env.docker.bak 2>/dev/null || true
-            EXISTING_SECRET=$(grep -E '^APP_SECRET=' .env.docker 2>/dev/null | cut -d '=' -f2- || true)
-            EXISTING_PG_PASS=$(grep -E '^POSTGRES_PASSWORD=' .env.docker 2>/dev/null | cut -d '=' -f2- || true)
-            EXISTING_CLAIM_TOKEN=$(grep -E '^SOFT_SERVE_INITIAL_ADMIN_TOKEN=' .env.docker 2>/dev/null | cut -d '=' -f2- | tr -d '"' || true)
-            EXISTING_ADMIN_KEYS=$(grep -E '^SOFT_SERVE_INITIAL_ADMIN_KEYS=' .env.docker 2>/dev/null | cut -d '=' -f2- | tr -d '"' || true)
-            if [ -n "$EXISTING_SECRET" ]; then
-                APP_SECRET="$EXISTING_SECRET"
-            fi
-            if [ -n "$EXISTING_PG_PASS" ]; then
-                POSTGRES_PASSWORD="$EXISTING_PG_PASS"
-            fi
-            if [ -n "$EXISTING_CLAIM_TOKEN" ] && [ -z "$ADMIN_SSH_KEY" ]; then
-                ADMIN_CLAIM_TOKEN="$EXISTING_CLAIM_TOKEN"
-            fi
-            if [ -n "$EXISTING_ADMIN_KEYS" ] && [ -z "$ADMIN_SSH_KEY" ]; then
-                ADMIN_SSH_KEY="$EXISTING_ADMIN_KEYS"
-            fi
-        fi
     fi
 
     if [ "$SSH_PORT" = "22" ]; then
@@ -2232,152 +2334,265 @@ if [ "${SKIP_APP_DEPLOY:-0}" -eq 0 ]; then
         SOFT_SERVE_SSH_URL="ssh://${DOMAIN}:${SSH_PORT}"
     fi
 
-    if [ -w . ] || [ -w .env.docker 2>/dev/null ]; then
-        cat > .env.docker << EOF
+    if [ "$MODE" = "native" ]; then
+        # Configuration Native (.env.local)
+        cat > .env.local << EOF
 # ==============================================================================
-# Production Environment for Gickers.sh (Domain: ${DOMAIN})
+# Native Host Environment for Gickers.sh (Domain: ${DOMAIN})
 # Generated automatically on $(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date)
 # ==============================================================================
 
 APP_ENV=prod
 APP_DEBUG=0
 APP_SECRET=${APP_SECRET}
-
-# Database
-POSTGRES_USER=${POSTGRES_USER}
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-POSTGRES_DB=${POSTGRES_DB}
-
-# Host Ports
-HTTP_PORT=${HTTP_PORT}
-HTTPS_PORT=${HTTPS_PORT}
-SSH_PORT=${SSH_PORT}
-
-# Public Host & URLs (Production Target: ${DOMAIN})
 APP_DOMAIN=${DOMAIN}
-SOFT_SERVE_HTTP_PUBLIC_URL=https://${DOMAIN}
-SOFT_SERVE_SSH_PUBLIC_URL=${SOFT_SERVE_SSH_URL}
 
-# TLS (Empty for automated Let's Encrypt certificates managed by Caddy)
-CADDY_TLS=""
+# Database SQLite locale
+DATABASE_URL="sqlite:///%kernel.project_dir%/.data/gickers-sh.db"
+MESSENGER_TRANSPORT_DSN="doctrine://default?auto_setup=0"
 
-# Server branding & policy
-SOFT_SERVE_NAME=${APP_NAME}
+# Ports et URLs publiques
+SOFT_SERVE_NAME="${APP_NAME}"
+SOFT_SERVE_SSH_LISTEN_ADDR="0.0.0.0:${SSH_PORT}"
+SOFT_SERVE_SSH_PUBLIC_URL="${SOFT_SERVE_SSH_URL}"
+SOFT_SERVE_HTTP_LISTEN_ADDR="0.0.0.0:${HTTP_PORT}"
+SOFT_SERVE_HTTP_PUBLIC_URL="http://${DOMAIN}:${HTTP_PORT}"
+
+# Politiques & Accès
 SOFT_SERVE_LFS_ENABLED=${LFS_ENABLED}
 SOFT_SERVE_ANON_ACCESS=${ANON_ACCESS}
 SOFT_SERVE_ALLOW_KEYLESS=${ALLOW_KEYLESS}
 SOFT_SERVE_INITIAL_ADMIN_KEYS="${ADMIN_SSH_KEY}"
 SOFT_SERVE_INITIAL_ADMIN_TOKEN="${ADMIN_CLAIM_TOKEN}"
 SOFT_SERVE_ALLOW_SIGNUP=${ALLOW_SIGNUP}
-SOFT_SERVE_WEBHOOK_ALLOW_LIST=
-
-# Isolated Deploy Engine (Docker-in-Docker with gVisor sandbox & anti-SSRF)
-DOCKER_HOST=tcp://deploy-dockerd:2375
-DEPLOY_GATEWAY_HOST=deploy-dockerd
-DEPLOY_DOCKER_RUNTIME=runsc
-DEPLOY_GVISOR_PLATFORM=systrap
 EOF
-    else
-        cat << EOF | $EXEC_SUDO tee .env.docker >/dev/null
-# ==============================================================================
-# Production Environment for Gickers.sh (Domain: ${DOMAIN})
-# Generated automatically on $(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date)
-# ==============================================================================
+        chmod 600 .env.local 2>/dev/null || true
+        printf "  %s✔%s %sConfiguration native .env.local initialisée.%s
+" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
 
-APP_ENV=prod
-APP_DEBUG=0
-APP_SECRET=${APP_SECRET}
+        # ----------------------------------------------------------------------
+        # 7. Build et Démarrage Natif
+        # ----------------------------------------------------------------------
+        deploy_log="/tmp/gickers_deploy.log"
+        : > "$deploy_log"
 
-# Database
-POSTGRES_USER=${POSTGRES_USER}
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-POSTGRES_DB=${POSTGRES_DB}
-
-# Host Ports
-HTTP_PORT=${HTTP_PORT}
-HTTPS_PORT=${HTTPS_PORT}
-SSH_PORT=${SSH_PORT}
-
-# Public Host & URLs (Production Target: ${DOMAIN})
-APP_DOMAIN=${DOMAIN}
-SOFT_SERVE_HTTP_PUBLIC_URL=https://${DOMAIN}
-SOFT_SERVE_SSH_PUBLIC_URL=${SOFT_SERVE_SSH_URL}
-
-# TLS (Empty for automated Let's Encrypt certificates managed by Caddy)
-CADDY_TLS=""
-
-# Server branding & policy
-SOFT_SERVE_NAME=${APP_NAME}
-SOFT_SERVE_LFS_ENABLED=${LFS_ENABLED}
-SOFT_SERVE_ANON_ACCESS=${ANON_ACCESS}
-SOFT_SERVE_ALLOW_KEYLESS=${ALLOW_KEYLESS}
-SOFT_SERVE_INITIAL_ADMIN_KEYS="${ADMIN_SSH_KEY}"
-SOFT_SERVE_INITIAL_ADMIN_TOKEN="${ADMIN_CLAIM_TOKEN}"
-SOFT_SERVE_ALLOW_SIGNUP=${ALLOW_SIGNUP}
-SOFT_SERVE_WEBHOOK_ALLOW_LIST=
-
-# Isolated Deploy Engine (Docker-in-Docker with gVisor sandbox & anti-SSRF)
-DOCKER_HOST=tcp://deploy-dockerd:2375
-DEPLOY_GATEWAY_HOST=deploy-dockerd
-DEPLOY_DOCKER_RUNTIME=runsc
-DEPLOY_GVISOR_PLATFORM=systrap
-EOF
-        if [ -n "$EXEC_SUDO" ]; then
-            $EXEC_SUDO chown "$CURRENT_USER" .env.docker 2>/dev/null || true
+        (
+            if [ ! -f vendor/autoload.php ]; then
+                composer install --no-dev --optimize-autoloader >> "$deploy_log" 2>&1
+            fi
+            chmod +x bin/soft bin/console
+            if [ ! -x bin/gickers-ssh ]; then
+                ( cd cmd/gickers-ssh && go build -o ../../bin/gickers-ssh . >> "$deploy_log" 2>&1 )
+            fi
+            ln -sf gickers-ssh bin/codes-ssh 2>/dev/null || true
+        ) < /dev/null &
+        if ! gum_spin $! "Compilation du gateway gickers-ssh et installation Composer..."; then
+            printf "
+  %s✖%s %sÉchec de la compilation / installation native.%s
+" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+            tail -n 25 "$deploy_log" | sed 's/^/    /'
+            exit 1
         fi
-    fi
 
-    chmod 600 .env.docker 2>/dev/null || true
-    printf "  %s✔%s %sConfiguration .env.docker initialisée.%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+        (
+            ./bin/soft doctrine:migrations:migrate --allow-no-migration --no-interaction >> "$deploy_log" 2>&1
+        ) < /dev/null &
+        if ! gum_spin $! "Exécution des migrations SQLite & initialisation Doctrine..."; then
+            printf "
+  %s✖%s %sÉchec des migrations Doctrine.%s
+" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+            tail -n 25 "$deploy_log" | sed 's/^/    /'
+            exit 1
+        fi
+    else
+        # Configuration Docker (.env.docker)
+        if [ -f .env.docker ]; then
+            if [ ! -r .env.docker ]; then
+                if [ -n "$EXEC_SUDO" ]; then
+                    $EXEC_SUDO chmod 644 .env.docker 2>/dev/null || true
+                    $EXEC_SUDO chown "$CURRENT_USER" .env.docker 2>/dev/null || true
+                else
+                    chmod 644 .env.docker 2>/dev/null || true
+                fi
+            fi
 
-    # --------------------------------------------------------------------------
-    # 7. Build et Déploiement Docker Compose
-    # --------------------------------------------------------------------------
-    deploy_log="/tmp/gickers_deploy.log"
-    : > "$deploy_log"
+            if [ -r .env.docker ]; then
+                cp .env.docker .env.docker.bak 2>/dev/null || true
+                EXISTING_SECRET=$(grep -E '^APP_SECRET=' .env.docker 2>/dev/null | cut -d '=' -f2- || true)
+                EXISTING_PG_PASS=$(grep -E '^POSTGRES_PASSWORD=' .env.docker 2>/dev/null | cut -d '=' -f2- || true)
+                EXISTING_CLAIM_TOKEN=$(grep -E '^SOFT_SERVE_INITIAL_ADMIN_TOKEN=' .env.docker 2>/dev/null | cut -d '=' -f2- | tr -d '"' || true)
+                EXISTING_ADMIN_KEYS=$(grep -E '^SOFT_SERVE_INITIAL_ADMIN_KEYS=' .env.docker 2>/dev/null | cut -d '=' -f2- | tr -d '"' || true)
+                if [ -n "$EXISTING_SECRET" ]; then
+                    APP_SECRET="$EXISTING_SECRET"
+                fi
+                if [ -n "$EXISTING_PG_PASS" ]; then
+                    POSTGRES_PASSWORD="$EXISTING_PG_PASS"
+                fi
+                if [ -n "$EXISTING_CLAIM_TOKEN" ] && [ -z "$ADMIN_SSH_KEY" ]; then
+                    ADMIN_CLAIM_TOKEN="$EXISTING_CLAIM_TOKEN"
+                fi
+                if [ -n "$EXISTING_ADMIN_KEYS" ] && [ -z "$ADMIN_SSH_KEY" ]; then
+                    ADMIN_SSH_KEY="$EXISTING_ADMIN_KEYS"
+                fi
+            fi
+        fi
 
-    ( docker compose --env-file .env.docker build >> "$deploy_log" 2>&1 ) < /dev/null &
-    if ! gum_spin $! "Construction des conteneurs Docker (PHP, gickers-ssh, FrankenPHP)..."; then
-        printf "\n  %s✖%s %sÉchec de la construction des conteneurs Docker.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
-        printf "  %sDernières lignes du journal d'erreur :%s\n\n" "$C_MUTED" "$C_RESET"
-        tail -n 25 "$deploy_log" | sed 's/^/    /'
-        printf "\n"
-        exit 1
-    fi
+        if [ -w . ] || [ -w .env.docker 2>/dev/null ]; then
+            cat > .env.docker << EOF
+# ==============================================================================
+# Production Environment for Gickers.sh (Domain: ${DOMAIN})
+# Generated automatically on $(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date)
+# ==============================================================================
 
-    ( docker compose --env-file .env.docker up -d postgres >> "$deploy_log" 2>&1 ) < /dev/null &
-    if ! gum_spin $! "Démarrage de PostgreSQL..."; then
-        printf "\n  %s✖%s %sÉchec du démarrage de PostgreSQL.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
-        printf "  %sDernières lignes du journal d'erreur :%s\n\n" "$C_MUTED" "$C_RESET"
-        tail -n 25 "$deploy_log" | sed 's/^/    /'
-        printf "\n"
-        exit 1
-    fi
+APP_ENV=prod
+APP_DEBUG=0
+APP_SECRET=${APP_SECRET}
 
-    # Wait for PostgreSQL readiness
-    RETRY=0
-    MAX_RETRY=30
-    until docker compose --env-file .env.docker exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" < /dev/null >/dev/null 2>&1 || [ $RETRY -eq $MAX_RETRY ]; do
-        sleep 1
-        RETRY=$((RETRY + 1))
-    done
+# Database
+POSTGRES_USER=${POSTGRES_USER}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+POSTGRES_DB=${POSTGRES_DB}
 
-    ( docker compose --env-file .env.docker run -T --rm init < /dev/null >> "$deploy_log" 2>&1 ) &
-    if ! gum_spin $! "Exécution des migrations Doctrine & initialisation du serveur..."; then
-        printf "\n  %s✖%s %sÉchec de l'initialisation du serveur / migrations Doctrine.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
-        printf "  %sDernières lignes du journal d'erreur :%s\n\n" "$C_MUTED" "$C_RESET"
-        tail -n 25 "$deploy_log" | sed 's/^/    /'
-        printf "\n"
-        exit 1
-    fi
+# Host Ports
+HTTP_PORT=${HTTP_PORT}
+HTTPS_PORT=${HTTPS_PORT}
+SSH_PORT=${SSH_PORT}
 
-    ( docker compose --env-file .env.docker up -d < /dev/null >> "$deploy_log" 2>&1 ) &
-    if ! gum_spin $! "Démarrage complet de la stack (HTTP, SSH, Worker, Deploy-Engine)..."; then
-        printf "\n  %s✖%s %sÉchec du démarrage complet de la stack Docker Compose.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
-        printf "  %sDernières lignes du journal d'erreur :%s\n\n" "$C_MUTED" "$C_RESET"
-        tail -n 25 "$deploy_log" | sed 's/^/    /'
-        printf "\n"
-        exit 1
+# Public Host & URLs (Production Target: ${DOMAIN})
+APP_DOMAIN=${DOMAIN}
+SOFT_SERVE_HTTP_PUBLIC_URL=https://${DOMAIN}
+SOFT_SERVE_SSH_PUBLIC_URL=${SOFT_SERVE_SSH_URL}
+
+# TLS (Empty for automated Let's Encrypt certificates managed by Caddy)
+CADDY_TLS=""
+
+# Server branding & policy
+SOFT_SERVE_NAME=${APP_NAME}
+SOFT_SERVE_LFS_ENABLED=${LFS_ENABLED}
+SOFT_SERVE_ANON_ACCESS=${ANON_ACCESS}
+SOFT_SERVE_ALLOW_KEYLESS=${ALLOW_KEYLESS}
+SOFT_SERVE_INITIAL_ADMIN_KEYS="${ADMIN_SSH_KEY}"
+SOFT_SERVE_INITIAL_ADMIN_TOKEN="${ADMIN_CLAIM_TOKEN}"
+SOFT_SERVE_ALLOW_SIGNUP=${ALLOW_SIGNUP}
+SOFT_SERVE_WEBHOOK_ALLOW_LIST=
+
+# Isolated Deploy Engine (Docker-in-Docker with gVisor sandbox & anti-SSRF)
+DOCKER_HOST=tcp://deploy-dockerd:2375
+DEPLOY_GATEWAY_HOST=deploy-dockerd
+DEPLOY_DOCKER_RUNTIME=runsc
+DEPLOY_GVISOR_PLATFORM=systrap
+EOF
+        else
+            cat << EOF | $EXEC_SUDO tee .env.docker >/dev/null
+# ==============================================================================
+# Production Environment for Gickers.sh (Domain: ${DOMAIN})
+# Generated automatically on $(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date)
+# ==============================================================================
+
+APP_ENV=prod
+APP_DEBUG=0
+APP_SECRET=${APP_SECRET}
+
+# Database
+POSTGRES_USER=${POSTGRES_USER}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+POSTGRES_DB=${POSTGRES_DB}
+
+# Host Ports
+HTTP_PORT=${HTTP_PORT}
+HTTPS_PORT=${HTTPS_PORT}
+SSH_PORT=${SSH_PORT}
+
+# Public Host & URLs (Production Target: ${DOMAIN})
+APP_DOMAIN=${DOMAIN}
+SOFT_SERVE_HTTP_PUBLIC_URL=https://${DOMAIN}
+SOFT_SERVE_SSH_PUBLIC_URL=${SOFT_SERVE_SSH_URL}
+
+# TLS (Empty for automated Let's Encrypt certificates managed by Caddy)
+CADDY_TLS=""
+
+# Server branding & policy
+SOFT_SERVE_NAME=${APP_NAME}
+SOFT_SERVE_LFS_ENABLED=${LFS_ENABLED}
+SOFT_SERVE_ANON_ACCESS=${ANON_ACCESS}
+SOFT_SERVE_ALLOW_KEYLESS=${ALLOW_KEYLESS}
+SOFT_SERVE_INITIAL_ADMIN_KEYS="${ADMIN_SSH_KEY}"
+SOFT_SERVE_INITIAL_ADMIN_TOKEN="${ADMIN_CLAIM_TOKEN}"
+SOFT_SERVE_ALLOW_SIGNUP=${ALLOW_SIGNUP}
+SOFT_SERVE_WEBHOOK_ALLOW_LIST=
+
+# Isolated Deploy Engine (Docker-in-Docker with gVisor sandbox & anti-SSRF)
+DOCKER_HOST=tcp://deploy-dockerd:2375
+DEPLOY_GATEWAY_HOST=deploy-dockerd
+DEPLOY_DOCKER_RUNTIME=runsc
+DEPLOY_GVISOR_PLATFORM=systrap
+EOF
+            if [ -n "$EXEC_SUDO" ]; then
+                $EXEC_SUDO chown "$CURRENT_USER" .env.docker 2>/dev/null || true
+            fi
+        fi
+
+        chmod 600 .env.docker 2>/dev/null || true
+        printf "  %s✔%s %sConfiguration .env.docker initialisée.%s
+" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+
+        # ----------------------------------------------------------------------
+        # 7. Build et Déploiement Docker Compose
+        # ----------------------------------------------------------------------
+        deploy_log="/tmp/gickers_deploy.log"
+        : > "$deploy_log"
+
+        ( docker compose --env-file .env.docker build >> "$deploy_log" 2>&1 ) < /dev/null &
+        if ! gum_spin $! "Construction des conteneurs Docker (PHP, gickers-ssh, FrankenPHP)..."; then
+            printf "
+  %s✖%s %sÉchec de la construction des conteneurs Docker.%s
+" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+            tail -n 25 "$deploy_log" | sed 's/^/    /'
+            printf "
+"
+            exit 1
+        fi
+
+        ( docker compose --env-file .env.docker up -d postgres >> "$deploy_log" 2>&1 ) < /dev/null &
+        if ! gum_spin $! "Démarrage de PostgreSQL..."; then
+            printf "
+  %s✖%s %sÉchec du démarrage de PostgreSQL.%s
+" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+            tail -n 25 "$deploy_log" | sed 's/^/    /'
+            printf "
+"
+            exit 1
+        fi
+
+        # Wait for PostgreSQL readiness
+        RETRY=0
+        MAX_RETRY=30
+        until docker compose --env-file .env.docker exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" < /dev/null >/dev/null 2>&1 || [ $RETRY -eq $MAX_RETRY ]; do
+            sleep 1
+            RETRY=$((RETRY + 1))
+        done
+
+        ( docker compose --env-file .env.docker run -T --rm init < /dev/null >> "$deploy_log" 2>&1 ) &
+        if ! gum_spin $! "Exécution des migrations Doctrine & initialisation du serveur..."; then
+            printf "
+  %s✖%s %sÉchec de l'initialisation du serveur / migrations Doctrine.%s
+" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+            tail -n 25 "$deploy_log" | sed 's/^/    /'
+            printf "
+"
+            exit 1
+        fi
+
+        ( docker compose --env-file .env.docker up -d < /dev/null >> "$deploy_log" 2>&1 ) &
+        if ! gum_spin $! "Démarrage complet de la stack (HTTP, SSH, Worker, Deploy-Engine)..."; then
+            printf "
+  %s✖%s %sÉchec du démarrage complet de la stack Docker Compose.%s
+" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+            tail -n 25 "$deploy_log" | sed 's/^/    /'
+            printf "
+"
+            exit 1
+        fi
     fi
 fi
 
@@ -2418,7 +2633,23 @@ INIT_EOF
             $EXEC_SUDO rc-update add gickers default >/dev/null 2>&1 || true
             $EXEC_SUDO rc-service gickers start >/dev/null 2>&1 || true
         else
-            echo "[Unit]
+            if [ "$MODE" = "native" ]; then
+                echo "[Unit]
+Description=Gickers.sh Native Git Forge & Platform
+After=network.target
+
+[Service]
+Type=simple
+${SYSTEMD_USER_DIRECTIVE}
+WorkingDirectory=${INSTALL_DIR}
+ExecStart=${INSTALL_DIR}/bin/soft serve
+Restart=always
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target" | $EXEC_SUDO tee /etc/systemd/system/gickers.service >/dev/null
+            else
+                echo "[Unit]
 Description=Gickers.sh Git Forge & Container Platform
 Requires=docker.service
 After=docker.service network-online.target
@@ -2436,6 +2667,7 @@ TimeoutStartSec=300
 
 [Install]
 WantedBy=multi-user.target" | $EXEC_SUDO tee /etc/systemd/system/gickers.service >/dev/null
+            fi
 
             $EXEC_SUDO systemctl daemon-reload >/dev/null 2>&1 || true
             $EXEC_SUDO systemctl enable gickers.service >/dev/null 2>&1 || true

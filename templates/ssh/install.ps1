@@ -13,6 +13,7 @@ __HEADER_CARD__
 
 $domain = "__DOMAIN__"
 $appName = "__APP_NAME__"
+$mode = "__MODE__"
 $sshPort = "__SSH_PORT__"
 $httpPort = "__HTTP_PORT__"
 $httpsPort = "__HTTPS_PORT__"
@@ -172,7 +173,33 @@ if (-not $nonInteractive) {
 
     $adminUser = Gum-Input -PromptLabel "Nom d'utilisateur administrateur" -DefaultValue $adminUser
 
-    # 4. Summary & Confirmation
+    # 4. Variables d'environnement & Secrets (Valeurs Intelligentes)
+    if (Test-Path ".env.docker") {
+        $prevSecret = (Get-Content ".env.docker" | Where-Object { $_ -match '^APP_SECRET=(.+)' } | ForEach-Object { $matches[1] })
+        $prevPass = (Get-Content ".env.docker" | Where-Object { $_ -match '^POSTGRES_PASSWORD=(.+)' } | ForEach-Object { $matches[1] })
+        if ($prevSecret) { $appSecret = $prevSecret }
+        if ($prevPass) { $postgresPassword = $prevPass }
+    }
+    if ([string]::IsNullOrEmpty($appSecret)) {
+        $appSecret = [System.Guid]::NewGuid().ToString("N")
+    }
+    if ([string]::IsNullOrEmpty($postgresPassword)) {
+        $postgresPassword = [System.Guid]::NewGuid().ToString("N").Substring(0, 24)
+    }
+
+    $envOpts = @(
+        "Conserver ces valeurs recommandées (Automatique & Sécurisé - Entrée rapide)",
+        "Personnaliser les variables d'environnement (Secret, Base de données)..."
+    )
+    $envChoice = Gum-Choose -Title "Variables d'environnement & Secrets" -Options $envOpts
+    if ($envChoice -eq 1) {
+        $appSecret = Gum-Input -PromptLabel "Clé APP_SECRET (Symfony)" -DefaultValue $appSecret
+        $postgresUser = Gum-Input -PromptLabel "Utilisateur PostgreSQL" -DefaultValue $postgresUser
+        $postgresPassword = Gum-Input -PromptLabel "Mot de passe PostgreSQL" -DefaultValue $postgresPassword
+        $postgresDb = Gum-Input -PromptLabel "Nom de la base PostgreSQL" -DefaultValue $postgresDb
+    }
+
+    # 5. Summary & Confirmation
     Write-Host "`n  $escBold${escCyan}Configuration finale du déploiement :$escReset"
     Write-Host "    • Utilisateur :   $escBold$escGreen$systemUser$escReset"
     Write-Host "    • Domaine :       $escBold$escWhite$domain$escReset"
