@@ -1542,7 +1542,7 @@ EOF
     # --------------------------------------------------------------------------
     # 7. Build et Déploiement Docker Compose
     # --------------------------------------------------------------------------
-    local deploy_log="/tmp/gickers_deploy.log"
+    deploy_log="/tmp/gickers_deploy.log"
     : > "$deploy_log"
 
     ( docker compose --env-file .env.docker build >> "$deploy_log" 2>&1 ) &
