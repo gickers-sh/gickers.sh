@@ -237,7 +237,7 @@ gum_checklist() {
             rendered=$((rendered + 1))
         done
 
-        # Affichage du bloc d'informations et des commandes de l'élément focus
+        # Affichage du bloc d'informations et des commandes de l'élément focus sans encadré
         local cur_desc="${descs[selected]:-}"
         local cur_cmd="${cmds[selected]:-}"
 
@@ -245,48 +245,47 @@ gum_checklist() {
             printf "\r${ESC}[2K\n"
             rendered=$((rendered + 1))
 
-            local top_line="╭─"
-            local sep_line="├─"
-            local bot_line="╰─"
-            for (( w=0; w<inner_width; w++ )); do
-                top_line+="─"
-                sep_line+="─"
-                bot_line+="─"
-            done
-            top_line+="╮"
-            sep_line+="┤"
-            bot_line+="╯"
-
-            printf "\r${ESC}[2K    %s%s%s\n" "$C_CYAN" "$top_line" "$C_RESET"
-            rendered=$((rendered + 1))
-
             if [ -n "$cur_desc" ]; then
                 local desc_clean
                 desc_clean=$(echo "$cur_desc" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+                local first_dline=1
                 while IFS= read -r dline; do
                     [ -z "$dline" ] && continue
                     while [ "${#dline}" -gt "$inner_width" ]; do
-                        local chunk="${dline:0:$inner_width}"
-                        printf "\r${ESC}[2K    %s│%s %s%-*s%s %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD$C_WHITE" "$inner_width" "$chunk" "$C_RESET" "$C_CYAN" "$C_RESET"
+                        local split_idx="$inner_width"
+                        local prefix="${dline:0:$inner_width}"
+                        if [[ "$prefix" =~ ^(.*)[[:space:]]([^[:space:]]*)$ ]]; then
+                            split_idx="${#BASH_REMATCH[1]}"
+                        fi
+                        [ "$split_idx" -le 0 ] && split_idx="$inner_width"
+                        local chunk="${dline:0:$split_idx}"
+                        if [ "$first_dline" -eq 1 ]; then
+                            printf "\r${ESC}[2K      %sℹ%s %s%s%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$chunk" "$C_RESET"
+                            first_dline=0
+                        else
+                            printf "\r${ESC}[2K        %s%s%s\n" "$C_MUTED" "$chunk" "$C_RESET"
+                        fi
                         rendered=$((rendered + 1))
-                        dline="${dline:$inner_width}"
+                        dline="${dline:$split_idx}"
+                        dline=$(echo "$dline" | sed -e 's/^[[:space:]]*//')
                     done
-                    printf "\r${ESC}[2K    %s│%s %s%-*s%s %s│%s\n" "$C_CYAN" "$C_RESET" "$C_BOLD$C_WHITE" "$inner_width" "$dline" "$C_RESET" "$C_CYAN" "$C_RESET"
+                    if [ "$first_dline" -eq 1 ]; then
+                        printf "\r${ESC}[2K      %sℹ%s %s%s%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$dline" "$C_RESET"
+                        first_dline=0
+                    else
+                        printf "\r${ESC}[2K        %s%s%s\n" "$C_MUTED" "$dline" "$C_RESET"
+                    fi
                     rendered=$((rendered + 1))
                 done <<< "$desc_clean"
             fi
 
             if [ -n "$cur_cmd" ]; then
-                if [ -n "$cur_desc" ]; then
-                    printf "\r${ESC}[2K    %s%s%s\n" "$C_CYAN" "$sep_line" "$C_RESET"
-                    rendered=$((rendered + 1))
-                fi
+                printf "\r${ESC}[2K\n"
+                rendered=$((rendered + 1))
                 while IFS= read -r cline; do
-                    # Découpage intelligent par mot pour ne pas couper au milieu d'un token
                     local remaining="$cline"
                     while [ "${#remaining}" -gt "$inner_width" ]; do
                         local split_idx="$inner_width"
-                        # Trouver le dernier espace avant inner_width
                         local prefix="${remaining:0:$inner_width}"
                         if [[ "$prefix" =~ ^(.*)[[:space:]]([^[:space:]]*)$ ]]; then
                             split_idx="${#BASH_REMATCH[1]}"
@@ -296,9 +295,7 @@ gum_checklist() {
                         local part="${remaining:0:$split_idx}"
                         local colored_part
                         colored_part=$(colorize_bash_line "$part")
-                        local padding=$(( inner_width - ${#part} ))
-                        [ "$padding" -lt 0 ] && padding=0
-                        printf "\r${ESC}[2K    %s│%s %s%*s %s│%s\n" "$C_CYAN" "$C_RESET" "$colored_part" "$padding" "" "$C_CYAN" "$C_RESET"
+                        printf "\r${ESC}[2K        %s\n" "$colored_part"
                         rendered=$((rendered + 1))
                         remaining="${remaining:$split_idx}"
                         remaining=$(echo "$remaining" | sed -e 's/^[[:space:]]*//')
@@ -306,15 +303,10 @@ gum_checklist() {
                     done
                     local colored_rem
                     colored_rem=$(colorize_bash_line "$remaining")
-                    local pad=$(( inner_width - ${#remaining} ))
-                    [ "$pad" -lt 0 ] && pad=0
-                    printf "\r${ESC}[2K    %s│%s %s%*s %s│%s\n" "$C_CYAN" "$C_RESET" "$colored_rem" "$pad" "" "$C_CYAN" "$C_RESET"
+                    printf "\r${ESC}[2K        %s\n" "$colored_rem"
                     rendered=$((rendered + 1))
                 done <<< "$cur_cmd"
             fi
-
-            printf "\r${ESC}[2K    %s%s%s\n" "$C_CYAN" "$bot_line" "$C_RESET"
-            rendered=$((rendered + 1))
         fi
 
         last_rendered_lines=$rendered
