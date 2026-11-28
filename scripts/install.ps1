@@ -452,7 +452,10 @@ if ($stepFirewall -eq "auto") {
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 Set-Location $installDir
 
-if (-not (Test-Path "compose.yaml")) {
+if (Test-Path ".git") {
+    git fetch --depth 1 origin main 2>$null
+    git reset --hard origin/main 2>$null
+} elseif (-not (Test-Path "compose.yaml")) {
     git clone --depth 1 https://github.com/gickerssh/gickers.sh.git .
 }
 
@@ -461,6 +464,11 @@ New-Item -ItemType Directory -Force -Path ".data", ".data/caddy/sites", "var", "
 $appSecret = [System.Guid]::NewGuid().ToString("N")
 if ([string]::IsNullOrEmpty($postgresPassword)) {
     $postgresPassword = [System.Guid]::NewGuid().ToString("N").Substring(0, 24)
+}
+
+$adminClaimToken = ""
+if ([string]::IsNullOrEmpty($adminSshKey)) {
+    $adminClaimToken = [System.Guid]::NewGuid().ToString("N")
 }
 
 $sshUrl = if ($sshPort -eq "22") { "ssh://$domain" } else { "ssh://${domain}:${sshPort}" }
@@ -484,6 +492,8 @@ SOFT_SERVE_LFS_ENABLED=$lfsEnabled
 SOFT_SERVE_ANON_ACCESS=$anonAccess
 SOFT_SERVE_ALLOW_KEYLESS=$allowKeyless
 SOFT_SERVE_INITIAL_ADMIN_KEYS="$adminSshKey"
+SOFT_SERVE_INITIAL_ADMIN_TOKEN="$adminClaimToken"
+SOFT_SERVE_ALLOW_SIGNUP=$allowSignup
 DOCKER_HOST=tcp://deploy-dockerd:2375
 DEPLOY_GATEWAY_HOST=deploy-dockerd
 DEPLOY_DOCKER_RUNTIME=runsc
@@ -498,7 +508,7 @@ docker compose --env-file .env.docker build
 docker compose --env-file .env.docker up -d postgres
 
 Start-Sleep -Seconds 3
-docker compose --env-file .env.docker run --rm init
+docker compose --env-file .env.docker run -T --rm init
 docker compose --env-file .env.docker up -d
 
 Write-Host ""
@@ -514,3 +524,17 @@ Write-Host ""
 [38;2;65;72;104m[48;2;31;35;53m╰────────────────────────────────────────────────────────────────────────╯[m
 '@ | Write-Host
 Write-Host ""
+
+if (-not [string]::IsNullOrEmpty($adminClaimToken)) {
+    $sshPortOpt = if ($sshPort -ne "22") { "-p $sshPort " } else { "" }
+    Write-Host "  $escGreen╭────────────────────────────────────────────────────────────────────────╮$escReset"
+    Write-Host "  $escGreen│$escReset $escBold$escWhite🔑 Initialisation Administrateur (Token sécurisé à usage unique)       $escGreen│$escReset"
+    Write-Host "  $escGreen├────────────────────────────────────────────────────────────────────────┤$escReset"
+    Write-Host "  $escGreen│$escReset Initialisez votre compte administrateur depuis votre poste client :     $escGreen│$escReset"
+    Write-Host "  $escGreen│$escReset                                                                        $escGreen│$escReset"
+    Write-Host "  $escGreen│$escReset   $escCyan${escBold}ssh $sshPortOpt$domain signup --token $adminClaimToken | iex$escReset"
+    Write-Host "  $escGreen│$escReset                                                                        $escGreen│$escReset"
+    Write-Host "  $escGreen│$escReset Sur Linux / macOS (Bash) :                                              $escGreen│$escReset"
+    Write-Host "  $escGreen│$escReset   $escCyan${escBold}ssh $sshPortOpt$domain signup --token $adminClaimToken | bash$escReset"
+    Write-Host "  $escGreen╰────────────────────────────────────────────────────────────────────────╯$escReset`n"
+}

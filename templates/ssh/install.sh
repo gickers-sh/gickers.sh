@@ -51,6 +51,7 @@ STEP_FIREWALL="__STEP_FIREWALL__"
 STEP_SYSTEMD="__STEP_SYSTEMD__"
 SYSTEM_USER="__SYSTEM_USER__"
 SYSTEM_ONLY="__SYSTEM_ONLY__"
+ADMIN_CLAIM_TOKEN=""
 
 # Auto-detect root vs non-root
 if [ "$(id -u 2>/dev/null || echo 1)" -eq 0 ]; then
@@ -450,7 +451,7 @@ if ! command -v docker >/dev/null 2>&1; then
                 fi
                 ;;
         esac
-    ) &
+    ) < /dev/null &
     gum_spin $! "Installation officielle de Docker & Compose..."
 else
     printf "  %s✔%s %sDocker : déjà opérationnel sur l'hôte%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
@@ -476,7 +477,7 @@ fi
         else
             $EXEC_SUDO systemctl restart ssh >/dev/null 2>&1 || $EXEC_SUDO systemctl restart sshd >/dev/null 2>&1 || true
         fi
-    ) &
+    ) < /dev/null &
     gum_spin $! "Bascule de OpenSSH hôte sur le port 2222 (port 22 libéré)..."
 
     # Mise à jour du port dans .env.docker
@@ -503,7 +504,7 @@ fi
             $EXEC_SUDO ufw allow 22/tcp comment 'Gickers Git SSH' >/dev/null 2>&1 || true
             $EXEC_SUDO ufw --force enable >/dev/null 2>&1 || true
         fi
-    ) &
+    ) < /dev/null &
     gum_spin $! "Installation et application des règles UFW (80, 443, 22, 2222)..."
 
     # 5. Service systemd
@@ -535,14 +536,14 @@ WantedBy=multi-user.target" | $EXEC_SUDO tee /etc/systemd/system/gickers.service
 
         $EXEC_SUDO systemctl daemon-reload >/dev/null 2>&1 || true
         $EXEC_SUDO systemctl enable gickers.service >/dev/null 2>&1 || true
-    ) &
+    ) < /dev/null &
     gum_spin $! "Enregistrement et activation de gickers.service..."
 
     # Recharger les conteneurs pour appliquer le port 22
     if command -v docker >/dev/null 2>&1; then
         (
             cd "$INSTALL_DIR" && docker compose --env-file .env.docker up -d >/dev/null 2>&1 || true
-        ) &
+        ) < /dev/null &
         gum_spin $! "Actualisation des conteneurs pour le port 22..."
     fi
 
@@ -1154,7 +1155,7 @@ EOF
             mkdir -p "$(dirname "$ADMIN_KEY_PATH")" && chmod 700 "$(dirname "$ADMIN_KEY_PATH")"
             if [ "$OVERWRITE_ADMIN_KEY" -eq 1 ]; then
                 prompt_password_with_confirm "Passphrase de la clé admin" ADMIN_PASSPHRASE
-                ( ssh-keygen -t ed25519 -f "$ADMIN_KEY_PATH" -C "admin@${DOMAIN}" -N "$ADMIN_PASSPHRASE" >/dev/null 2>&1 ) &
+                ( ssh-keygen -t ed25519 -f "$ADMIN_KEY_PATH" -C "admin@${DOMAIN}" -N "$ADMIN_PASSPHRASE" >/dev/null 2>&1 ) < /dev/null &
                 gum_spin $! "Génération de la clé SSH ed25519..."
             fi
             if [ -f "${ADMIN_KEY_PATH}.pub" ]; then
@@ -1246,7 +1247,7 @@ if [ "$IS_ROOT" -eq 1 ] || [ -n "$EXEC_SUDO" ]; then
             else
                 $EXEC_SUDO useradd -m -s /bin/bash -U "$SYSTEM_USER" >/dev/null 2>&1 || true
             fi
-        ) &
+        ) < /dev/null &
         gum_spin $! "Création de l'utilisateur système dédié ($SYSTEM_USER)..."
     fi
 fi
@@ -1292,7 +1293,7 @@ if [ "$STEP_DOCKER" = "auto" ] && [ -n "$EXEC_SUDO" -o "$IS_ROOT" -eq 1 ]; then
                 fi
                 ;;
         esac
-    ) &
+    ) < /dev/null &
     gum_spin $! "Installation et configuration de Docker & Compose..."
 
     if [ "$SYSTEM_USER" != "root" ] && id -u "$SYSTEM_USER" >/dev/null 2>&1; then
@@ -1340,7 +1341,7 @@ if [ "$STEP_SSHD" = "auto" ] && [ -n "$EXEC_SUDO" -o "$IS_ROOT" -eq 1 ]; then
         else
             $EXEC_SUDO systemctl restart ssh >/dev/null 2>&1 || $EXEC_SUDO systemctl restart sshd >/dev/null 2>&1 || true
         fi
-    ) &
+    ) < /dev/null &
     gum_spin $! "Bascule sécurisée de OpenSSH hôte vers le port 2222 (port 22 libéré)..."
 
     printf "\n  %s!%s %s[IMPORTANT] OpenSSH hôte écoute désormais sur le port 2222 :%s\n" "$C_GOLD" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
@@ -1370,7 +1371,7 @@ if [ "$STEP_FIREWALL" = "auto" ] && [ -n "$EXEC_SUDO" -o "$IS_ROOT" -eq 1 ]; the
             fi
             $EXEC_SUDO ufw --force enable >/dev/null 2>&1 || true
         fi
-    ) &
+    ) < /dev/null &
     gum_spin $! "Installation et configuration des règles de pare-feu UFW..."
 fi
 
@@ -1381,16 +1382,22 @@ if [ "${SKIP_APP_DEPLOY:-0}" -eq 0 ]; then
     mkdir -p "$INSTALL_DIR"
     cd "$INSTALL_DIR"
 
-    if [ ! -f "$INSTALL_DIR/compose.yaml" ]; then
+    if [ -d "$INSTALL_DIR/.git" ]; then
+        (
+            cd "$INSTALL_DIR"
+            git fetch --depth 1 origin main >/dev/null 2>&1 && git reset --hard origin/main >/dev/null 2>&1 || git pull --rebase origin main >/dev/null 2>&1 || true
+        ) < /dev/null &
+        gum_spin $! "Mise à jour du projet gickers.sh vers la dernière version..."
+    elif [ ! -f "$INSTALL_DIR/compose.yaml" ]; then
         if [ -n "$PROJECT_ROOT" ] && [ -f "$PROJECT_ROOT/compose.yaml" ] && [ "$PROJECT_ROOT" != "$INSTALL_DIR" ]; then
             (
                 tar --exclude='.git' --exclude='.data' --exclude='var' -cf - -C "$PROJECT_ROOT" . | tar -xf - -C "$INSTALL_DIR"
-            ) &
+            ) < /dev/null &
             gum_spin $! "Copie des fichiers sources vers $INSTALL_DIR..."
         else
             (
                 git clone --depth 1 https://github.com/gickerssh/gickers.sh.git "$INSTALL_DIR" >/dev/null 2>&1 || git clone --depth 1 https://github.com/gickerssh/gickers.sh.git . >/dev/null 2>&1 || true
-            ) &
+            ) < /dev/null &
             gum_spin $! "Téléchargement du projet gickers.sh..."
         fi
     fi
@@ -1557,7 +1564,7 @@ EOF
     deploy_log="/tmp/gickers_deploy.log"
     : > "$deploy_log"
 
-    ( docker compose --env-file .env.docker build >> "$deploy_log" 2>&1 ) &
+    ( docker compose --env-file .env.docker build >> "$deploy_log" 2>&1 ) < /dev/null &
     if ! gum_spin $! "Construction des conteneurs Docker (PHP, gickers-ssh, FrankenPHP)..."; then
         printf "\n  %s✖%s %sÉchec de la construction des conteneurs Docker.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
         printf "  %sDernières lignes du journal d'erreur :%s\n\n" "$C_MUTED" "$C_RESET"
@@ -1566,7 +1573,7 @@ EOF
         exit 1
     fi
 
-    ( docker compose --env-file .env.docker up -d postgres >> "$deploy_log" 2>&1 ) &
+    ( docker compose --env-file .env.docker up -d postgres >> "$deploy_log" 2>&1 ) < /dev/null &
     if ! gum_spin $! "Démarrage de PostgreSQL..."; then
         printf "\n  %s✖%s %sÉchec du démarrage de PostgreSQL.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
         printf "  %sDernières lignes du journal d'erreur :%s\n\n" "$C_MUTED" "$C_RESET"
@@ -1578,12 +1585,12 @@ EOF
     # Wait for PostgreSQL readiness
     RETRY=0
     MAX_RETRY=30
-    until docker compose --env-file .env.docker exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1 || [ $RETRY -eq $MAX_RETRY ]; do
+    until docker compose --env-file .env.docker exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" < /dev/null >/dev/null 2>&1 || [ $RETRY -eq $MAX_RETRY ]; do
         sleep 1
         RETRY=$((RETRY + 1))
     done
 
-    ( docker compose --env-file .env.docker run --rm init >> "$deploy_log" 2>&1 ) &
+    ( docker compose --env-file .env.docker run -T --rm init < /dev/null >> "$deploy_log" 2>&1 ) &
     if ! gum_spin $! "Exécution des migrations Doctrine & initialisation du serveur..."; then
         printf "\n  %s✖%s %sÉchec de l'initialisation du serveur / migrations Doctrine.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
         printf "  %sDernières lignes du journal d'erreur :%s\n\n" "$C_MUTED" "$C_RESET"
@@ -1592,7 +1599,7 @@ EOF
         exit 1
     fi
 
-    ( docker compose --env-file .env.docker up -d >> "$deploy_log" 2>&1 ) &
+    ( docker compose --env-file .env.docker up -d < /dev/null >> "$deploy_log" 2>&1 ) &
     if ! gum_spin $! "Démarrage complet de la stack (HTTP, SSH, Worker, Deploy-Engine)..."; then
         printf "\n  %s✖%s %sÉchec du démarrage complet de la stack Docker Compose.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
         printf "  %sDernières lignes du journal d'erreur :%s\n\n" "$C_MUTED" "$C_RESET"
@@ -1661,7 +1668,7 @@ WantedBy=multi-user.target" | $EXEC_SUDO tee /etc/systemd/system/gickers.service
             $EXEC_SUDO systemctl daemon-reload >/dev/null 2>&1 || true
             $EXEC_SUDO systemctl enable gickers.service >/dev/null 2>&1 || true
         fi
-    ) &
+    ) < /dev/null &
     gum_spin $! "Activation du service au boot de la machine ($INIT_SYSTEM)..."
 
     if [ "$SYSTEM_USER" != "root" ] && id -u "$SYSTEM_USER" >/dev/null 2>&1; then
@@ -1674,7 +1681,7 @@ fi
 # ------------------------------------------------------------------------------
 # 9. Affichage de la Carte de Succès
 # ------------------------------------------------------------------------------
-sleep 2
+sleep 1
 echo ""
 cat << 'EOF'
 __SUCCESS_CARD__
