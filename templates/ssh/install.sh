@@ -1168,10 +1168,14 @@ EOF
             gum_paste_pubkey ADMIN_SSH_KEY
         fi
 
-        # 6. Admin Username
-        DEFAULT_ADMIN_USER="${ADMIN_USER:-admin}"
-        gum_input "Nom d'utilisateur administrateur" ADMIN_USER "$DEFAULT_ADMIN_USER"
-        ADMIN_USER=$(echo "$ADMIN_USER" | tr -d '[:space:]')
+        # 6. Admin Username (uniquement si une clé admin a été configurée)
+        if [ -n "$ADMIN_SSH_KEY" ]; then
+            DEFAULT_ADMIN_USER="${ADMIN_USER:-admin}"
+            gum_input "Nom d'utilisateur administrateur" ADMIN_USER "$DEFAULT_ADMIN_USER"
+            ADMIN_USER=$(echo "$ADMIN_USER" | tr -d '[:space:]')
+        else
+            ADMIN_USER=""
+        fi
 
         # 7. Server Access Policy
         POLICY_OPTS=(
@@ -1203,7 +1207,11 @@ EOF
     printf "    • %sRépertoire cible :%s     %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_GOLD" "$INSTALL_DIR" "$C_RESET"
     printf "    • %sPort SSH Git :%s         %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_CYAN" "$SSH_PORT" "$C_RESET"
     printf "    • %sPorts Web :%s            %s%s / %s%s\n" "$C_MUTED" "$C_RESET" "$C_CYAN" "$HTTP_PORT" "$HTTPS_PORT" "$C_RESET"
-    printf "    • %sAdmin initial :%s        %s@%s%s\n" "$C_MUTED" "$C_RESET" "$C_GREEN" "$ADMIN_USER" "$C_RESET"
+    if [ -n "$ADMIN_SSH_KEY" ]; then
+        printf "    • %sAdmin initial :%s        %s@%s%s\n" "$C_MUTED" "$C_RESET" "$C_GREEN" "$ADMIN_USER" "$C_RESET"
+    else
+        printf "    • %sAdmin initial :%s        %sPremier utilisateur connecté (auto)%s\n" "$C_MUTED" "$C_RESET" "$C_MUTED" "$C_RESET"
+    fi
     printf "    • %sÉtape Docker :%s         %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_WHITE" "$STEP_DOCKER" "$C_RESET"
     printf "    • %sBascule SSHD :%s         %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_WHITE" "$STEP_SSHD" "$C_RESET"
     printf "    • %sPare-feu UFW :%s         %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_WHITE" "$STEP_FIREWALL" "$C_RESET"
