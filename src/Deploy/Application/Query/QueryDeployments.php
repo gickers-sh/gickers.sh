@@ -29,6 +29,11 @@ final readonly class QueryDeployments
     ) {
     }
 
+    public function isDeploySupported(): bool
+    {
+        return $this->accessResolver->isDeploySupported();
+    }
+
     /**
      * @return list<array{environment: DeployEnvironment, latestRelease: ?DeployRelease, releases: list<DeployRelease>, quota: DeployQuota}>
      */

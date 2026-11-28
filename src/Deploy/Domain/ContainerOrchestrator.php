@@ -10,6 +10,11 @@ use App\Deploy\Domain\Spec\ComposeSpec;
 interface ContainerOrchestrator
 {
     /**
+     * Checks whether the container orchestrator engine (Docker daemon) is available and responsive on the system.
+     */
+    public function isAvailable(): bool;
+
+    /**
      * Builds and starts the containers for an environment at a specific commit SHA.
      *
      * @param array<string, string> $decryptedEnvVars

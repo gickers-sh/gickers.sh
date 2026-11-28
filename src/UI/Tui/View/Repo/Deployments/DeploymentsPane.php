@@ -289,6 +289,12 @@ final class DeploymentsPane extends RepoScreen
             return;
         }
 
+        if (!$query->isDeploySupported()) {
+            $this->list->setEmptyText("\n  Deployment engine is disabled (Docker not detected on host).");
+
+            return;
+        }
+
         try {
             $query->environmentsForRepo($this->repo->state->actor, $this->repo->state->db->name());
             $this->list->setEmptyText("\n  No deployment environments configured.");

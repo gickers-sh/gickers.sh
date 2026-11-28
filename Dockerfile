@@ -39,9 +39,16 @@ WORKDIR /app
 ENV COMPOSER_ALLOW_SUPERUSER=1
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
+ARG APP_ENV=prod
+ENV APP_ENV=${APP_ENV}
+
 # Install PHP dependencies first so Docker caches this layer across source edits.
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist --no-autoloader
+RUN if [ "$APP_ENV" = "prod" ]; then \
+        composer install --no-dev --no-scripts --no-interaction --prefer-dist --no-autoloader; \
+    else \
+        composer install --no-scripts --no-interaction --prefer-dist --no-autoloader; \
+    fi
 
 # Application source + the freshly built Go gateway.
 COPY . .
@@ -49,11 +56,14 @@ COPY --from=ssh-build /out/gickers-ssh /usr/local/bin/gickers-ssh
 RUN ln -sf /usr/local/bin/gickers-ssh /usr/local/bin/codes-ssh \
     && ln -sf /usr/local/bin/gickers-ssh /app/bin/gickers-ssh \
     && ln -sf /usr/local/bin/gickers-ssh /app/bin/codes-ssh \
-    && composer dump-autoload --optimize --no-dev --no-scripts \
+    && if [ "$APP_ENV" = "prod" ]; then \
+           composer dump-autoload --optimize --no-dev --no-scripts; \
+       else \
+           composer dump-autoload --optimize --no-scripts; \
+       fi \
     && chmod +x bin/soft bin/console /usr/local/bin/gickers-ssh /usr/local/bin/codes-ssh \
     && touch .env
 
-ENV APP_ENV=prod
 # soft:serve prepares state and supervises the requested component(s).
 # Compose overrides the command per service (--only=init|ssh|http|worker).
 ENTRYPOINT ["php", "bin/soft"]

@@ -110,6 +110,11 @@ final class ReconcileDeploymentsTest extends KernelTestCase
         $fakeOrchestrator = new class implements \App\Deploy\Domain\ContainerOrchestrator {
             public bool $stopped = false;
 
+            public function isAvailable(): bool
+            {
+                return true;
+            }
+
             public function deploy(DeployEnvironment $environment, string $commitSha, \App\Deploy\Domain\Spec\ComposeSpec $spec, \App\Deploy\Domain\DeployQuota $quota, array $decryptedEnvVars, array $exposedServices, callable $onLog): void
             {
             }

@@ -9,12 +9,14 @@ use App\Access\Application\AccessResolver;
 use App\Access\Application\ServerPolicy;
 use App\Access\Domain\AccessLevel;
 use App\Access\Domain\DeployPolicy;
+use App\Deploy\Domain\ContainerOrchestrator;
 use App\Deploy\Domain\DeployQuota;
 use App\Deploy\Domain\DeployStore;
 use App\Identity\Domain\Model\User;
 use App\Repo\Domain\Model\Repo;
 use App\Repo\Domain\RepoName;
 use App\Shared\Domain\Exception\AccessDenied;
+use App\Shared\Domain\Exception\InvalidInput;
 
 final readonly class DeployAccessResolver
 {
@@ -23,7 +25,13 @@ final readonly class DeployAccessResolver
         private AccessResolver $accessResolver,
         private AccessGuard $accessGuard,
         private DeployStore $deployStore,
+        private ?ContainerOrchestrator $orchestrator = null,
     ) {
+    }
+
+    public function isDeploySupported(): bool
+    {
+        return $this->orchestrator?->isAvailable() ?? true;
     }
 
     /**
@@ -55,6 +63,10 @@ final readonly class DeployAccessResolver
      */
     public function isRepoRefDeployAllowed(Repo $repo, ?string $ref = null, ?User $actor = null): bool
     {
+        if (!$this->isDeploySupported()) {
+            return false;
+        }
+
         $config = $this->deployStore->configForRepo($repo);
         $rules = $this->deployStore->refRulesForRepo($repo);
 
@@ -84,6 +96,10 @@ final readonly class DeployAccessResolver
 
     public function assertCanManageDeploy(?User $actor, RepoName|string $repoName, ?string $ref = null): Repo
     {
+        if (!$this->isDeploySupported()) {
+            throw new InvalidInput('Deployment engine is disabled on this server: Docker is not available or running.');
+        }
+
         $name = $repoName instanceof RepoName ? $repoName : RepoName::fromInput($repoName);
         $repo = $this->accessGuard->assertRepo($actor, $name, AccessLevel::ReadWriteAccess);
         if (null === $repo) {

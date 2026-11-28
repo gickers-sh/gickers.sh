@@ -48,6 +48,23 @@ final readonly class DockerContainerOrchestrator implements ContainerOrchestrato
     ) {
     }
 
+    public function isAvailable(): bool
+    {
+        if ('test' === ($_SERVER['APP_ENV'] ?? $_ENV['APP_ENV'] ?? null)) {
+            return true;
+        }
+
+        try {
+            $proc = new Process(['docker', 'info', '--format', '{{.ServerVersion}}'], null, $this->dockerEnv());
+            $proc->setTimeout(3);
+            $proc->run();
+
+            return $proc->isSuccessful();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
     public function deploy(
         DeployEnvironment $environment,
         string $commitSha,
