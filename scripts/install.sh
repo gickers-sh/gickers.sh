@@ -1051,6 +1051,50 @@ gum_spin() {
     gum_stream_spin "$pid" "$msg" "$log_file"
 }
 
+# Direct logged command execution with live streaming and auto-retry error handling
+run_logged_step() {
+    local title="$1"
+    local log_file="$2"
+    local work_dir="$3"
+    shift 3
+
+    while true; do
+        printf "\n  %s⠋%s %s%s...%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$title" "$C_RESET"
+        mkdir -p "$(dirname "$log_file")" 2>/dev/null || true
+        : > "$log_file"
+
+        local start_time
+        start_time=$(date +%s)
+        local exit_code=0
+
+        set +e
+        (
+            cd "$work_dir"
+            "$@"
+        ) 2>&1 | tee "$log_file"
+        exit_code=${PIPESTATUS[0]}
+        set -e
+
+        local end_time
+        end_time=$(date +%s)
+        local duration_str
+        duration_str=$(format_duration "$(( end_time - start_time ))")
+
+        if [ "$exit_code" -eq 0 ]; then
+            printf "  %s✔%s %s%s%s %s(%s)%s\n" \
+                "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$title" "$C_RESET" "$C_DIM" "$duration_str" "$C_RESET"
+            return 0
+        else
+            printf "  %s✖%s %s%s%s %s(Échec, code %d après %s)%s\n" \
+                "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$title" "$C_RESET" "$C_PINK" "$exit_code" "$duration_str" "$C_RESET"
+            if handle_step_error "$title" "$log_file" "$work_dir"; then
+                return 0
+            fi
+            # Si handle_step_error retourne 1 (Rétenter), la boucle while recommence
+        fi
+    done
+}
+
 # Backwards compatibility aliases
 select_menu() { gum_choose "$@"; }
 prompt() { gum_input "$1" "$2" "${3:-}"; }
@@ -1450,70 +1494,69 @@ fi
 
 # 2. Docker si non installé
 if ! command -v docker >/dev/null 2>&1; then
-    (
-        case "$PKG_MGR" in
-            apk)
-                $EXEC_SUDO apk update >/dev/null 2>&1
-                $EXEC_SUDO apk add --no-cache ca-certificates curl git git-lfs jq ufw docker docker-cli-compose >/dev/null 2>&1
-                $EXEC_SUDO rc-update add docker boot >/dev/null 2>&1 || true
-                $EXEC_SUDO service docker start >/dev/null 2>&1 || true
-                ;;
-            dnf)
-                $EXEC_SUDO dnf install -y dnf-plugins-core >/dev/null 2>&1
-                $EXEC_SUDO dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo >/dev/null 2>&1
-                $EXEC_SUDO dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin >/dev/null 2>&1
-                $EXEC_SUDO systemctl enable --now docker >/dev/null 2>&1 || true
-                ;;
-            pacman)
-                $EXEC_SUDO pacman -Sy --noconfirm docker docker-compose git git-lfs curl jq ufw >/dev/null 2>&1
-                $EXEC_SUDO systemctl enable --now docker >/dev/null 2>&1 || true
-                ;;
-            *)
-                if [ -d /etc/apt ]; then
-                    $EXEC_SUDO apt-get update -y >/dev/null 2>&1
-                    $EXEC_SUDO apt-get install -y --no-install-recommends ca-certificates curl gnupg git jq ufw >/dev/null 2>&1
-                    $EXEC_SUDO install -m 0755 -d /etc/apt/keyrings
-                    curl -fsSL "https://download.docker.com/linux/$OS_NAME/gpg" | $EXEC_SUDO gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes >/dev/null 2>&1
-                    $EXEC_SUDO chmod a+r /etc/apt/keyrings/docker.gpg
-                    local codename
-                    codename=$(. /etc/os-release 2>/dev/null && echo "$VERSION_CODENAME" || echo "stable")
-                    [ -z "$codename" ] && codename="stable"
-                    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$OS_NAME $codename stable" \
-                        | $EXEC_SUDO tee /etc/apt/sources.list.d/docker.list >/dev/null
-                    $EXEC_SUDO apt-get update -y >/dev/null 2>&1
-                    $EXEC_SUDO apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1
-                    $EXEC_SUDO systemctl enable --now docker >/dev/null 2>&1 || true
-                fi
-                ;;
-        esac
-    ) < /dev/null &
-    gum_spin $! "Installation officielle de Docker & Compose..."
+    run_logged_step "Installation officielle de Docker & Compose" "/tmp/gickers_system_docker.log" "$PWD" \
+        bash -c "
+            case '$PKG_MGR' in
+                apk)
+                    $EXEC_SUDO apk update
+                    $EXEC_SUDO apk add --no-cache ca-certificates curl git git-lfs jq ufw docker docker-cli-compose
+                    $EXEC_SUDO rc-update add docker boot || true
+                    $EXEC_SUDO service docker start || true
+                    ;;
+                dnf)
+                    $EXEC_SUDO dnf install -y dnf-plugins-core
+                    $EXEC_SUDO dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+                    $EXEC_SUDO dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+                    $EXEC_SUDO systemctl enable --now docker || true
+                    ;;
+                pacman)
+                    $EXEC_SUDO pacman -Sy --noconfirm docker docker-compose git git-lfs curl jq ufw
+                    $EXEC_SUDO systemctl enable --now docker || true
+                    ;;
+                *)
+                    if [ -d /etc/apt ]; then
+                        $EXEC_SUDO apt-get update -y
+                        $EXEC_SUDO apt-get install -y --no-install-recommends ca-certificates curl gnupg git jq ufw
+                        $EXEC_SUDO install -m 0755 -d /etc/apt/keyrings
+                        curl -fsSL 'https://download.docker.com/linux/$OS_NAME/gpg' | $EXEC_SUDO gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes
+                        $EXEC_SUDO chmod a+r /etc/apt/keyrings/docker.gpg
+                        local_coden=\$(. /etc/os-release 2>/dev/null && echo \"\$VERSION_CODENAME\" || echo 'stable')
+                        [ -z \"\$local_coden\" ] && local_coden='stable'
+                        echo \"deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$OS_NAME \$local_coden stable\" \
+                            | $EXEC_SUDO tee /etc/apt/sources.list.d/docker.list >/dev/null
+                        $EXEC_SUDO apt-get update -y
+                        $EXEC_SUDO apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+                        $EXEC_SUDO systemctl enable --now docker || true
+                    fi
+                    ;;
+            esac
+        "
 else
     printf "  %s✔%s %sDocker : déjà opérationnel sur l'hôte%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
 fi
 
     # 3. Bascule OpenSSH vers 2222
-    (
-        if command -v ufw >/dev/null 2>&1; then
-            $EXEC_SUDO ufw allow 2222/tcp comment 'OpenSSH System (moved from 22)' >/dev/null 2>&1 || true
-        fi
-        if [ -d /etc/ssh/sshd_config.d ]; then
-            echo "Port 2222" | $EXEC_SUDO tee /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf >/dev/null
-            $EXEC_SUDO chmod 644 /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf
-        fi
-        if [ -f /etc/ssh/sshd_config ]; then
-            $EXEC_SUDO sed -i -E 's/^[#[:space:]]*Port[[:space:]]+22[[:space:]]*$/Port 2222/' /etc/ssh/sshd_config
-        fi
-        if systemctl is-active --quiet ssh.socket 2>/dev/null; then
-            $EXEC_SUDO mkdir -p /etc/systemd/system/ssh.socket.d
-            echo -e "[Socket]\nListenStream=\nListenStream=2222" | $EXEC_SUDO tee /etc/systemd/system/ssh.socket.d/listen-2222.conf >/dev/null
-            $EXEC_SUDO systemctl daemon-reload >/dev/null 2>&1
-            $EXEC_SUDO systemctl restart ssh.socket >/dev/null 2>&1 || true
-        else
-            $EXEC_SUDO systemctl restart ssh >/dev/null 2>&1 || $EXEC_SUDO systemctl restart sshd >/dev/null 2>&1 || true
-        fi
-    ) < /dev/null &
-    gum_spin $! "Bascule de OpenSSH hôte sur le port 2222 (port 22 libéré)..."
+    run_logged_step "Bascule de OpenSSH hôte sur le port 2222 (port 22 libéré)" "/tmp/gickers_system_sshd.log" "$PWD" \
+        bash -c "
+            if command -v ufw >/dev/null 2>&1; then
+                $EXEC_SUDO ufw allow 2222/tcp comment 'OpenSSH System (moved from 22)' || true
+            fi
+            if [ -d /etc/ssh/sshd_config.d ]; then
+                echo 'Port 2222' | $EXEC_SUDO tee /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf >/dev/null
+                $EXEC_SUDO chmod 644 /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf
+            fi
+            if [ -f /etc/ssh/sshd_config ]; then
+                $EXEC_SUDO sed -i -E 's/^[#[:space:]]*Port[[:space:]]+22[[:space:]]*$/Port 2222/' /etc/ssh/sshd_config
+            fi
+            if systemctl is-active --quiet ssh.socket 2>/dev/null; then
+                $EXEC_SUDO mkdir -p /etc/systemd/system/ssh.socket.d
+                echo -e '[Socket]\nListenStream=\nListenStream=2222' | $EXEC_SUDO tee /etc/systemd/system/ssh.socket.d/listen-2222.conf >/dev/null
+                $EXEC_SUDO systemctl daemon-reload
+                $EXEC_SUDO systemctl restart ssh.socket || true
+            else
+                $EXEC_SUDO systemctl restart ssh || $EXEC_SUDO systemctl restart sshd || true
+            fi
+        "
 
     # Mise à jour du port dans .env.docker
     if [ -f "$INSTALL_DIR/.env.docker" ]; then
@@ -1522,25 +1565,25 @@ fi
     fi
 
     # 4. Pare-feu UFW
-    (
-        if ! command -v ufw >/dev/null 2>&1; then
-            case "$PKG_MGR" in
-                apk)    $EXEC_SUDO apk add --no-cache ufw >/dev/null 2>&1 ;;
-                dnf)    $EXEC_SUDO dnf install -y ufw >/dev/null 2>&1 ;;
-                pacman) $EXEC_SUDO pacman -S --noconfirm ufw >/dev/null 2>&1 ;;
-                *)      $EXEC_SUDO apt-get update -y >/dev/null 2>&1 && $EXEC_SUDO apt-get install -y --no-install-recommends ufw >/dev/null 2>&1 ;;
-            esac
-        fi
+    run_logged_step "Installation et application des règles UFW (80, 443, 22, 2222)" "/tmp/gickers_system_ufw.log" "$PWD" \
+        bash -c "
+            if ! command -v ufw >/dev/null 2>&1; then
+                case '$PKG_MGR' in
+                    apk)    $EXEC_SUDO apk add --no-cache ufw ;;
+                    dnf)    $EXEC_SUDO dnf install -y ufw ;;
+                    pacman) $EXEC_SUDO pacman -S --noconfirm ufw ;;
+                    *)      $EXEC_SUDO apt-get update -y && $EXEC_SUDO apt-get install -y --no-install-recommends ufw ;;
+                esac
+            fi
 
-        if command -v ufw >/dev/null 2>&1; then
-            $EXEC_SUDO ufw allow 2222/tcp comment 'Host SSH daemon' >/dev/null 2>&1 || true
-            $EXEC_SUDO ufw allow 80/tcp comment 'Gickers HTTP' >/dev/null 2>&1 || true
-            $EXEC_SUDO ufw allow 443/tcp comment 'Gickers HTTPS' >/dev/null 2>&1 || true
-            $EXEC_SUDO ufw allow 22/tcp comment 'Gickers Git SSH' >/dev/null 2>&1 || true
-            $EXEC_SUDO ufw --force enable >/dev/null 2>&1 || true
-        fi
-    ) < /dev/null &
-    gum_spin $! "Installation et application des règles UFW (80, 443, 22, 2222)..."
+            if command -v ufw >/dev/null 2>&1; then
+                $EXEC_SUDO ufw allow 2222/tcp comment 'Host SSH daemon' || true
+                $EXEC_SUDO ufw allow 80/tcp comment 'Gickers HTTP' || true
+                $EXEC_SUDO ufw allow 443/tcp comment 'Gickers HTTPS' || true
+                $EXEC_SUDO ufw allow 22/tcp comment 'Gickers Git SSH' || true
+                $EXEC_SUDO ufw --force enable || true
+            fi
+        "
 
     # 5. Service systemd
     local systemd_user_line=""
@@ -1549,8 +1592,9 @@ fi
 Group=${SYSTEM_USER}"
     fi
 
-    (
-        echo "[Unit]
+    run_logged_step "Enregistrement et activation de gickers.service" "/tmp/gickers_system_service.log" "$PWD" \
+        bash -c "
+            echo '[Unit]
 Description=Gickers.sh Git Forge & Container Platform
 Requires=docker.service
 After=docker.service network-online.target
@@ -1567,19 +1611,16 @@ ExecReload=/usr/bin/docker compose --env-file .env.docker restart
 TimeoutStartSec=300
 
 [Install]
-WantedBy=multi-user.target" | $EXEC_SUDO tee /etc/systemd/system/gickers.service >/dev/null
+WantedBy=multi-user.target' | $EXEC_SUDO tee /etc/systemd/system/gickers.service >/dev/null
 
-        $EXEC_SUDO systemctl daemon-reload >/dev/null 2>&1 || true
-        $EXEC_SUDO systemctl enable gickers.service >/dev/null 2>&1 || true
-    ) < /dev/null &
-    gum_spin $! "Enregistrement et activation de gickers.service..."
+            $EXEC_SUDO systemctl daemon-reload || true
+            $EXEC_SUDO systemctl enable gickers.service || true
+        "
 
     # Recharger les conteneurs pour appliquer le port 22
     if command -v docker >/dev/null 2>&1; then
-        (
-            cd "$INSTALL_DIR" && docker compose --env-file .env.docker up -d >/dev/null 2>&1 || true
-        ) < /dev/null &
-        gum_spin $! "Actualisation des conteneurs pour le port 22..."
+        run_logged_step "Actualisation des conteneurs pour le port 22" "/tmp/gickers_system_containers.log" "$INSTALL_DIR" \
+            docker compose --env-file .env.docker up -d
     fi
 
     # Bannière finale de succès
@@ -1710,8 +1751,69 @@ fi
 
 # Détection d'une installation existante et choix du mode
 EXISTING_INSTALL=0
-if [ -f "$INSTALL_DIR/compose.yaml" ] || [ -f "$PWD/compose.yaml" ] || [ -f "$INSTALL_DIR/.env.docker" ] || [ -f "$PWD/.env.docker" ] || [ -f "$INSTALL_DIR/.env.local" ] || [ -f "$PWD/.env.local" ]; then
+EXISTING_DETAIL=""
+EXISTING_DOMAIN=""
+
+# 1. Recherche et inventaire de toutes les instances applicatives sur la machine
+DETECTED_DIRS=()
+CANDIDATE_SEARCH_PATHS=("$INSTALL_DIR" "$PWD" "/home/gickers/gickers.sh" "/var/www/gickers" "$HOME/gickers.sh")
+if [ -d "/home" ]; then
+    while IFS= read -r f_path; do
+        [ -n "$f_path" ] && CANDIDATE_SEARCH_PATHS+=("$(dirname "$f_path")")
+    done < <(find /home -maxdepth 3 -name "compose.yaml" 2>/dev/null | grep -iE 'gickers|codes\.sh' || true)
+fi
+
+for c_dir in "${CANDIDATE_SEARCH_PATHS[@]}"; do
+    [ -z "$c_dir" ] || [ ! -d "$c_dir" ] && continue
+    if [ -f "$c_dir/compose.yaml" ] || [ -f "$c_dir/.env.docker" ] || [ -f "$c_dir/.env.local" ]; then
+        # Déduplication
+        local_already=0
+        for seen in "${DETECTED_DIRS[@]}"; do
+            [ "$seen" = "$c_dir" ] && local_already=1 && break
+        done
+        [ "$local_already" -eq 0 ] && DETECTED_DIRS+=("$c_dir")
+    fi
+done
+
+# Si plusieurs instances sont trouvées, permettre de choisir celle ciblée
+if [ "${#DETECTED_DIRS[@]}" -gt 1 ] && [ "$NON_INTERACTIVE" -eq 0 ]; then
+    INSTANCE_MENU=()
+    for d_path in "${DETECTED_DIRS[@]}"; do
+        inst_dom=""
+        if [ -f "$d_path/.env.docker" ]; then
+            inst_dom=$(grep -E '^APP_DOMAIN=' "$d_path/.env.docker" 2>/dev/null | cut -d '=' -f2- | tr -d ' "' || true)
+        fi
+        [ -z "$inst_dom" ] && inst_dom="(domaine non spécifié)"
+        INSTANCE_MENU+=("$d_path — $inst_dom")
+    done
+    gum_choose "Plusieurs installations de gickers.sh ont été détectées. Laquelle cibler ?" "${INSTANCE_MENU[@]}" && INST_SEL=$? || INST_SEL=$?
+    INSTALL_DIR="${DETECTED_DIRS[$INST_SEL]}"
     EXISTING_INSTALL=1
+    EXISTING_DETAIL="Instance sélectionnée : $INSTALL_DIR"
+elif [ "${#DETECTED_DIRS[@]}" -eq 1 ]; then
+    EXISTING_INSTALL=1
+    INSTALL_DIR="${DETECTED_DIRS[0]}"
+    EXISTING_DETAIL="Fichiers détectés dans $INSTALL_DIR"
+fi
+
+# Résolution du domaine de l'instance existante
+if [ -n "$INSTALL_DIR" ] && [ -d "$INSTALL_DIR" ]; then
+    if [ -f "$INSTALL_DIR/.env.docker" ]; then
+        EXISTING_DOMAIN=$(grep -E '^APP_DOMAIN=' "$INSTALL_DIR/.env.docker" 2>/dev/null | cut -d '=' -f2- | tr -d ' "' || true)
+    elif [ -f "$INSTALL_DIR/.env.local" ]; then
+        EXISTING_DOMAIN=$(grep -E '^APP_DOMAIN=' "$INSTALL_DIR/.env.local" 2>/dev/null | cut -d '=' -f2- | tr -d ' "' || true)
+    fi
+fi
+[ -n "$EXISTING_DOMAIN" ] && DOMAIN="$EXISTING_DOMAIN"
+
+# 2. Recherche par conteneurs ou volumes Docker existants si aucun répertoire n'avait été trouvé
+if [ "$EXISTING_INSTALL" -eq 0 ] && command -v docker >/dev/null 2>&1; then
+    docker_containers=$(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E 'gickers|codes-sh' || true)
+    docker_volumes=$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -E 'gickers|codes-sh' || true)
+    if [ -n "$docker_containers" ] || [ -n "$docker_volumes" ]; then
+        EXISTING_INSTALL=1
+        EXISTING_DETAIL="Conteneurs ou volumes Docker actifs détectés sur l'hôte"
+    fi
 fi
 
 # Choix interactif du mode de déploiement (Docker vs Natif Host)
@@ -1746,7 +1848,15 @@ if [ "$EXISTING_INSTALL" -eq 1 ] && [ "$NON_INTERACTIVE" -eq 0 ]; then
         "Réinitialisation complète / Hard Reset (⚠️  Supprime base de données, volumes et dépôts)"
     )
 
-    gum_choose "Une installation existante a été détectée dans $INSTALL_DIR" "${EXISTING_OPTS[@]}" && EXIST_SELECTION=$? || EXIST_SELECTION=$?
+    detect_msg="Une installation existante a été détectée sur cette machine"
+    if [ -n "$EXISTING_DOMAIN" ]; then
+        detect_msg="Installation existante détectée pour ${EXISTING_DOMAIN} ($INSTALL_DIR)"
+    elif [ -n "$EXISTING_DETAIL" ]; then
+        detect_msg="Installation existante détectée ($EXISTING_DETAIL)"
+    elif [ -n "$INSTALL_DIR" ]; then
+        detect_msg="Une installation existante a été détectée dans $INSTALL_DIR"
+    fi
+    gum_choose "$detect_msg" "${EXISTING_OPTS[@]}" && EXIST_SELECTION=$? || EXIST_SELECTION=$?
     SELECTED_TEXT="${EXISTING_OPTS[$EXIST_SELECTION]}"
 
     if [[ "$SELECTED_TEXT" == *"infrastructure hôte"* ]]; then
@@ -1761,30 +1871,34 @@ fi
 
 # Double confirmation stricte pour le Hard Reset (interactif)
 if [ "$HARD_RESET" -eq 1 ] && [ "$NON_INTERACTIVE" -eq 0 ]; then
+    target_reset_domain="${EXISTING_DOMAIN:-$DOMAIN}"
+    expected_confirm_phrase="HARD RESET $target_reset_domain"
+
     printf "\n"
     printf "  %s⚠️  ATTENTION : DEMANDE DE RÉINITIALISATION COMPLÈTE (HARD RESET)%s\n" "$C_BOLD$C_PINK" "$C_RESET"
+    printf "  %sCible : %s%s%s (Répertoire : %s%s%s)%s\n" "$C_MUTED" "$C_BOLD$C_WHITE" "$target_reset_domain" "$C_RESET" "$C_CYAN" "$INSTALL_DIR" "$C_RESET" "$C_RESET"
     printf "  %sCette action est %sIRRÉVERSIBLE%s%s et va détruire définitivement :%s\n" "$C_WHITE" "$C_BOLD$C_PINK" "$C_RESET" "$C_WHITE" "$C_RESET"
-    printf "    %s•%s %sTous les dépôts Git hébergés et objets Git LFS%s\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
+    printf "    %s•%s %sTous les dépôts Git hébergés et objets Git LFS de cette instance%s\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
     printf "    %s•%s %sLa base PostgreSQL (utilisateurs, comptes, clés SSH, tickets)%s\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
-    printf "    %s•%s %sLes volumes Docker gickers-data, gickers-db et conteneurs%s\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
+    printf "    %s•%s %sLes conteneurs et volumes Docker associés à cette instance%s\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
     printf "    %s•%s %sLa configuration de production .env.docker actuelle%s\n\n" "$C_PINK" "$C_RESET" "$C_MUTED" "$C_RESET"
 
     CONFIRM_OPTS=(
         "Non, annuler et conserver mes données intactes (Recommandé)"
         "Oui, je comprends les risques et souhaite réinitialiser"
     )
-    gum_choose "Confirmation 1/2 : Êtes-vous sûr de vouloir supprimer TOUTES les données ?" "${CONFIRM_OPTS[@]}" && CONFIRM_1=$? || CONFIRM_1=$?
+    gum_choose "Confirmation 1/2 : Êtes-vous sûr de vouloir supprimer TOUTES les données de $target_reset_domain ?" "${CONFIRM_OPTS[@]}" && CONFIRM_1=$? || CONFIRM_1=$?
     if [ "$CONFIRM_1" -ne 1 ]; then
         printf "  %s✔%s %sRéinitialisation annulée. Vos données sont préservées intactes.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
         HARD_RESET=0
     else
         reset_confirm=""
-        gum_input "Confirmation 2/2 : Tapez 'RESET' en majuscules pour confirmer" reset_confirm "" "RESET"
-        if [ "$reset_confirm" = "RESET" ]; then
+        gum_input "Confirmation 2/2 : Tapez '$expected_confirm_phrase' pour confirmer" reset_confirm "" "$expected_confirm_phrase"
+        if [ "$reset_confirm" = "$expected_confirm_phrase" ]; then
             HARD_RESET=1
-            printf "  %s✔%s %sDouble confirmation validée. Hard reset enclenché.%s\n\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+            printf "  %s✔%s %sDouble confirmation validée. Hard reset enclenché pour %s.%s\n\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$target_reset_domain" "$C_RESET"
         else
-            printf "  %s✔%s %sSaisie non conforme ('%s' != 'RESET'). Réinitialisation annulée, données préservées.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$reset_confirm" "$C_RESET"
+            printf "  %s✔%s %sSaisie non conforme ('%s' != '%s'). Réinitialisation annulée, données préservées.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$reset_confirm" "$expected_confirm_phrase" "$C_RESET"
             HARD_RESET=0
         fi
     fi
@@ -2411,6 +2525,9 @@ EOF
     printf "    • %sBascule SSHD :%s         %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_WHITE" "$STEP_SSHD" "$C_RESET"
     printf "    • %sPare-feu UFW :%s         %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_WHITE" "$STEP_FIREWALL" "$C_RESET"
     printf "    • %sService Systemd :%s      %s%s%s\n" "$C_MUTED" "$C_RESET" "$C_WHITE" "$STEP_SYSTEMD" "$C_RESET"
+    if [ "${HARD_RESET:-0}" -eq 1 ]; then
+        printf "    • %sRéinitialisation :%s     %s⚠️  HARD RESET ACTIF (Suppression totale des données)%s\n" "$C_MUTED" "$C_RESET" "$C_BOLD$C_PINK" "$C_RESET"
+    fi
     printf "\n"
 
     gum_confirm "Lancer l'installation et le déploiement sur cette machine ?" 1 || {
@@ -2450,48 +2567,48 @@ if [ "$IS_ROOT" -eq 1 ] || [ -n "$EXEC_SUDO" ]; then
 fi
 
 if [ "$STEP_DOCKER" = "auto" ] && [ -n "$EXEC_SUDO" -o "$IS_ROOT" -eq 1 ]; then
-    (
-        case "$PKG_MGR" in
-            apk)
-                $EXEC_SUDO apk update >/dev/null 2>&1
-                $EXEC_SUDO apk add --no-cache ca-certificates curl git git-lfs jq ufw docker docker-cli-compose >/dev/null 2>&1
-                $EXEC_SUDO rc-update add docker boot >/dev/null 2>&1 || true
-                $EXEC_SUDO service docker start >/dev/null 2>&1 || true
-                ;;
-            dnf)
-                $EXEC_SUDO dnf install -y dnf-plugins-core >/dev/null 2>&1
-                $EXEC_SUDO dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo >/dev/null 2>&1
-                $EXEC_SUDO dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin git git-lfs jq curl ca-certificates >/dev/null 2>&1
-                $EXEC_SUDO systemctl enable --now docker >/dev/null 2>&1 || true
-                ;;
-            pacman)
-                $EXEC_SUDO pacman -Sy --noconfirm docker docker-compose git git-lfs curl jq ufw >/dev/null 2>&1
-                $EXEC_SUDO systemctl enable --now docker >/dev/null 2>&1 || true
-                ;;
-            *)
-                if command -v apt-get >/dev/null 2>&1; then
-                    $EXEC_SUDO apt-get update -y >/dev/null 2>&1
-                    $EXEC_SUDO apt-get install -y --no-install-recommends \
-                        apt-transport-https ca-certificates curl gnupg git git-lfs jq ufw fail2ban openssl tar >/dev/null 2>&1
-                fi
-                if ! command -v docker >/dev/null 2>&1; then
-                    if [ -d /etc/apt ]; then
-                        $EXEC_SUDO install -m 0755 -d /etc/apt/keyrings
-                        curl -fsSL "https://download.docker.com/linux/$OS_NAME/gpg" | $EXEC_SUDO gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes >/dev/null 2>&1
-                        $EXEC_SUDO chmod a+r /etc/apt/keyrings/docker.gpg
-                        CODENAME=$(. /etc/os-release 2>/dev/null && echo "$VERSION_CODENAME" || echo "stable")
-                        [ -z "$CODENAME" ] && CODENAME="stable"
-                        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$OS_NAME $CODENAME stable" \
-                            | $EXEC_SUDO tee /etc/apt/sources.list.d/docker.list >/dev/null
-                        $EXEC_SUDO apt-get update -y >/dev/null 2>&1
-                        $EXEC_SUDO apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1
-                        $EXEC_SUDO systemctl enable --now docker >/dev/null 2>&1 || true
+    run_logged_step "Installation et configuration de Docker & Compose" "/tmp/gickers_docker_install.log" "$PWD" \
+        bash -c "
+            case '$PKG_MGR' in
+                apk)
+                    $EXEC_SUDO apk update
+                    $EXEC_SUDO apk add --no-cache ca-certificates curl git git-lfs jq ufw docker docker-cli-compose
+                    $EXEC_SUDO rc-update add docker boot || true
+                    $EXEC_SUDO service docker start || true
+                    ;;
+                dnf)
+                    $EXEC_SUDO dnf install -y dnf-plugins-core
+                    $EXEC_SUDO dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+                    $EXEC_SUDO dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin git git-lfs jq curl ca-certificates
+                    $EXEC_SUDO systemctl enable --now docker || true
+                    ;;
+                pacman)
+                    $EXEC_SUDO pacman -Sy --noconfirm docker docker-compose git git-lfs curl jq ufw
+                    $EXEC_SUDO systemctl enable --now docker || true
+                    ;;
+                *)
+                    if command -v apt-get >/dev/null 2>&1; then
+                        $EXEC_SUDO apt-get update -y
+                        $EXEC_SUDO apt-get install -y --no-install-recommends \
+                            apt-transport-https ca-certificates curl gnupg git git-lfs jq ufw fail2ban openssl tar
                     fi
-                fi
-                ;;
-        esac
-    ) < /dev/null &
-    gum_spin $! "Installation et configuration de Docker & Compose..."
+                    if ! command -v docker >/dev/null 2>&1; then
+                        if [ -d /etc/apt ]; then
+                            $EXEC_SUDO install -m 0755 -d /etc/apt/keyrings
+                            curl -fsSL 'https://download.docker.com/linux/$OS_NAME/gpg' | $EXEC_SUDO gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes
+                            $EXEC_SUDO chmod a+r /etc/apt/keyrings/docker.gpg
+                            CODENAME=\$(. /etc/os-release 2>/dev/null && echo \"\$VERSION_CODENAME\" || echo 'stable')
+                            [ -z \"\$CODENAME\" ] && CODENAME='stable'
+                            echo \"deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$OS_NAME \$CODENAME stable\" \
+                                | $EXEC_SUDO tee /etc/apt/sources.list.d/docker.list >/dev/null
+                            $EXEC_SUDO apt-get update -y
+                            $EXEC_SUDO apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+                            $EXEC_SUDO systemctl enable --now docker || true
+                        fi
+                    fi
+                    ;;
+            esac
+        "
 
     if [ "$SYSTEM_USER" != "root" ] && id -u "$SYSTEM_USER" >/dev/null 2>&1; then
         if [ "$PKG_MGR" = "apk" ]; then
@@ -2517,29 +2634,29 @@ fi
 
 # B. Bascule OpenSSH hôte vers le port 2222
 if [ "$STEP_SSHD" = "auto" ] && [ -n "$EXEC_SUDO" -o "$IS_ROOT" -eq 1 ]; then
-    (
-        if command -v ufw >/dev/null 2>&1; then
-            $EXEC_SUDO ufw allow 2222/tcp comment 'OpenSSH System (moved from 22)' >/dev/null 2>&1 || true
-        fi
-        if [ -d /etc/ssh/sshd_config.d ]; then
-            echo "Port 2222" | $EXEC_SUDO tee /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf >/dev/null
-            $EXEC_SUDO chmod 644 /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf
-        fi
-        if [ -f /etc/ssh/sshd_config ]; then
-            $EXEC_SUDO sed -i -E 's/^[#[:space:]]*Port[[:space:]]+22[[:space:]]*$/Port 2222/' /etc/ssh/sshd_config
-        fi
-        if [ "$INIT_SYSTEM" = "openrc" ]; then
-            $EXEC_SUDO rc-service sshd restart >/dev/null 2>&1 || true
-        elif systemctl is-active --quiet ssh.socket 2>/dev/null; then
-            $EXEC_SUDO mkdir -p /etc/systemd/system/ssh.socket.d
-            echo -e "[Socket]\nListenStream=\nListenStream=2222" | $EXEC_SUDO tee /etc/systemd/system/ssh.socket.d/listen-2222.conf >/dev/null
-            $EXEC_SUDO systemctl daemon-reload >/dev/null 2>&1
-            $EXEC_SUDO systemctl restart ssh.socket >/dev/null 2>&1 || true
-        else
-            $EXEC_SUDO systemctl restart ssh >/dev/null 2>&1 || $EXEC_SUDO systemctl restart sshd >/dev/null 2>&1 || true
-        fi
-    ) < /dev/null &
-    gum_spin $! "Bascule sécurisée de OpenSSH hôte vers le port 2222 (port 22 libéré)..."
+    run_logged_step "Bascule sécurisée de OpenSSH hôte vers le port 2222 (port 22 libéré)" "/tmp/gickers_sshd_switch.log" "$PWD" \
+        bash -c "
+            if command -v ufw >/dev/null 2>&1; then
+                $EXEC_SUDO ufw allow 2222/tcp comment 'OpenSSH System (moved from 22)' || true
+            fi
+            if [ -d /etc/ssh/sshd_config.d ]; then
+                echo 'Port 2222' | $EXEC_SUDO tee /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf >/dev/null
+                $EXEC_SUDO chmod 644 /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf
+            fi
+            if [ -f /etc/ssh/sshd_config ]; then
+                $EXEC_SUDO sed -i -E 's/^[#[:space:]]*Port[[:space:]]+22[[:space:]]*$/Port 2222/' /etc/ssh/sshd_config
+            fi
+            if [ '$INIT_SYSTEM' = 'openrc' ]; then
+                $EXEC_SUDO rc-service sshd restart || true
+            elif systemctl is-active --quiet ssh.socket 2>/dev/null; then
+                $EXEC_SUDO mkdir -p /etc/systemd/system/ssh.socket.d
+                echo -e '[Socket]\nListenStream=\nListenStream=2222' | $EXEC_SUDO tee /etc/systemd/system/ssh.socket.d/listen-2222.conf >/dev/null
+                $EXEC_SUDO systemctl daemon-reload
+                $EXEC_SUDO systemctl restart ssh.socket || true
+            else
+                $EXEC_SUDO systemctl restart ssh || $EXEC_SUDO systemctl restart sshd || true
+            fi
+        "
 
     printf "\n  %s!%s %s[IMPORTANT] OpenSSH hôte écoute désormais sur le port 2222 :%s\n" "$C_GOLD" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
     printf "    %sssh -p 2222 $(whoami)@<IP_VPS>%s\n\n" "$C_CYAN" "$C_RESET"
@@ -2547,29 +2664,29 @@ fi
 
 # C. Règles de pare-feu UFW
 if [ "$STEP_FIREWALL" = "auto" ] && [ -n "$EXEC_SUDO" -o "$IS_ROOT" -eq 1 ]; then
-    (
-        if ! command -v ufw >/dev/null 2>&1; then
-            case "$PKG_MGR" in
-                apk)    $EXEC_SUDO apk add --no-cache ufw >/dev/null 2>&1 ;;
-                dnf)    $EXEC_SUDO dnf install -y ufw >/dev/null 2>&1 ;;
-                pacman) $EXEC_SUDO pacman -S --noconfirm ufw >/dev/null 2>&1 ;;
-                *)      $EXEC_SUDO apt-get update -y >/dev/null 2>&1 && $EXEC_SUDO apt-get install -y --no-install-recommends ufw >/dev/null 2>&1 ;;
-            esac
-        fi
-
-        if command -v ufw >/dev/null 2>&1; then
-            CURRENT_SSH=$(ss -tlnp 2>/dev/null | grep -E 'sshd|ssh' | awk '{print $4}' | awk -F: '{print $NF}' | head -n 1 || echo "2222")
-            [ -z "$CURRENT_SSH" ] && CURRENT_SSH="2222"
-            $EXEC_SUDO ufw allow "$CURRENT_SSH"/tcp comment 'Host SSH daemon' >/dev/null 2>&1 || true
-            $EXEC_SUDO ufw allow "$HTTP_PORT"/tcp comment 'Gickers HTTP' >/dev/null 2>&1 || true
-            $EXEC_SUDO ufw allow "$HTTPS_PORT"/tcp comment 'Gickers HTTPS' >/dev/null 2>&1 || true
-            if [ "$SSH_PORT" != "$CURRENT_SSH" ]; then
-                $EXEC_SUDO ufw allow "$SSH_PORT"/tcp comment 'Gickers Git SSH' >/dev/null 2>&1 || true
+    run_logged_step "Installation et configuration des règles de pare-feu UFW" "/tmp/gickers_ufw.log" "$PWD" \
+        bash -c "
+            if ! command -v ufw >/dev/null 2>&1; then
+                case '$PKG_MGR' in
+                    apk)    $EXEC_SUDO apk add --no-cache ufw ;;
+                    dnf)    $EXEC_SUDO dnf install -y ufw ;;
+                    pacman) $EXEC_SUDO pacman -S --noconfirm ufw ;;
+                    *)      $EXEC_SUDO apt-get update -y && $EXEC_SUDO apt-get install -y --no-install-recommends ufw ;;
+                esac
             fi
-            $EXEC_SUDO ufw --force enable >/dev/null 2>&1 || true
-        fi
-    ) < /dev/null &
-    gum_spin $! "Installation et configuration des règles de pare-feu UFW..."
+
+            if command -v ufw >/dev/null 2>&1; then
+                CURRENT_SSH=\$(ss -tlnp 2>/dev/null | grep -E 'sshd|ssh' | awk '{print \$4}' | awk -F: '{print \$NF}' | head -n 1 || echo '2222')
+                [ -z \"\$CURRENT_SSH\" ] && CURRENT_SSH='2222'
+                $EXEC_SUDO ufw allow \"\$CURRENT_SSH\"/tcp comment 'Host SSH daemon' || true
+                $EXEC_SUDO ufw allow '$HTTP_PORT'/tcp comment 'Gickers HTTP' || true
+                $EXEC_SUDO ufw allow '$HTTPS_PORT'/tcp comment 'Gickers HTTPS' || true
+                if [ '$SSH_PORT' != \"\$CURRENT_SSH\" ]; then
+                    $EXEC_SUDO ufw allow '$SSH_PORT'/tcp comment 'Gickers Git SSH' || true
+                fi
+                $EXEC_SUDO ufw --force enable || true
+            fi
+        "
 fi
 
 # ------------------------------------------------------------------------------
@@ -2601,22 +2718,15 @@ if [ "${SKIP_APP_DEPLOY:-0}" -eq 0 ]; then
     fi
 
     if [ -d "$INSTALL_DIR/.git" ]; then
-        (
-            cd "$INSTALL_DIR"
-            git fetch --depth 1 origin main >/dev/null 2>&1 && git reset --hard origin/main >/dev/null 2>&1 || git pull --rebase origin main >/dev/null 2>&1 || true
-        ) < /dev/null &
-        gum_spin $! "Mise à jour du projet gickers.sh vers la dernière version..."
+        run_logged_step "Mise à jour du projet gickers.sh vers la dernière version" "/tmp/gickers_git_pull.log" "$INSTALL_DIR" \
+            bash -c "git fetch --depth 1 origin main && git reset --hard origin/main || git pull --rebase origin main"
     elif [ ! -f "$INSTALL_DIR/compose.yaml" ]; then
         if [ -n "$PROJECT_ROOT" ] && [ -f "$PROJECT_ROOT/compose.yaml" ] && [ "$PROJECT_ROOT" != "$INSTALL_DIR" ]; then
-            (
-                tar --exclude='.git' --exclude='.data' --exclude='var' -cf - -C "$PROJECT_ROOT" . | tar -xf - -C "$INSTALL_DIR"
-            ) < /dev/null &
-            gum_spin $! "Copie des fichiers sources vers $INSTALL_DIR..."
+            run_logged_step "Copie des fichiers sources vers $INSTALL_DIR" "/tmp/gickers_source_copy.log" "$INSTALL_DIR" \
+                bash -c "tar --exclude='.git' --exclude='.data' --exclude='var' -cf - -C '$PROJECT_ROOT' . | tar -xf - -C '$INSTALL_DIR'"
         else
-            (
-                git clone --depth 1 https://github.com/gickerssh/gickers.sh.git "$INSTALL_DIR" >/dev/null 2>&1 || git clone --depth 1 https://github.com/gickerssh/gickers.sh.git . >/dev/null 2>&1 || true
-            ) < /dev/null &
-            gum_spin $! "Téléchargement du projet gickers.sh..."
+            run_logged_step "Téléchargement du projet gickers.sh" "/tmp/gickers_git_clone.log" "$INSTALL_DIR" \
+                bash -c "git clone --depth 1 https://github.com/gickerssh/gickers.sh.git '$INSTALL_DIR' || git clone --depth 1 https://github.com/gickerssh/gickers.sh.git . || true"
         fi
     fi
 
@@ -2860,29 +2970,13 @@ EOF
         # ----------------------------------------------------------------------
         deploy_log="/tmp/gickers_deploy.log"
 
-        # A. Build des conteneurs avec streaming dynamique des logs BuildKit
-        while true; do
-            : > "$deploy_log"
-            ( docker compose --env-file .env.docker build --progress=plain >> "$deploy_log" 2>&1 ) < /dev/null &
-            if gum_stream_spin $! "Construction des conteneurs Docker (PHP, gickers-ssh, FrankenPHP)..." "$deploy_log"; then
-                break
-            fi
-            if handle_step_error "Construction des conteneurs Docker" "$deploy_log" "$PWD"; then
-                break
-            fi
-        done
+        # A. Build des conteneurs avec affichage complet BuildKit & live streaming
+        run_logged_step "Construction des conteneurs Docker (PHP, gickers-ssh, FrankenPHP)" "$deploy_log" "$INSTALL_DIR" \
+            docker compose --env-file .env.docker build
 
         # B. Démarrage de PostgreSQL
-        while true; do
-            : > "$deploy_log"
-            ( docker compose --env-file .env.docker up -d postgres >> "$deploy_log" 2>&1 ) < /dev/null &
-            if gum_stream_spin $! "Démarrage de PostgreSQL..." "$deploy_log"; then
-                break
-            fi
-            if handle_step_error "Démarrage de PostgreSQL" "$deploy_log" "$PWD"; then
-                break
-            fi
-        done
+        run_logged_step "Démarrage de PostgreSQL" "$deploy_log" "$INSTALL_DIR" \
+            docker compose --env-file .env.docker up -d postgres
 
         # Wait for PostgreSQL readiness
         (
@@ -2897,28 +2991,12 @@ EOF
         gum_stream_spin $! "Attente de disponibilité de PostgreSQL..."
 
         # C. Exécution des migrations Doctrine & initialisation
-        while true; do
-            : > "$deploy_log"
-            ( docker compose --env-file .env.docker run -T --rm init < /dev/null >> "$deploy_log" 2>&1 ) &
-            if gum_stream_spin $! "Exécution des migrations Doctrine & initialisation du serveur..." "$deploy_log"; then
-                break
-            fi
-            if handle_step_error "Initialisation Doctrine & Migrations" "$deploy_log" "$PWD"; then
-                break
-            fi
-        done
+        run_logged_step "Exécution des migrations Doctrine & initialisation du serveur" "$deploy_log" "$INSTALL_DIR" \
+            docker compose --env-file .env.docker run -T --rm init
 
         # D. Démarrage complet de la stack Docker Compose
-        while true; do
-            : > "$deploy_log"
-            ( docker compose --env-file .env.docker up -d < /dev/null >> "$deploy_log" 2>&1 ) &
-            if gum_stream_spin $! "Démarrage complet de la stack (HTTP, SSH, Worker, Deploy-Engine)..." "$deploy_log"; then
-                break
-            fi
-            if handle_step_error "Démarrage complet de la stack" "$deploy_log" "$PWD"; then
-                break
-            fi
-        done
+        run_logged_step "Démarrage complet de la stack (HTTP, SSH, Worker, Deploy-Engine)" "$deploy_log" "$INSTALL_DIR" \
+            docker compose --env-file .env.docker up -d
     fi
 fi
 

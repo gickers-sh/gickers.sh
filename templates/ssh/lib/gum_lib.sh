@@ -1044,6 +1044,50 @@ gum_spin() {
     gum_stream_spin "$pid" "$msg" "$log_file"
 }
 
+# Direct logged command execution with live streaming and auto-retry error handling
+run_logged_step() {
+    local title="$1"
+    local log_file="$2"
+    local work_dir="$3"
+    shift 3
+
+    while true; do
+        printf "\n  %s⠋%s %s%s...%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$title" "$C_RESET"
+        mkdir -p "$(dirname "$log_file")" 2>/dev/null || true
+        : > "$log_file"
+
+        local start_time
+        start_time=$(date +%s)
+        local exit_code=0
+
+        set +e
+        (
+            cd "$work_dir"
+            "$@"
+        ) 2>&1 | tee "$log_file"
+        exit_code=${PIPESTATUS[0]}
+        set -e
+
+        local end_time
+        end_time=$(date +%s)
+        local duration_str
+        duration_str=$(format_duration "$(( end_time - start_time ))")
+
+        if [ "$exit_code" -eq 0 ]; then
+            printf "  %s✔%s %s%s%s %s(%s)%s\n" \
+                "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$title" "$C_RESET" "$C_DIM" "$duration_str" "$C_RESET"
+            return 0
+        else
+            printf "  %s✖%s %s%s%s %s(Échec, code %d après %s)%s\n" \
+                "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$title" "$C_RESET" "$C_PINK" "$exit_code" "$duration_str" "$C_RESET"
+            if handle_step_error "$title" "$log_file" "$work_dir"; then
+                return 0
+            fi
+            # Si handle_step_error retourne 1 (Rétenter), la boucle while recommence
+        fi
+    done
+}
+
 # Backwards compatibility aliases
 select_menu() { gum_choose "$@"; }
 prompt() { gum_input "$1" "$2" "${3:-}"; }
