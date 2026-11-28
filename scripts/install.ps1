@@ -4,7 +4,7 @@
 # ==============================================================================
 $ErrorActionPreference = "Stop"
 
-﻿$esc = [char]27
+$esc = [char]27
 $escCyan = "$esc[1;38;2;125;207;255m"      # #7dcfff
 $escPink = "$esc[1;38;2;247;118;142m"      # #f7768e
 $escGreen = "$esc[1;38;2;115;218;202m"     # #73daca
@@ -284,6 +284,30 @@ function Gum-PastePubkey {
 
 function Select-Menu { Gum-Choose @args }
 
+function Invoke-QuietNative {
+    param([scriptblock]$CommandBlock)
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $global:LASTEXITCODE = 0
+    try {
+        return (& $CommandBlock 2>$null)
+    } catch {
+        $global:LASTEXITCODE = 1
+        return $null
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+}
+
+function Write-Utf8NoBomFile {
+    param(
+        [string]$Path,
+        [string]$Content
+    )
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+}
+
 function Run-LoggedStep {
     param(
         [string]$StepLabel,
@@ -294,6 +318,10 @@ function Run-LoggedStep {
 
     $chars = @('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏')
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $logDir = Split-Path -Parent $LogFile
+    if (-not [string]::IsNullOrEmpty($logDir) -and -not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    }
 
     while ($true) {
         $sw.Restart()
@@ -308,26 +336,39 @@ function Run-LoggedStep {
         $exitCode = 0
         if ($isBuild) {
             Write-Host "  $escPink⠋$escReset $escBold$escWhite$StepLabel...$escReset"
+            $prevEap = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            $global:LASTEXITCODE = 0
             try {
-                & $CommandBlock 2>&1 | Tee-Object -FilePath $LogFile
-                $exitCode = $LASTEXITCODE
+                & $CommandBlock 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $LogFile
+                $exitCode = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
             } catch {
                 $exitCode = 1
-                $_ | Out-File -FilePath $LogFile -Append
+                $_ | Out-String | Out-File -FilePath $LogFile -Append -Encoding UTF8
+            } finally {
+                $ErrorActionPreference = $prevEap
             }
         } else {
             Write-Host -NoNewline "$esc[?25l"
             $job = Start-Job -ScriptBlock {
-                param($blk, $dir, $log)
-                Set-Location $dir
+                param($cmdText, $dir, $log)
+                $ErrorActionPreference = "Continue"
+                if (-not [string]::IsNullOrEmpty($dir) -and (Test-Path $dir)) {
+                    Set-Location $dir
+                }
+                $global:LASTEXITCODE = 0
                 try {
-                    & $blk 2>&1 | Out-File -FilePath $log -Encoding UTF8
-                    return $LASTEXITCODE
+                    $sb = [scriptblock]::Create($cmdText)
+                    & $sb 2>&1 | ForEach-Object { "$_" } | Out-File -FilePath $log -Encoding UTF8
+                    if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+                        return [int]$LASTEXITCODE
+                    }
+                    return 0
                 } catch {
-                    $_ | Out-File -FilePath $log -Append -Encoding UTF8
+                    $_ | Out-String | Out-File -FilePath $log -Append -Encoding UTF8
                     return 1
                 }
-            } -ArgumentList $CommandBlock, (Get-Location).Path, $LogFile
+            } -ArgumentList $cmdStr, (Get-Location).Path, $LogFile
 
             $i = 0
             while ($job.State -eq 'Running') {
@@ -343,9 +384,16 @@ function Run-LoggedStep {
             }
 
             Write-Host -NoNewline "$esc[?25h"
-            $null = Receive-Job -Job $job
-            $exitCode = $job.ChildJobs[0].ExitCode
-            if ($null -eq $exitCode) { $exitCode = 0 }
+            $jobResult = Receive-Job -Job $job
+            $exitCode = 0
+            if ($job.State -eq 'Failed') {
+                $exitCode = 1
+            } elseif ($null -ne $jobResult) {
+                $lastVal = @($jobResult)[-1]
+                if ($lastVal -is [int] -or $lastVal -is [long]) {
+                    $exitCode = [int]$lastVal
+                }
+            }
             Remove-Job -Job $job -Force
         }
 
@@ -378,24 +426,25 @@ function Run-LoggedStep {
             "Ignorer cette étape et continuer quand même",
             "Abandonner l'installation"
         )
-        $errChoice = Gum-Choose -Title "Action en cas d'erreur sur '$StepLabel'" -Options $errOpts
-        switch ($errChoice) {
-            0 { continue }
-            1 {
+        $retryStep = $false
+        while ($true) {
+            $errChoice = Gum-Choose -Title "Action en cas d'erreur sur '$StepLabel'" -Options $errOpts
+            if ($errChoice -eq 0) {
+                $retryStep = $true
+                break
+            } elseif ($errChoice -eq 1) {
                 if (Test-Path $LogFile) {
                     Get-Content -Path $LogFile | Out-Host -Paging
                 }
-                continue
-            }
-            2 {
+            } elseif ($errChoice -eq 2) {
                 Write-Host "  $escGold!$escReset $escBold${escWhite}Étape ignorée par l'administrateur.$escReset`n"
                 return 0
-            }
-            3 {
+            } else {
                 Write-Host "`n  $escPink✖$escReset $escBold${escPink}Installation interrompue par l'administrateur.$escReset`n"
                 exit $exitCode
             }
         }
+        if ($retryStep) { continue }
     }
 }
 
@@ -406,8 +455,10 @@ function Manage-InstanceUpdate {
 
     if (Test-Path (Join-Path $Dir ".git")) {
         Run-LoggedStep -StepLabel "Récupération du dernier code source (git pull)" -LogFile $logFile -WorkDir $Dir -CommandBlock {
-            git fetch --depth 1 origin main 2>$null
-            git reset --hard origin/main 2>$null
+            git fetch --depth 1 origin main
+            if ($LASTEXITCODE -ne 0) { throw "git fetch failed ($LASTEXITCODE)" }
+            git reset --hard origin/main
+            if ($LASTEXITCODE -ne 0) { throw "git reset failed ($LASTEXITCODE)" }
         }
     }
 
@@ -489,13 +540,13 @@ function Manage-InstanceEdit {
 
     Write-Host "`n  $escBold${escCyan}⚙️  Édition de la configuration : $envFile$escReset`n"
 
-    $curDomain = (Get-Content $envFile | Where-Object { $_ -match '^APP_DOMAIN=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+    $curDomain = (Get-Content $envFile | Where-Object { $_ -match '^APP_DOMAIN=(.+)' } | ForEach-Object { $matches[1].Trim(' "') } | Select-Object -First 1)
     if ([string]::IsNullOrEmpty($curDomain)) { $curDomain = "gits.run" }
-    $curSsh = (Get-Content $envFile | Where-Object { $_ -match '^SSH_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+    $curSsh = (Get-Content $envFile | Where-Object { $_ -match '^SSH_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') } | Select-Object -First 1)
     if ([string]::IsNullOrEmpty($curSsh)) { $curSsh = "22" }
-    $curHttp = (Get-Content $envFile | Where-Object { $_ -match '^HTTP_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+    $curHttp = (Get-Content $envFile | Where-Object { $_ -match '^HTTP_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') } | Select-Object -First 1)
     if ([string]::IsNullOrEmpty($curHttp)) { $curHttp = "80" }
-    $curHttps = (Get-Content $envFile | Where-Object { $_ -match '^HTTPS_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+    $curHttps = (Get-Content $envFile | Where-Object { $_ -match '^HTTPS_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') } | Select-Object -First 1)
     if ([string]::IsNullOrEmpty($curHttps)) { $curHttps = "443" }
 
     $newDomain = Gum-Input -PromptLabel "Domaine public (FQDN)" -DefaultValue $curDomain
@@ -506,6 +557,7 @@ function Manage-InstanceEdit {
     $signOpts = @("Inscriptions ouvertes (true)", "Inscriptions fermées (false)")
     $signChoice = Gum-Choose -Title "Politique d'inscriptions" -Options $signOpts
     $newSignup = if ($signChoice -eq 1) { "false" } else { "true" }
+    $newSshUrl = if ($newSsh -eq "22" -or [string]::IsNullOrEmpty($newSsh)) { "ssh://$newDomain" } else { "ssh://${newDomain}:${newSsh}" }
 
     $lines = Get-Content $envFile
     $newLines = @()
@@ -515,11 +567,11 @@ function Manage-InstanceEdit {
         elseif ($line -match '^HTTP_PORT=') { $newLines += "HTTP_PORT=$newHttp" }
         elseif ($line -match '^HTTPS_PORT=') { $newLines += "HTTPS_PORT=$newHttps" }
         elseif ($line -match '^SOFT_SERVE_ALLOW_SIGNUP=') { $newLines += "SOFT_SERVE_ALLOW_SIGNUP=$newSignup" }
-        elseif ($line -match '^SOFT_SERVE_SSH_PUBLIC_URL=') { $newLines += "SOFT_SERVE_SSH_PUBLIC_URL=ssh://$newDomain" }
+        elseif ($line -match '^SOFT_SERVE_SSH_PUBLIC_URL=') { $newLines += "SOFT_SERVE_SSH_PUBLIC_URL=$newSshUrl" }
         elseif ($line -match '^SOFT_SERVE_HTTP_PUBLIC_URL=') { $newLines += "SOFT_SERVE_HTTP_PUBLIC_URL=https://$newDomain" }
         else { $newLines += $line }
     }
-    Set-Content -Path $envFile -Value $newLines -Encoding UTF8
+    Write-Utf8NoBomFile -Path $envFile -Content (($newLines -join "`n") + "`n")
 
     Write-Host "`n  $escGreen✔$escReset $escBold${escWhite}Configuration mise à jour dans $envFile$escReset"
 
@@ -570,18 +622,24 @@ function Manage-InstanceDelete {
 
     if (Test-Path (Join-Path $Dir "compose.yaml")) {
         Run-LoggedStep -StepLabel "Arrêt et destruction des conteneurs et volumes Docker" -LogFile $logFile -WorkDir $Dir -CommandBlock {
-            docker compose --env-file .env.docker down -v --remove-orphans 2>$null
-            docker compose down -v --remove-orphans 2>$null
+            docker compose --env-file .env.docker down -v --remove-orphans
+            if ($LASTEXITCODE -ne 0) {
+                docker compose down -v --remove-orphans
+            }
+            $global:LASTEXITCODE = 0
         }
     }
 
-    docker volume rm -f gickers-sh_gickers-data gickers-sh_gickers-db gickers-sh_gickers-var gickers-sh_gickers-deploy-engine 2>$null
+    Invoke-QuietNative { docker volume rm -f gickers-sh_gickers-data gickers-sh_gickers-db gickers-sh_gickers-var gickers-sh_gickers-deploy-engine } | Out-Null
 
     if (Test-Path $Dir) {
         $logFileFs = Join-Path $env:TEMP "gickers_delete_fs.log"
-        Run-LoggedStep -StepLabel "Suppression du répertoire $Dir" -LogFile $logFileFs -WorkDir (Get-Location).Path -CommandBlock {
-            Remove-Item -Recurse -Force -Path $Dir
-        }
+        $parentDir = Split-Path -Parent $Dir
+        if ([string]::IsNullOrEmpty($parentDir) -or -not (Test-Path $parentDir)) { $parentDir = $env:TEMP }
+        if ((Get-Location).Path -eq $Dir) { Set-Location $parentDir }
+        $escapedDir = $Dir -replace "'", "''"
+        $delCmd = [scriptblock]::Create("Remove-Item -Recurse -Force -LiteralPath '$escapedDir'")
+        Run-LoggedStep -StepLabel "Suppression du répertoire $Dir" -LogFile $logFileFs -WorkDir $parentDir -CommandBlock $delCmd
     }
 
     Write-Host "  $escGreen✔$escReset $escBold${escWhite}Instance $Domain supprimée définitivement avec succès. Ports et ressources libérés.$escReset`n"
@@ -636,11 +694,9 @@ if ([string]::IsNullOrEmpty($installDir)) {
 
 # Auto-detect existing Docker
 $dockerInstalled = 0
-try {
-    $null = docker --version
+$dockerVerOut = Invoke-QuietNative { docker --version }
+if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace(($dockerVerOut | Out-String))) {
     $dockerInstalled = 1
-} catch {
-    $dockerInstalled = 0
 }
 
 # Auto-detect existing Admin SSH key
@@ -672,24 +728,22 @@ $candidatePaths.Add("C:\codes.sh")
 
 # Détection Docker Compose via labels de conteneurs et images officielles
 if ($dockerInstalled -eq 1) {
-    try {
-        $dockerDirs = docker ps -a --filter "ancestor=gickers-sh:latest" --format '{{ index .Labels "com.docker.compose.project.working_dir" }}' 2>$null
-        if ($dockerDirs) {
-            foreach ($d in ($dockerDirs -split "`r?`n")) {
-                if (-not [string]::IsNullOrWhiteSpace($d) -and (Test-Path $d)) {
-                    $candidatePaths.Add($d.Trim())
-                }
+    $dockerDirs = Invoke-QuietNative { docker ps -a --filter "ancestor=gickers-sh:latest" --format '{{ index .Labels "com.docker.compose.project.working_dir" }}' }
+    if ($dockerDirs) {
+        foreach ($d in ($dockerDirs -split "`r?`n")) {
+            if (-not [string]::IsNullOrWhiteSpace($d) -and (Test-Path $d)) {
+                $candidatePaths.Add($d.Trim())
             }
         }
-        $dockerDirs2 = docker ps -a --filter "label=com.docker.compose.project=gickers-sh" --format '{{ index .Labels "com.docker.compose.project.working_dir" }}' 2>$null
-        if ($dockerDirs2) {
-            foreach ($d in ($dockerDirs2 -split "`r?`n")) {
-                if (-not [string]::IsNullOrWhiteSpace($d) -and (Test-Path $d)) {
-                    $candidatePaths.Add($d.Trim())
-                }
+    }
+    $dockerDirs2 = Invoke-QuietNative { docker ps -a --filter "label=com.docker.compose.project=gickers-sh" --format '{{ index .Labels "com.docker.compose.project.working_dir" }}' }
+    if ($dockerDirs2) {
+        foreach ($d in ($dockerDirs2 -split "`r?`n")) {
+            if (-not [string]::IsNullOrWhiteSpace($d) -and (Test-Path $d)) {
+                $candidatePaths.Add($d.Trim())
             }
         }
-    } catch {}
+    }
 }
 
 # Filtrage et déduplication
@@ -714,10 +768,10 @@ foreach ($dPath in $detectedDirs) {
     $envDocker = Join-Path $dPath ".env.docker"
     $envLocal = Join-Path $dPath ".env.local"
     if (Test-Path $envDocker) {
-        $m = (Get-Content $envDocker | Where-Object { $_ -match '^APP_DOMAIN=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+        $m = (Get-Content $envDocker | Where-Object { $_ -match '^APP_DOMAIN=(.+)' } | ForEach-Object { $matches[1].Trim(' "') } | Select-Object -First 1)
         if ($m) { $instDom = $m }
     } elseif (Test-Path $envLocal) {
-        $m = (Get-Content $envLocal | Where-Object { $_ -match '^APP_DOMAIN=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+        $m = (Get-Content $envLocal | Where-Object { $_ -match '^APP_DOMAIN=(.+)' } | ForEach-Object { $matches[1].Trim(' "') } | Select-Object -First 1)
         if ($m) { $instDom = $m }
     }
     if ([string]::IsNullOrEmpty($instDom)) { $instDom = "domaine non spécifié" }
@@ -725,26 +779,24 @@ foreach ($dPath in $detectedDirs) {
 
     $instState = "Arrêté"
     if ($dockerInstalled -eq 1) {
-        try {
-            $cList = docker ps -a --filter "label=com.docker.compose.project.working_dir=$dPath" -q 2>$null
-            if ($cList) {
-                $totalCnt = ($cList -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count
-                $rList = docker ps --filter "label=com.docker.compose.project.working_dir=$dPath" -q 2>$null
-                $runningCnt = if ($rList) { ($rList -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count } else { 0 }
-                if ($totalCnt -gt 0) {
-                    if ($runningCnt -gt 0) {
-                        $instState = "Docker actif (${runningCnt}/${totalCnt} UP)"
-                    } else {
-                        $instState = "Docker arrêté (0/${totalCnt})"
-                    }
+        $cList = Invoke-QuietNative { docker ps -a --filter "label=com.docker.compose.project.working_dir=$dPath" -q }
+        if ($cList) {
+            $totalCnt = ($cList -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count
+            $rList = Invoke-QuietNative { docker ps --filter "label=com.docker.compose.project.working_dir=$dPath" -q }
+            $runningCnt = if ($rList) { ($rList -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count } else { 0 }
+            if ($totalCnt -gt 0) {
+                if ($runningCnt -gt 0) {
+                    $instState = "Docker actif (${runningCnt}/${totalCnt} UP)"
+                } else {
+                    $instState = "Docker arrêté (0/${totalCnt})"
                 }
             }
-        } catch {}
+        }
     }
 
     $instSsh = "22"
     if (Test-Path $envDocker) {
-        $s = (Get-Content $envDocker | Where-Object { $_ -match '^SSH_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+        $s = (Get-Content $envDocker | Where-Object { $_ -match '^SSH_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') } | Select-Object -First 1)
         if ($s) { $instSsh = $s }
     }
 
@@ -854,6 +906,7 @@ if ($hardReset -and -not $nonInteractive) {
     }
 }
 
+if (-not $nonInteractive) {
     # 0. User & Isolation choice
     $userOpts = @(
         "Utiliser l'utilisateur Windows actuel ($env:USERNAME) [Recommandé]",
@@ -905,6 +958,9 @@ if ($hardReset -and -not $nonInteractive) {
 
     $appName = Gum-Input -PromptLabel "Nom d'usage de la forge" -DefaultValue $appName -Placeholder "ex: Gickers.sh"
 
+    if ([string]::IsNullOrEmpty($installDir)) {
+        $installDir = Join-Path $HOME "gickers.sh"
+    }
     $installDir = Gum-Input -PromptLabel "Répertoire d'installation" -DefaultValue $installDir
 
     $sshOpts = @(
@@ -920,9 +976,10 @@ if ($hardReset -and -not $nonInteractive) {
     $adminUser = Gum-Input -PromptLabel "Nom d'utilisateur administrateur" -DefaultValue $adminUser
 
     # 4. Variables d'environnement & Secrets (Valeurs Intelligentes)
-    if (Test-Path ".env.docker") {
-        $prevSecret = (Get-Content ".env.docker" | Where-Object { $_ -match '^APP_SECRET=(.+)' } | ForEach-Object { $matches[1] })
-        $prevPass = (Get-Content ".env.docker" | Where-Object { $_ -match '^POSTGRES_PASSWORD=(.+)' } | ForEach-Object { $matches[1] })
+    $existingEnvPath = Join-Path $installDir ".env.docker"
+    if ((-not $hardReset) -and (Test-Path $existingEnvPath)) {
+        $prevSecret = (Get-Content $existingEnvPath | Where-Object { $_ -match '^APP_SECRET=(.+)' } | ForEach-Object { $matches[1] } | Select-Object -First 1)
+        $prevPass = (Get-Content $existingEnvPath | Where-Object { $_ -match '^POSTGRES_PASSWORD=(.+)' } | ForEach-Object { $matches[1] } | Select-Object -First 1)
         if ($prevSecret) { $appSecret = $prevSecret }
         if ($prevPass) { $postgresPassword = $prevPass }
     }
@@ -983,13 +1040,17 @@ Set-Location $installDir
 
 if ($hardReset) {
     Write-Host "  $escPink⚙$escReset $escBold${escWhite}Exécution du Hard Reset (suppression des conteneurs, volumes et bases de données)...$escReset"
-    docker compose --env-file .env.docker down -v --remove-orphans 2>$null
-    docker compose down -v --remove-orphans 2>$null
-    docker volume rm -f gickers-sh_gickers-data gickers-sh_gickers-db gickers-sh_gickers-var gickers-sh_gickers-deploy-engine 2>$null
+    Invoke-QuietNative { docker compose --env-file .env.docker down -v --remove-orphans } | Out-Null
+    Invoke-QuietNative { docker compose down -v --remove-orphans } | Out-Null
+    Invoke-QuietNative { docker volume rm -f gickers-sh_gickers-data gickers-sh_gickers-db gickers-sh_gickers-var gickers-sh_gickers-deploy-engine } | Out-Null
     if (Test-Path ".env.docker") {
-        Move-Item ".env.docker" ".env.docker.reset.bak" -Force 2>$null
+        Move-Item ".env.docker" ".env.docker.reset.bak" -Force -ErrorAction SilentlyContinue
     }
-    Remove-Item -Recurse -Force ".data", "var/cache", "var/log" 2>$null
+    Remove-Item -Recurse -Force ".data", "var/cache", "var/log" -ErrorAction SilentlyContinue
+    $appSecret = ""
+    $postgresPassword = ""
+    $adminClaimToken = ""
+    $adminSshKey = ""
     Write-Host "  $escGreen✔$escReset $escBold${escWhite}Hard reset terminé. L'environnement est maintenant vierge.$escReset`n"
 }
 
@@ -997,8 +1058,10 @@ $deployLog = Join-Path $env:TEMP "gickers_deploy.log"
 
 if (Test-Path ".git") {
     Run-LoggedStep -StepLabel "Mise à jour du projet gickers.sh vers la dernière version" -LogFile $deployLog -WorkDir $installDir -CommandBlock {
-        git fetch --depth 1 origin main 2>$null
-        git reset --hard origin/main 2>$null
+        git fetch --depth 1 origin main
+        if ($LASTEXITCODE -ne 0) { throw "git fetch failed ($LASTEXITCODE)" }
+        git reset --hard origin/main
+        if ($LASTEXITCODE -ne 0) { throw "git reset failed ($LASTEXITCODE)" }
     }
 } elseif (-not (Test-Path "compose.yaml")) {
     Run-LoggedStep -StepLabel "Téléchargement du projet gickers.sh" -LogFile $deployLog -WorkDir $installDir -CommandBlock {
@@ -1008,7 +1071,9 @@ if (Test-Path ".git") {
 
 New-Item -ItemType Directory -Force -Path ".data", ".data/caddy/sites", "var", "var/cache", "var/log" | Out-Null
 
-$appSecret = [System.Guid]::NewGuid().ToString("N")
+if ([string]::IsNullOrEmpty($appSecret)) {
+    $appSecret = [System.Guid]::NewGuid().ToString("N")
+}
 if ([string]::IsNullOrEmpty($postgresPassword)) {
     $postgresPassword = [System.Guid]::NewGuid().ToString("N").Substring(0, 24)
 }
@@ -1019,10 +1084,10 @@ if ([string]::IsNullOrEmpty($adminSshKey)) {
 }
 
 if ((-not $hardReset) -and (Test-Path ".env.docker")) {
-    $existingSecret = (Get-Content ".env.docker" | Where-Object { $_ -match '^APP_SECRET=(.+)' } | ForEach-Object { $matches[1] })
-    $existingPass = (Get-Content ".env.docker" | Where-Object { $_ -match '^POSTGRES_PASSWORD=(.+)' } | ForEach-Object { $matches[1] })
-    $existingToken = (Get-Content ".env.docker" | Where-Object { $_ -match '^SOFT_SERVE_INITIAL_ADMIN_TOKEN=(.+)' } | ForEach-Object { $matches[1].Trim('"') })
-    $existingKeys = (Get-Content ".env.docker" | Where-Object { $_ -match '^SOFT_SERVE_INITIAL_ADMIN_KEYS=(.+)' } | ForEach-Object { $matches[1].Trim('"') })
+    $existingSecret = (Get-Content ".env.docker" | Where-Object { $_ -match '^APP_SECRET=(.+)' } | ForEach-Object { $matches[1] } | Select-Object -First 1)
+    $existingPass = (Get-Content ".env.docker" | Where-Object { $_ -match '^POSTGRES_PASSWORD=(.+)' } | ForEach-Object { $matches[1] } | Select-Object -First 1)
+    $existingToken = (Get-Content ".env.docker" | Where-Object { $_ -match '^SOFT_SERVE_INITIAL_ADMIN_TOKEN=(.+)' } | ForEach-Object { $matches[1].Trim('"') } | Select-Object -First 1)
+    $existingKeys = (Get-Content ".env.docker" | Where-Object { $_ -match '^SOFT_SERVE_INITIAL_ADMIN_KEYS=(.+)' } | ForEach-Object { $matches[1].Trim('"') } | Select-Object -First 1)
     if ($existingSecret) { $appSecret = $existingSecret }
     if ($existingPass) { $postgresPassword = $existingPass }
     if ($existingToken -and [string]::IsNullOrEmpty($adminSshKey)) { $adminClaimToken = $existingToken }
@@ -1032,6 +1097,7 @@ if ((-not $hardReset) -and (Test-Path ".env.docker")) {
 $sshUrl = if ($sshPort -eq "22") { "ssh://$domain" } else { "ssh://${domain}:${sshPort}" }
 
 $envContent = @"
+# Production Environment for Gickers.sh (Domain: $domain)
 APP_ENV=prod
 APP_DEBUG=0
 APP_SECRET=$appSecret
@@ -1058,7 +1124,7 @@ DEPLOY_DOCKER_RUNTIME=runsc
 DEPLOY_GVISOR_PLATFORM=systrap
 "@
 
-Set-Content -Path ".env.docker" -Value $envContent -Encoding UTF8
+Write-Utf8NoBomFile -Path (Join-Path (Get-Location).Path ".env.docker") -Content ($envContent + "`n")
 
 Write-Host "  $escGreen✔$escReset $escBold$escWhite Configuration .env.docker initialisée.$escReset"
 

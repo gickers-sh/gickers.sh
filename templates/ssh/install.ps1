@@ -49,11 +49,9 @@ if ([string]::IsNullOrEmpty($installDir)) {
 
 # Auto-detect existing Docker
 $dockerInstalled = 0
-try {
-    $null = docker --version
+$dockerVerOut = Invoke-QuietNative { docker --version }
+if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace(($dockerVerOut | Out-String))) {
     $dockerInstalled = 1
-} catch {
-    $dockerInstalled = 0
 }
 
 # Auto-detect existing Admin SSH key
@@ -85,24 +83,22 @@ $candidatePaths.Add("C:\codes.sh")
 
 # Détection Docker Compose via labels de conteneurs et images officielles
 if ($dockerInstalled -eq 1) {
-    try {
-        $dockerDirs = docker ps -a --filter "ancestor=gickers-sh:latest" --format '{{ index .Labels "com.docker.compose.project.working_dir" }}' 2>$null
-        if ($dockerDirs) {
-            foreach ($d in ($dockerDirs -split "`r?`n")) {
-                if (-not [string]::IsNullOrWhiteSpace($d) -and (Test-Path $d)) {
-                    $candidatePaths.Add($d.Trim())
-                }
+    $dockerDirs = Invoke-QuietNative { docker ps -a --filter "ancestor=gickers-sh:latest" --format '{{ index .Labels "com.docker.compose.project.working_dir" }}' }
+    if ($dockerDirs) {
+        foreach ($d in ($dockerDirs -split "`r?`n")) {
+            if (-not [string]::IsNullOrWhiteSpace($d) -and (Test-Path $d)) {
+                $candidatePaths.Add($d.Trim())
             }
         }
-        $dockerDirs2 = docker ps -a --filter "label=com.docker.compose.project=gickers-sh" --format '{{ index .Labels "com.docker.compose.project.working_dir" }}' 2>$null
-        if ($dockerDirs2) {
-            foreach ($d in ($dockerDirs2 -split "`r?`n")) {
-                if (-not [string]::IsNullOrWhiteSpace($d) -and (Test-Path $d)) {
-                    $candidatePaths.Add($d.Trim())
-                }
+    }
+    $dockerDirs2 = Invoke-QuietNative { docker ps -a --filter "label=com.docker.compose.project=gickers-sh" --format '{{ index .Labels "com.docker.compose.project.working_dir" }}' }
+    if ($dockerDirs2) {
+        foreach ($d in ($dockerDirs2 -split "`r?`n")) {
+            if (-not [string]::IsNullOrWhiteSpace($d) -and (Test-Path $d)) {
+                $candidatePaths.Add($d.Trim())
             }
         }
-    } catch {}
+    }
 }
 
 # Filtrage et déduplication
@@ -127,10 +123,10 @@ foreach ($dPath in $detectedDirs) {
     $envDocker = Join-Path $dPath ".env.docker"
     $envLocal = Join-Path $dPath ".env.local"
     if (Test-Path $envDocker) {
-        $m = (Get-Content $envDocker | Where-Object { $_ -match '^APP_DOMAIN=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+        $m = (Get-Content $envDocker | Where-Object { $_ -match '^APP_DOMAIN=(.+)' } | ForEach-Object { $matches[1].Trim(' "') } | Select-Object -First 1)
         if ($m) { $instDom = $m }
     } elseif (Test-Path $envLocal) {
-        $m = (Get-Content $envLocal | Where-Object { $_ -match '^APP_DOMAIN=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+        $m = (Get-Content $envLocal | Where-Object { $_ -match '^APP_DOMAIN=(.+)' } | ForEach-Object { $matches[1].Trim(' "') } | Select-Object -First 1)
         if ($m) { $instDom = $m }
     }
     if ([string]::IsNullOrEmpty($instDom)) { $instDom = "domaine non spécifié" }
@@ -138,26 +134,24 @@ foreach ($dPath in $detectedDirs) {
 
     $instState = "Arrêté"
     if ($dockerInstalled -eq 1) {
-        try {
-            $cList = docker ps -a --filter "label=com.docker.compose.project.working_dir=$dPath" -q 2>$null
-            if ($cList) {
-                $totalCnt = ($cList -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count
-                $rList = docker ps --filter "label=com.docker.compose.project.working_dir=$dPath" -q 2>$null
-                $runningCnt = if ($rList) { ($rList -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count } else { 0 }
-                if ($totalCnt -gt 0) {
-                    if ($runningCnt -gt 0) {
-                        $instState = "Docker actif (${runningCnt}/${totalCnt} UP)"
-                    } else {
-                        $instState = "Docker arrêté (0/${totalCnt})"
-                    }
+        $cList = Invoke-QuietNative { docker ps -a --filter "label=com.docker.compose.project.working_dir=$dPath" -q }
+        if ($cList) {
+            $totalCnt = ($cList -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count
+            $rList = Invoke-QuietNative { docker ps --filter "label=com.docker.compose.project.working_dir=$dPath" -q }
+            $runningCnt = if ($rList) { ($rList -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count } else { 0 }
+            if ($totalCnt -gt 0) {
+                if ($runningCnt -gt 0) {
+                    $instState = "Docker actif (${runningCnt}/${totalCnt} UP)"
+                } else {
+                    $instState = "Docker arrêté (0/${totalCnt})"
                 }
             }
-        } catch {}
+        }
     }
 
     $instSsh = "22"
     if (Test-Path $envDocker) {
-        $s = (Get-Content $envDocker | Where-Object { $_ -match '^SSH_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+        $s = (Get-Content $envDocker | Where-Object { $_ -match '^SSH_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') } | Select-Object -First 1)
         if ($s) { $instSsh = $s }
     }
 
@@ -267,6 +261,7 @@ if ($hardReset -and -not $nonInteractive) {
     }
 }
 
+if (-not $nonInteractive) {
     # 0. User & Isolation choice
     $userOpts = @(
         "Utiliser l'utilisateur Windows actuel ($env:USERNAME) [Recommandé]",
@@ -318,6 +313,9 @@ if ($hardReset -and -not $nonInteractive) {
 
     $appName = Gum-Input -PromptLabel "Nom d'usage de la forge" -DefaultValue $appName -Placeholder "ex: Gickers.sh"
 
+    if ([string]::IsNullOrEmpty($installDir)) {
+        $installDir = Join-Path $HOME "gickers.sh"
+    }
     $installDir = Gum-Input -PromptLabel "Répertoire d'installation" -DefaultValue $installDir
 
     $sshOpts = @(
@@ -333,9 +331,10 @@ if ($hardReset -and -not $nonInteractive) {
     $adminUser = Gum-Input -PromptLabel "Nom d'utilisateur administrateur" -DefaultValue $adminUser
 
     # 4. Variables d'environnement & Secrets (Valeurs Intelligentes)
-    if (Test-Path ".env.docker") {
-        $prevSecret = (Get-Content ".env.docker" | Where-Object { $_ -match '^APP_SECRET=(.+)' } | ForEach-Object { $matches[1] })
-        $prevPass = (Get-Content ".env.docker" | Where-Object { $_ -match '^POSTGRES_PASSWORD=(.+)' } | ForEach-Object { $matches[1] })
+    $existingEnvPath = Join-Path $installDir ".env.docker"
+    if ((-not $hardReset) -and (Test-Path $existingEnvPath)) {
+        $prevSecret = (Get-Content $existingEnvPath | Where-Object { $_ -match '^APP_SECRET=(.+)' } | ForEach-Object { $matches[1] } | Select-Object -First 1)
+        $prevPass = (Get-Content $existingEnvPath | Where-Object { $_ -match '^POSTGRES_PASSWORD=(.+)' } | ForEach-Object { $matches[1] } | Select-Object -First 1)
         if ($prevSecret) { $appSecret = $prevSecret }
         if ($prevPass) { $postgresPassword = $prevPass }
     }
@@ -396,13 +395,17 @@ Set-Location $installDir
 
 if ($hardReset) {
     Write-Host "  $escPink⚙$escReset $escBold${escWhite}Exécution du Hard Reset (suppression des conteneurs, volumes et bases de données)...$escReset"
-    docker compose --env-file .env.docker down -v --remove-orphans 2>$null
-    docker compose down -v --remove-orphans 2>$null
-    docker volume rm -f gickers-sh_gickers-data gickers-sh_gickers-db gickers-sh_gickers-var gickers-sh_gickers-deploy-engine 2>$null
+    Invoke-QuietNative { docker compose --env-file .env.docker down -v --remove-orphans } | Out-Null
+    Invoke-QuietNative { docker compose down -v --remove-orphans } | Out-Null
+    Invoke-QuietNative { docker volume rm -f gickers-sh_gickers-data gickers-sh_gickers-db gickers-sh_gickers-var gickers-sh_gickers-deploy-engine } | Out-Null
     if (Test-Path ".env.docker") {
-        Move-Item ".env.docker" ".env.docker.reset.bak" -Force 2>$null
+        Move-Item ".env.docker" ".env.docker.reset.bak" -Force -ErrorAction SilentlyContinue
     }
-    Remove-Item -Recurse -Force ".data", "var/cache", "var/log" 2>$null
+    Remove-Item -Recurse -Force ".data", "var/cache", "var/log" -ErrorAction SilentlyContinue
+    $appSecret = ""
+    $postgresPassword = ""
+    $adminClaimToken = ""
+    $adminSshKey = ""
     Write-Host "  $escGreen✔$escReset $escBold${escWhite}Hard reset terminé. L'environnement est maintenant vierge.$escReset`n"
 }
 
@@ -410,8 +413,10 @@ $deployLog = Join-Path $env:TEMP "gickers_deploy.log"
 
 if (Test-Path ".git") {
     Run-LoggedStep -StepLabel "Mise à jour du projet gickers.sh vers la dernière version" -LogFile $deployLog -WorkDir $installDir -CommandBlock {
-        git fetch --depth 1 origin main 2>$null
-        git reset --hard origin/main 2>$null
+        git fetch --depth 1 origin main
+        if ($LASTEXITCODE -ne 0) { throw "git fetch failed ($LASTEXITCODE)" }
+        git reset --hard origin/main
+        if ($LASTEXITCODE -ne 0) { throw "git reset failed ($LASTEXITCODE)" }
     }
 } elseif (-not (Test-Path "compose.yaml")) {
     Run-LoggedStep -StepLabel "Téléchargement du projet gickers.sh" -LogFile $deployLog -WorkDir $installDir -CommandBlock {
@@ -421,7 +426,9 @@ if (Test-Path ".git") {
 
 New-Item -ItemType Directory -Force -Path ".data", ".data/caddy/sites", "var", "var/cache", "var/log" | Out-Null
 
-$appSecret = [System.Guid]::NewGuid().ToString("N")
+if ([string]::IsNullOrEmpty($appSecret)) {
+    $appSecret = [System.Guid]::NewGuid().ToString("N")
+}
 if ([string]::IsNullOrEmpty($postgresPassword)) {
     $postgresPassword = [System.Guid]::NewGuid().ToString("N").Substring(0, 24)
 }
@@ -432,10 +439,10 @@ if ([string]::IsNullOrEmpty($adminSshKey)) {
 }
 
 if ((-not $hardReset) -and (Test-Path ".env.docker")) {
-    $existingSecret = (Get-Content ".env.docker" | Where-Object { $_ -match '^APP_SECRET=(.+)' } | ForEach-Object { $matches[1] })
-    $existingPass = (Get-Content ".env.docker" | Where-Object { $_ -match '^POSTGRES_PASSWORD=(.+)' } | ForEach-Object { $matches[1] })
-    $existingToken = (Get-Content ".env.docker" | Where-Object { $_ -match '^SOFT_SERVE_INITIAL_ADMIN_TOKEN=(.+)' } | ForEach-Object { $matches[1].Trim('"') })
-    $existingKeys = (Get-Content ".env.docker" | Where-Object { $_ -match '^SOFT_SERVE_INITIAL_ADMIN_KEYS=(.+)' } | ForEach-Object { $matches[1].Trim('"') })
+    $existingSecret = (Get-Content ".env.docker" | Where-Object { $_ -match '^APP_SECRET=(.+)' } | ForEach-Object { $matches[1] } | Select-Object -First 1)
+    $existingPass = (Get-Content ".env.docker" | Where-Object { $_ -match '^POSTGRES_PASSWORD=(.+)' } | ForEach-Object { $matches[1] } | Select-Object -First 1)
+    $existingToken = (Get-Content ".env.docker" | Where-Object { $_ -match '^SOFT_SERVE_INITIAL_ADMIN_TOKEN=(.+)' } | ForEach-Object { $matches[1].Trim('"') } | Select-Object -First 1)
+    $existingKeys = (Get-Content ".env.docker" | Where-Object { $_ -match '^SOFT_SERVE_INITIAL_ADMIN_KEYS=(.+)' } | ForEach-Object { $matches[1].Trim('"') } | Select-Object -First 1)
     if ($existingSecret) { $appSecret = $existingSecret }
     if ($existingPass) { $postgresPassword = $existingPass }
     if ($existingToken -and [string]::IsNullOrEmpty($adminSshKey)) { $adminClaimToken = $existingToken }
@@ -445,6 +452,7 @@ if ((-not $hardReset) -and (Test-Path ".env.docker")) {
 $sshUrl = if ($sshPort -eq "22") { "ssh://$domain" } else { "ssh://${domain}:${sshPort}" }
 
 $envContent = @"
+# Production Environment for Gickers.sh (Domain: $domain)
 APP_ENV=prod
 APP_DEBUG=0
 APP_SECRET=$appSecret
@@ -471,7 +479,7 @@ DEPLOY_DOCKER_RUNTIME=runsc
 DEPLOY_GVISOR_PLATFORM=systrap
 "@
 
-Set-Content -Path ".env.docker" -Value $envContent -Encoding UTF8
+Write-Utf8NoBomFile -Path (Join-Path (Get-Location).Path ".env.docker") -Content ($envContent + "`n")
 
 Write-Host "  $escGreen✔$escReset $escBold$escWhite Configuration .env.docker initialisée.$escReset"
 

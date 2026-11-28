@@ -76,4 +76,36 @@ final class InstallCommandTest extends KernelTestCase
         self::assertStringContainsString('SYSTEM_ONLY="1"', $out);
         self::assertStringContainsString('run_system_only', $out);
     }
+
+    public function testInstallBashIsolatesStdinAndWrapsMain(): void
+    {
+        $command = $this->application->find('install');
+        $tester = new CommandTester($command);
+
+        $tester->execute(['--bash' => true]);
+
+        self::assertSame(0, $tester->getStatusCode());
+        $out = $tester->getDisplay();
+
+        self::assertStringContainsString(') < /dev/null 2>&1 | tee "$log_file"', $out);
+        self::assertStringContainsString("main() {\n", $out);
+        self::assertStringContainsString("\nmain \"\$@\"", $out);
+    }
+
+    public function testInstallPowerShellHasNoMidFileBomAndUsesNoBomEnvWriter(): void
+    {
+        $command = $this->application->find('install');
+        $tester = new CommandTester($command);
+
+        $tester->execute(['--ps1' => true]);
+
+        self::assertSame(0, $tester->getStatusCode());
+        $out = $tester->getDisplay();
+
+        $withoutLeadingBom = str_starts_with($out, "\xEF\xBB\xBF") ? substr($out, 3) : $out;
+        self::assertStringNotContainsString("\xEF\xBB\xBF", $withoutLeadingBom);
+        self::assertStringContainsString('Invoke-QuietNative', $out);
+        self::assertStringContainsString('Write-Utf8NoBomFile', $out);
+        self::assertStringContainsString('if (-not $nonInteractive) {', $out);
+    }
 }

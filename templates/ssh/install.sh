@@ -7,6 +7,7 @@ set -euo pipefail
 
 __GUM_LIB__
 
+main() {
 # Display Termstrap Header
 cat << 'EOF'
 __HEADER_CARD__
@@ -541,6 +542,20 @@ WantedBy=multi-user.target' | $EXEC_SUDO tee /etc/systemd/system/gickers.service
 # ------------------------------------------------------------------------------
 # Routines Dédiées : Gestion d'Instance Détectée (Update/Restart/Rebuild/etc.)
 # ------------------------------------------------------------------------------
+preserve_dir_owner() {
+    local target_dir="$1"
+    [ ! -d "$target_dir" ] && return 0
+    local owner
+    owner=$(stat -c '%U' "$target_dir" 2>/dev/null || stat -f '%Su' "$target_dir" 2>/dev/null || echo "")
+    if [ -n "$owner" ] && [ "$owner" != "root" ] && id -u "$owner" >/dev/null 2>&1; then
+        if [ "$IS_ROOT" -eq 1 ]; then
+            chown -R "$owner":"$owner" "$target_dir" 2>/dev/null || true
+        elif [ -n "${SUDO_CMD:-}" ]; then
+            $SUDO_CMD chown -R "$owner":"$owner" "$target_dir" 2>/dev/null || true
+        fi
+    fi
+}
+
 manage_instance_update() {
     local dir="$1"
     local log_file="/tmp/gickers_update.log"
@@ -570,6 +585,7 @@ manage_instance_update() {
     fi
 
     printf "  %s✔%s %sInstance mise à jour avec succès.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+    preserve_dir_owner "$dir"
     exit 0
 }
 
@@ -649,13 +665,18 @@ manage_instance_edit() {
     gum_choose "Politique d'inscriptions" "${SIGN_OPTS[@]}" && local s_idx=$? || local s_idx=$?
     [ "$s_idx" -eq 1 ] && cur_signup="false" || cur_signup="true"
 
+    local new_ssh_url="ssh://${cur_domain}"
+    if [ "$cur_ssh" != "22" ] && [ -n "$cur_ssh" ]; then
+        new_ssh_url="ssh://${cur_domain}:${cur_ssh}"
+    fi
+
     sed -i.bak -E \
         -e "s|^APP_DOMAIN=.*|APP_DOMAIN=${cur_domain}|" \
         -e "s|^SSH_PORT=.*|SSH_PORT=${cur_ssh}|" \
         -e "s|^HTTP_PORT=.*|HTTP_PORT=${cur_http}|" \
         -e "s|^HTTPS_PORT=.*|HTTPS_PORT=${cur_https}|" \
         -e "s|^SOFT_SERVE_ALLOW_SIGNUP=.*|SOFT_SERVE_ALLOW_SIGNUP=${cur_signup}|" \
-        -e "s|^SOFT_SERVE_SSH_PUBLIC_URL=.*|SOFT_SERVE_SSH_PUBLIC_URL=ssh://${cur_domain}|" \
+        -e "s|^SOFT_SERVE_SSH_PUBLIC_URL=.*|SOFT_SERVE_SSH_PUBLIC_URL=${new_ssh_url}|" \
         -e "s|^SOFT_SERVE_HTTP_PUBLIC_URL=.*|SOFT_SERVE_HTTP_PUBLIC_URL=https://${cur_domain}|" \
         "$env_file"
     rm -f "${env_file}.bak"
@@ -668,6 +689,7 @@ manage_instance_edit() {
     fi
 
     printf "  %s✔%s %sModifications appliquées avec succès.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+    preserve_dir_owner "$dir"
     exit 0
 }
 
@@ -716,6 +738,16 @@ manage_instance_delete() {
     if [ -d "$dir" ] && [ "$dir" != "/" ] && [ "$dir" != "$HOME" ]; then
         run_logged_step "Suppression du répertoire $dir" "/tmp/gickers_delete_fs.log" "$PWD" \
             rm -rf "$dir"
+    fi
+
+    local sudo_bin=""
+    [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" = "1" ] && sudo_bin="sudo"
+    if [ "$IS_ROOT" -eq 1 ] || [ -n "$sudo_bin" ]; then
+        if [ -f /etc/systemd/system/gickers.service ] && grep -qxF "WorkingDirectory=${dir}" /etc/systemd/system/gickers.service 2>/dev/null; then
+            $sudo_bin systemctl disable --now gickers.service >/dev/null 2>&1 || true
+            $sudo_bin rm -f /etc/systemd/system/gickers.service 2>/dev/null || true
+            $sudo_bin systemctl daemon-reload >/dev/null 2>&1 || true
+        fi
     fi
 
     printf "  %s✔%s %sInstance %s supprimée définitivement avec succès. Ports et ressources libérés.%s\n\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$dom" "$C_RESET"
@@ -2143,7 +2175,9 @@ EOF
             done
             [ $RETRY -lt $MAX_RETRY ]
         ) < /dev/null &
-        gum_stream_spin $! "Attente de disponibilité de PostgreSQL..."
+        if ! gum_stream_spin $! "Attente de disponibilité de PostgreSQL..."; then
+            printf "  %s!%s %sPostgreSQL ne répond pas encore à pg_isready après 30s, poursuite via depends_on...%s\n" "$C_GOLD" "$C_RESET" "$C_MUTED" "$C_RESET"
+        fi
 
         # C. Exécution des migrations Doctrine & initialisation
         run_logged_step "Exécution des migrations Doctrine & initialisation du serveur" "$deploy_log" "$INSTALL_DIR" \
@@ -2233,11 +2267,15 @@ WantedBy=multi-user.target" | $EXEC_SUDO tee /etc/systemd/system/gickers.service
         fi
     ) < /dev/null &
     gum_spin $! "Activation du service au boot de la machine ($INIT_SYSTEM)..."
+fi
 
-    if [ "$SYSTEM_USER" != "root" ] && id -u "$SYSTEM_USER" >/dev/null 2>&1; then
-        $EXEC_SUDO chown -R "$SYSTEM_USER":"$SYSTEM_USER" "$INSTALL_DIR" 2>/dev/null || true
-    elif [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
-        $EXEC_SUDO chown -R "$SUDO_USER":"$SUDO_USER" "$INSTALL_DIR" 2>/dev/null || true
+if [ "${SKIP_APP_DEPLOY:-0}" -eq 0 ] && [ -d "$INSTALL_DIR" ]; then
+    if [ "$IS_ROOT" -eq 1 ] || [ -n "$EXEC_SUDO" ]; then
+        if [ "$SYSTEM_USER" != "root" ] && id -u "$SYSTEM_USER" >/dev/null 2>&1; then
+            $EXEC_SUDO chown -R "$SYSTEM_USER":"$SYSTEM_USER" "$INSTALL_DIR" 2>/dev/null || true
+        elif [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+            $EXEC_SUDO chown -R "$SUDO_USER":"$SUDO_USER" "$INSTALL_DIR" 2>/dev/null || true
+        fi
     fi
 fi
 
@@ -2273,3 +2311,6 @@ if [ -n "$ADMIN_CLAIM_TOKEN" ]; then
     printf "  %sSur Windows (PowerShell) :%s\n" "$C_MUTED" "$C_RESET"
     printf "    %s%sssh %s%s signup --token %s | iex%s\n\n" "$C_BOLD" "$C_CYAN" "$SSH_PORT_CMD_OPT" "$DOMAIN" "$ADMIN_CLAIM_TOKEN" "$C_RESET"
 fi
+}
+
+main "$@"
