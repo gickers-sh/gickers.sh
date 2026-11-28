@@ -806,6 +806,89 @@ fi
 
 CURRENT_USER=$(whoami 2>/dev/null || echo "user")
 
+# Package Manager and Init System Abstraction
+PKG_MGR="unknown"
+if command -v apt-get >/dev/null 2>&1; then
+    PKG_MGR="apt"
+elif command -v apk >/dev/null 2>&1; then
+    PKG_MGR="apk"
+elif command -v dnf >/dev/null 2>&1; then
+    PKG_MGR="dnf"
+elif command -v pacman >/dev/null 2>&1; then
+    PKG_MGR="pacman"
+fi
+
+INIT_SYSTEM="unknown"
+if [ -d /run/systemd/system ] || command -v systemctl >/dev/null 2>&1; then
+    INIT_SYSTEM="systemd"
+elif [ -f /sbin/openrc-run ] || command -v rc-service >/dev/null 2>&1; then
+    INIT_SYSTEM="openrc"
+fi
+
+# Package Name Resolver per Package Manager
+pkg_resolve() {
+    local generic_pkg="$1"
+    case "$PKG_MGR" in
+        apk)
+            case "$generic_pkg" in
+                docker)          echo "docker docker-cli-compose" ;;
+                base-prereqs)    echo "ca-certificates curl gnupg git git-lfs jq ufw" ;;
+                system-user-add) echo "shadow" ;;
+                *)               echo "$generic_pkg" ;;
+            esac
+            ;;
+        apt)
+            case "$generic_pkg" in
+                docker)          echo "docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin" ;;
+                base-prereqs)    echo "ca-certificates curl gnupg git git-lfs jq ufw" ;;
+                *)               echo "$generic_pkg" ;;
+            esac
+            ;;
+        dnf)
+            case "$generic_pkg" in
+                docker)          echo "docker-ce docker-ce-cli containerd.io docker-compose-plugin" ;;
+                base-prereqs)    echo "ca-certificates curl gnupg2 git git-lfs jq" ;;
+                *)               echo "$generic_pkg" ;;
+            esac
+            ;;
+        pacman)
+            case "$generic_pkg" in
+                docker)          echo "docker docker-compose" ;;
+                base-prereqs)    echo "ca-certificates curl gnupg git git-lfs jq ufw" ;;
+                *)               echo "$generic_pkg" ;;
+            esac
+            ;;
+        *)
+            echo "$generic_pkg"
+            ;;
+    esac
+}
+
+pkg_update_cmd() {
+    case "$PKG_MGR" in
+        apt)    echo "apt-get update -y" ;;
+        apk)    echo "apk update" ;;
+        dnf)    echo "dnf check-update -y" ;;
+        pacman) echo "pacman -Sy" ;;
+        *)      echo "true" ;;
+    esac
+}
+
+pkg_install_cmd() {
+    local pkgs=("$@")
+    local resolved=()
+    for p in "${pkgs[@]}"; do
+        resolved+=($(pkg_resolve "$p"))
+    done
+    case "$PKG_MGR" in
+        apt)    echo "apt-get install -y --no-install-recommends ${resolved[*]}" ;;
+        apk)    echo "apk add --no-cache ${resolved[*]}" ;;
+        dnf)    echo "dnf install -y ${resolved[*]}" ;;
+        pacman) echo "pacman -S --noconfirm ${resolved[*]}" ;;
+        *)      echo "true" ;;
+    esac
+}
+
 # Helper to print annotated manual commands in terminal
 print_manual_commands_box() {
     local title="$1"
@@ -956,34 +1039,58 @@ EOF
         exit 0
     fi
 
-    # 1. Groupe docker
-    if id -u "$SYSTEM_USER" >/dev/null 2>&1; then
+# 1. Groupe docker
+if id -u "$SYSTEM_USER" >/dev/null 2>&1; then
+    if [ "$PKG_MGR" = "apk" ]; then
+        $EXEC_SUDO addgroup "$SYSTEM_USER" docker 2>/dev/null || true
+    else
         $EXEC_SUDO usermod -aG docker "$SYSTEM_USER" 2>/dev/null || true
     fi
+fi
 
-    # 2. Docker CE si non installé
-    if ! command -v docker >/dev/null 2>&1; then
-        if [ -d /etc/apt ]; then
-            (
-                $EXEC_SUDO apt-get update -y >/dev/null 2>&1
-                $EXEC_SUDO apt-get install -y --no-install-recommends ca-certificates curl gnupg git jq ufw >/dev/null 2>&1
-                $EXEC_SUDO install -m 0755 -d /etc/apt/keyrings
-                curl -fsSL "https://download.docker.com/linux/$OS_NAME/gpg" | $EXEC_SUDO gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes >/dev/null 2>&1
-                $EXEC_SUDO chmod a+r /etc/apt/keyrings/docker.gpg
-                local codename
-                codename=$(. /etc/os-release 2>/dev/null && echo "$VERSION_CODENAME" || echo "stable")
-                [ -z "$codename" ] && codename="stable"
-                echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$OS_NAME $codename stable" \
-                    | $EXEC_SUDO tee /etc/apt/sources.list.d/docker.list >/dev/null
-                $EXEC_SUDO apt-get update -y >/dev/null 2>&1
-                $EXEC_SUDO apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1
+# 2. Docker si non installé
+if ! command -v docker >/dev/null 2>&1; then
+    (
+        case "$PKG_MGR" in
+            apk)
+                $EXEC_SUDO apk update >/dev/null 2>&1
+                $EXEC_SUDO apk add --no-cache ca-certificates curl git git-lfs jq ufw docker docker-cli-compose >/dev/null 2>&1
+                $EXEC_SUDO rc-update add docker boot >/dev/null 2>&1 || true
+                $EXEC_SUDO service docker start >/dev/null 2>&1 || true
+                ;;
+            dnf)
+                $EXEC_SUDO dnf install -y dnf-plugins-core >/dev/null 2>&1
+                $EXEC_SUDO dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo >/dev/null 2>&1
+                $EXEC_SUDO dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin >/dev/null 2>&1
                 $EXEC_SUDO systemctl enable --now docker >/dev/null 2>&1 || true
-            ) &
-            gum_spin $! "Installation officielle de Docker CE & Compose..."
-        fi
-    else
-        printf "  %s✔%s %sDocker CE : déjà opérationnel sur l'hôte%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
-    fi
+                ;;
+            pacman)
+                $EXEC_SUDO pacman -Sy --noconfirm docker docker-compose git git-lfs curl jq ufw >/dev/null 2>&1
+                $EXEC_SUDO systemctl enable --now docker >/dev/null 2>&1 || true
+                ;;
+            *)
+                if [ -d /etc/apt ]; then
+                    $EXEC_SUDO apt-get update -y >/dev/null 2>&1
+                    $EXEC_SUDO apt-get install -y --no-install-recommends ca-certificates curl gnupg git jq ufw >/dev/null 2>&1
+                    $EXEC_SUDO install -m 0755 -d /etc/apt/keyrings
+                    curl -fsSL "https://download.docker.com/linux/$OS_NAME/gpg" | $EXEC_SUDO gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes >/dev/null 2>&1
+                    $EXEC_SUDO chmod a+r /etc/apt/keyrings/docker.gpg
+                    local codename
+                    codename=$(. /etc/os-release 2>/dev/null && echo "$VERSION_CODENAME" || echo "stable")
+                    [ -z "$codename" ] && codename="stable"
+                    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$OS_NAME $codename stable" \
+                        | $EXEC_SUDO tee /etc/apt/sources.list.d/docker.list >/dev/null
+                    $EXEC_SUDO apt-get update -y >/dev/null 2>&1
+                    $EXEC_SUDO apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1
+                    $EXEC_SUDO systemctl enable --now docker >/dev/null 2>&1 || true
+                fi
+                ;;
+        esac
+    ) &
+    gum_spin $! "Installation officielle de Docker & Compose..."
+else
+    printf "  %s✔%s %sDocker : déjà opérationnel sur l'hôte%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+fi
 
     # 3. Bascule OpenSSH vers 2222
     (
@@ -1017,10 +1124,12 @@ EOF
     # 4. Pare-feu UFW
     (
         if ! command -v ufw >/dev/null 2>&1; then
-            if command -v apt-get >/dev/null 2>&1; then
-                $EXEC_SUDO apt-get update -y >/dev/null 2>&1
-                $EXEC_SUDO apt-get install -y --no-install-recommends ufw >/dev/null 2>&1
-            fi
+            case "$PKG_MGR" in
+                apk)    $EXEC_SUDO apk add --no-cache ufw >/dev/null 2>&1 ;;
+                dnf)    $EXEC_SUDO dnf install -y ufw >/dev/null 2>&1 ;;
+                pacman) $EXEC_SUDO pacman -S --noconfirm ufw >/dev/null 2>&1 ;;
+                *)      $EXEC_SUDO apt-get update -y >/dev/null 2>&1 && $EXEC_SUDO apt-get install -y --no-install-recommends ufw >/dev/null 2>&1 ;;
+            esac
         fi
 
         if command -v ufw >/dev/null 2>&1; then
@@ -1244,26 +1353,87 @@ fi
 # ------------------------------------------------------------------------------
 if [ "$NON_INTERACTIVE" -eq 0 ]; then
     # Préparation des descriptions et commandes pour chaque étape du checklist
-    DESC_DOCKER="Installe les paquets de base (curl, git, jq), le dépôt officiel Docker CE et le plugin Docker Compose."
-    CMDS_DOCKER=$(cat << 'EOF'
-apt-get update -y && apt-get install -y ca-certificates curl gnupg git jq ufw
+    DESC_DOCKER="Installe les paquets de base (curl, git, jq), le moteur Docker et le plugin Docker Compose."
+    case "$PKG_MGR" in
+        apk)
+            CMDS_DOCKER=$(cat << 'EOF'
+apk update && apk add --no-cache ca-certificates curl git git-lfs jq ufw docker docker-cli-compose
+rc-update add docker boot && service docker start
+addgroup $USER docker
+EOF
+)
+            ;;
+        dnf)
+            CMDS_DOCKER=$(cat << 'EOF'
+dnf install -y dnf-plugins-core
+dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+systemctl enable --now docker && usermod -aG docker $USER
+EOF
+)
+            ;;
+        pacman)
+            CMDS_DOCKER=$(cat << 'EOF'
+pacman -Sy --noconfirm docker docker-compose git git-lfs curl jq ufw
+systemctl enable --now docker && usermod -aG docker $USER
+EOF
+)
+            ;;
+        *)
+            CMDS_DOCKER=$(cat << 'EOF'
+apt-get update -y && apt-get install -y ca-certificates curl gnupg git git-lfs jq ufw
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 systemctl enable --now docker && usermod -aG docker $USER
 EOF
 )
+            ;;
+    esac
 
     DESC_SSHD="Migre le serveur OpenSSH hôte sur le port 2222 afin de libérer le port 22 pour le service Git SSH."
-    CMDS_SSHD=$(cat << 'EOF'
+    if [ "$INIT_SYSTEM" = "openrc" ]; then
+        CMDS_SSHD=$(cat << 'EOF'
+ufw allow 2222/tcp comment 'OpenSSH System (moved from 22)'
+echo "Port 2222" > /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf
+rc-service sshd restart
+EOF
+)
+    else
+        CMDS_SSHD=$(cat << 'EOF'
 ufw allow 2222/tcp comment 'OpenSSH System (moved from 22)'
 echo "Port 2222" > /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf
 systemctl daemon-reload && systemctl restart ssh.socket || systemctl restart sshd
 EOF
 )
+    fi
 
     DESC_UFW="Installe UFW (si absent) et autorise le trafic Web (80, 443), Git SSH (22) et OpenSSH hôte (2222)."
-    CMDS_UFW=$(cat << 'EOF'
+    case "$PKG_MGR" in
+        apk)
+            CMDS_UFW=$(cat << 'EOF'
+apk add --no-cache ufw
+ufw allow 80/tcp comment 'Gickers HTTP / ACME'
+ufw allow 443/tcp comment 'Gickers HTTPS'
+ufw allow 22/tcp comment 'Gickers Git SSH'
+ufw allow 2222/tcp comment 'System OpenSSH'
+ufw --force enable
+EOF
+)
+            ;;
+        dnf)
+            CMDS_UFW=$(cat << 'EOF'
+dnf install -y ufw
+ufw allow 80/tcp comment 'Gickers HTTP / ACME'
+ufw allow 443/tcp comment 'Gickers HTTPS'
+ufw allow 22/tcp comment 'Gickers Git SSH'
+ufw allow 2222/tcp comment 'System OpenSSH'
+ufw --force enable
+EOF
+)
+            ;;
+        *)
+            CMDS_UFW=$(cat << 'EOF'
 apt-get install -y ufw
 ufw allow 80/tcp comment 'Gickers HTTP / ACME'
 ufw allow 443/tcp comment 'Gickers HTTPS'
@@ -1272,6 +1442,8 @@ ufw allow 2222/tcp comment 'System OpenSSH'
 ufw --force enable
 EOF
 )
+            ;;
+    esac
 
     DESC_APP="Télécharge ou synchronise le code source, configure .env.docker et démarre la stack complète Docker."
     CMDS_APP=$(cat << 'EOF'
@@ -1283,8 +1455,16 @@ docker compose --env-file .env.docker up -d
 EOF
 )
 
-    DESC_SYSTEMD="Crée une unité systemd gickers.service pour lancer automatiquement l'infrastructure au boot du serveur."
-    CMDS_SYSTEMD=$(cat << 'EOF'
+    DESC_SYSTEMD="Configure le service d'initialisation pour lancer automatiquement l'infrastructure au boot du serveur."
+    if [ "$INIT_SYSTEM" = "openrc" ]; then
+        CMDS_SYSTEMD=$(cat << 'EOF'
+# Service OpenRC /etc/init.d/gickers
+rc-update add gickers default
+rc-service gickers start
+EOF
+)
+    else
+        CMDS_SYSTEMD=$(cat << 'EOF'
 tee /etc/systemd/system/gickers.service << 'UNIT'
 [Unit]
 Description=Gickers.sh Git Forge & Container Platform
@@ -1302,6 +1482,7 @@ UNIT
 systemctl daemon-reload && systemctl enable gickers.service
 EOF
 )
+    fi
 
     # Sélection des étapes à exécuter au lancement
     CHECKLIST_ITEMS=(
@@ -1309,7 +1490,7 @@ EOF
         "Port SSH Git 22 (Bascule OpenSSH vers 2222)|1|${DESC_SSHD}|${CMDS_SSHD}"
         "Pare-feu hôte UFW (Installation & règles)|1|${DESC_UFW}|${CMDS_UFW}"
         "Déploiement applicatif (Conteneurs Docker)|1|${DESC_APP}|${CMDS_APP}"
-        "Service systemd gickers.service (Boot VPS)|1|${DESC_SYSTEMD}|${CMDS_SYSTEMD}"
+        "Service système au démarrage (Boot VPS)|1|${DESC_SYSTEMD}|${CMDS_SYSTEMD}"
     )
     gum_checklist "Sélectionnez les étapes à exécuter sur cette machine" SELECTED_STEPS "${CHECKLIST_ITEMS[@]}"
 
@@ -1366,25 +1547,10 @@ EOF
         gum_choose "Dépendances système & Docker CE" "${DOCKER_NO_SUDO_MENU[@]}" && DOCKER_SELECTION=$? || DOCKER_SELECTION=$?
         STEP_DOCKER="skip"
     elif [ "$STEP_DOCKER" = "auto" ]; then
-        DOCKER_CMDS=$(cat << 'EOF'
-# 1. Mise à jour des paquets et prérequis
-apt-get update -y && apt-get install -y ca-certificates curl gnupg git git-lfs jq ufw
-# 2. Clé GPG officielle Docker
-install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-chmod a+r /etc/apt/keyrings/docker.gpg
-# 3. Dépôt Docker CE
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
-# 4. Installation de Docker et du plugin Compose
-apt-get update -y && apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-# 5. Démarrage et ajout au groupe docker
-systemctl enable --now docker
-usermod -aG docker $USER
-EOF
-)
-        print_manual_commands_box "Commandes prévues : Installation Docker CE & Compose" "$DOCKER_CMDS"
+        DOCKER_CMDS="$CMDS_DOCKER"
+        print_manual_commands_box "Commandes prévues : Installation Docker & Compose" "$DOCKER_CMDS"
         DOCKER_MENU=(
-            "[Auto] Exécuter ces commandes pour installer Docker CE & Compose (Recommandé)"
+            "[Auto] Exécuter ces commandes pour installer Docker & Compose (Recommandé)"
             "[Ignorer] Je gère l'installation de Docker moi-même"
         )
         gum_choose "Dépendances système & Docker CE" "${DOCKER_MENU[@]}" && DOCKER_SELECTION=$? || DOCKER_SELECTION=$?
@@ -1407,17 +1573,7 @@ EOF
         STEP_SSHD="skip"
     elif [ "$SSHD_ON_PORT_22" -eq 1 ]; then
         printf "\n  %s!%s %sLe port 22 est actuellement occupé par le serveur OpenSSH hôte (sshd).%s\n" "$C_GOLD" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
-        SSHD_CMDS=$(cat << 'EOF'
-# 1. Ouvrir le port 2222 dans le pare-feu AVANT de modifier sshd
-ufw allow 2222/tcp comment 'OpenSSH System (moved from 22)'
-# 2. Configurer OpenSSH pour écouter sur 2222
-echo "Port 2222" > /etc/ssh/sshd_config.d/99-gickers-ssh-port.conf
-# 3. Redémarrer sshd ou le socket systemd
-systemctl daemon-reload && systemctl restart ssh.socket || systemctl restart sshd
-# 4. Vos futures connexions d'administration VPS se feront avec :
-# ssh -p 2222 user@<IP_VPS>
-EOF
-)
+        SSHD_CMDS="$CMDS_SSHD"
         print_manual_commands_box "Commandes prévues : Migration OpenSSH vers port 2222" "$SSHD_CMDS"
         SSHD_MENU=(
             "[Auto] Basculer OpenSSH hôte sur le port 2222 (Port 22 pour Git)"
@@ -1461,7 +1617,7 @@ EOF
         UFW_PREVIEW_INSTALL=""
         if [ "$UFW_INSTALLED" -eq 0 ]; then
             UFW_PREVIEW_INSTALL="# 0. Installation de UFW via le gestionnaire de paquets
-apt-get update -y && apt-get install -y --no-install-recommends ufw
+$(pkg_install_cmd ufw)
 "
         fi
 
@@ -1515,39 +1671,13 @@ EOF
         printf "  %s✔%s %sService systemd : ${C_BOLD}${C_GREEN}gickers.service déjà présent${C_RESET}\n" "$C_GREEN" "$C_RESET" "$C_WHITE"
         STEP_SYSTEMD="skip"
     elif [ "$STEP_SYSTEMD" = "auto" ]; then
-        SYSTEMD_CMDS=$(cat << EOF
-# 1. Créer le service systemd
-tee /etc/systemd/system/gickers.service << 'UNIT'
-[Unit]
-Description=Gickers.sh Git Forge & Container Platform
-Requires=docker.service
-After=docker.service network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-WorkingDirectory=${INSTALL_DIR}
-ExecStart=/usr/bin/docker compose --env-file .env.docker up -d
-ExecStop=/usr/bin/docker compose --env-file .env.docker down
-ExecReload=/usr/bin/docker compose --env-file .env.docker restart
-TimeoutStartSec=300
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-
-# 2. Recharger et activer le service au démarrage
-systemctl daemon-reload
-systemctl enable gickers.service
-EOF
-)
-        print_manual_commands_box "Commandes prévues : Création du service systemd" "$SYSTEMD_CMDS"
+        SYSTEMD_CMDS="$CMDS_SYSTEMD"
+        print_manual_commands_box "Commandes prévues : Création du service de démarrage" "$SYSTEMD_CMDS"
         SYSTEMD_MENU=(
-            "[Auto] Créer et activer gickers.service (redémarrage au boot)"
+            "[Auto] Créer et activer le service de démarrage (au boot)"
             "[Ignorer] Gérer les conteneurs manuellement via compose"
         )
-        gum_choose "Intégration systemd (démarrage automatique au boot du VPS)" "${SYSTEMD_MENU[@]}" && SYSTEMD_SELECTION=$? || SYSTEMD_SELECTION=$?
+        gum_choose "Intégration service au boot du VPS" "${SYSTEMD_MENU[@]}" && SYSTEMD_SELECTION=$? || SYSTEMD_SELECTION=$?
         case "$SYSTEMD_SELECTION" in
             0) STEP_SYSTEMD="auto" ;;
             1) STEP_SYSTEMD="skip" ;;
@@ -1732,47 +1862,79 @@ if [ "$IS_ROOT" -eq 1 ] || [ -n "$EXEC_SUDO" ]; then
     # Création de l'utilisateur système dédié si nécessaire
     if [ "$SYSTEM_USER" != "root" ] && ! id -u "$SYSTEM_USER" >/dev/null 2>&1; then
         (
-            $EXEC_SUDO useradd -m -s /bin/bash -U "$SYSTEM_USER" >/dev/null 2>&1 || true
+            if [ "$PKG_MGR" = "apk" ]; then
+                $EXEC_SUDO adduser -D -s /bin/sh "$SYSTEM_USER" >/dev/null 2>&1 || true
+            else
+                $EXEC_SUDO useradd -m -s /bin/bash -U "$SYSTEM_USER" >/dev/null 2>&1 || true
+            fi
         ) &
         gum_spin $! "Création de l'utilisateur système dédié ($SYSTEM_USER)..."
     fi
 fi
 
 if [ "$STEP_DOCKER" = "auto" ] && [ -n "$EXEC_SUDO" -o "$IS_ROOT" -eq 1 ]; then
-    if command -v apt-get >/dev/null 2>&1; then
-        (
-            $EXEC_SUDO apt-get update -y >/dev/null 2>&1
-            $EXEC_SUDO apt-get install -y --no-install-recommends \
-                apt-transport-https ca-certificates curl gnupg git git-lfs jq ufw fail2ban openssl tar >/dev/null 2>&1
-        ) &
-        gum_spin $! "Vérification et installation des paquets système (apt)..."
-    fi
-
-    if ! command -v docker >/dev/null 2>&1; then
-        if [ -d /etc/apt ]; then
-            (
-                $EXEC_SUDO install -m 0755 -d /etc/apt/keyrings
-                curl -fsSL "https://download.docker.com/linux/$OS_NAME/gpg" | $EXEC_SUDO gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes >/dev/null 2>&1
-                $EXEC_SUDO chmod a+r /etc/apt/keyrings/docker.gpg
-                CODENAME=$(. /etc/os-release 2>/dev/null && echo "$VERSION_CODENAME" || echo "stable")
-                [ -z "$CODENAME" ] && CODENAME="stable"
-                echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$OS_NAME $CODENAME stable" \
-                    | $EXEC_SUDO tee /etc/apt/sources.list.d/docker.list >/dev/null
-                $EXEC_SUDO apt-get update -y >/dev/null 2>&1
-                $EXEC_SUDO apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1
+    (
+        case "$PKG_MGR" in
+            apk)
+                $EXEC_SUDO apk update >/dev/null 2>&1
+                $EXEC_SUDO apk add --no-cache ca-certificates curl git git-lfs jq ufw docker docker-cli-compose >/dev/null 2>&1
+                $EXEC_SUDO rc-update add docker boot >/dev/null 2>&1 || true
+                $EXEC_SUDO service docker start >/dev/null 2>&1 || true
+                ;;
+            dnf)
+                $EXEC_SUDO dnf install -y dnf-plugins-core >/dev/null 2>&1
+                $EXEC_SUDO dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo >/dev/null 2>&1
+                $EXEC_SUDO dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin git git-lfs jq curl ca-certificates >/dev/null 2>&1
                 $EXEC_SUDO systemctl enable --now docker >/dev/null 2>&1 || true
-            ) &
-            gum_spin $! "Installation officielle de Docker CE & Docker Compose..."
-        fi
-    fi
+                ;;
+            pacman)
+                $EXEC_SUDO pacman -Sy --noconfirm docker docker-compose git git-lfs curl jq ufw >/dev/null 2>&1
+                $EXEC_SUDO systemctl enable --now docker >/dev/null 2>&1 || true
+                ;;
+            *)
+                if command -v apt-get >/dev/null 2>&1; then
+                    $EXEC_SUDO apt-get update -y >/dev/null 2>&1
+                    $EXEC_SUDO apt-get install -y --no-install-recommends \
+                        apt-transport-https ca-certificates curl gnupg git git-lfs jq ufw fail2ban openssl tar >/dev/null 2>&1
+                fi
+                if ! command -v docker >/dev/null 2>&1; then
+                    if [ -d /etc/apt ]; then
+                        $EXEC_SUDO install -m 0755 -d /etc/apt/keyrings
+                        curl -fsSL "https://download.docker.com/linux/$OS_NAME/gpg" | $EXEC_SUDO gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes >/dev/null 2>&1
+                        $EXEC_SUDO chmod a+r /etc/apt/keyrings/docker.gpg
+                        CODENAME=$(. /etc/os-release 2>/dev/null && echo "$VERSION_CODENAME" || echo "stable")
+                        [ -z "$CODENAME" ] && CODENAME="stable"
+                        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$OS_NAME $CODENAME stable" \
+                            | $EXEC_SUDO tee /etc/apt/sources.list.d/docker.list >/dev/null
+                        $EXEC_SUDO apt-get update -y >/dev/null 2>&1
+                        $EXEC_SUDO apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1
+                        $EXEC_SUDO systemctl enable --now docker >/dev/null 2>&1 || true
+                    fi
+                fi
+                ;;
+        esac
+    ) &
+    gum_spin $! "Installation et configuration de Docker & Compose..."
 
     if [ "$SYSTEM_USER" != "root" ] && id -u "$SYSTEM_USER" >/dev/null 2>&1; then
-        $EXEC_SUDO usermod -aG docker "$SYSTEM_USER" 2>/dev/null || true
+        if [ "$PKG_MGR" = "apk" ]; then
+            $EXEC_SUDO addgroup "$SYSTEM_USER" docker 2>/dev/null || true
+        else
+            $EXEC_SUDO usermod -aG docker "$SYSTEM_USER" 2>/dev/null || true
+        fi
     fi
     if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
-        $EXEC_SUDO usermod -aG docker "$SUDO_USER" 2>/dev/null || true
+        if [ "$PKG_MGR" = "apk" ]; then
+            $EXEC_SUDO addgroup "$SUDO_USER" docker 2>/dev/null || true
+        else
+            $EXEC_SUDO usermod -aG docker "$SUDO_USER" 2>/dev/null || true
+        fi
     elif [ "$IS_ROOT" -eq 0 ]; then
-        $EXEC_SUDO usermod -aG docker "$CURRENT_USER" 2>/dev/null || true
+        if [ "$PKG_MGR" = "apk" ]; then
+            $EXEC_SUDO addgroup "$CURRENT_USER" docker 2>/dev/null || true
+        else
+            $EXEC_SUDO usermod -aG docker "$CURRENT_USER" 2>/dev/null || true
+        fi
     fi
 fi
 
@@ -1789,7 +1951,9 @@ if [ "$STEP_SSHD" = "auto" ] && [ -n "$EXEC_SUDO" -o "$IS_ROOT" -eq 1 ]; then
         if [ -f /etc/ssh/sshd_config ]; then
             $EXEC_SUDO sed -i -E 's/^[#[:space:]]*Port[[:space:]]+22[[:space:]]*$/Port 2222/' /etc/ssh/sshd_config
         fi
-        if systemctl is-active --quiet ssh.socket 2>/dev/null; then
+        if [ "$INIT_SYSTEM" = "openrc" ]; then
+            $EXEC_SUDO rc-service sshd restart >/dev/null 2>&1 || true
+        elif systemctl is-active --quiet ssh.socket 2>/dev/null; then
             $EXEC_SUDO mkdir -p /etc/systemd/system/ssh.socket.d
             echo -e "[Socket]\nListenStream=\nListenStream=2222" | $EXEC_SUDO tee /etc/systemd/system/ssh.socket.d/listen-2222.conf >/dev/null
             $EXEC_SUDO systemctl daemon-reload >/dev/null 2>&1
@@ -1808,10 +1972,12 @@ fi
 if [ "$STEP_FIREWALL" = "auto" ] && [ -n "$EXEC_SUDO" -o "$IS_ROOT" -eq 1 ]; then
     (
         if ! command -v ufw >/dev/null 2>&1; then
-            if command -v apt-get >/dev/null 2>&1; then
-                $EXEC_SUDO apt-get update -y >/dev/null 2>&1
-                $EXEC_SUDO apt-get install -y --no-install-recommends ufw >/dev/null 2>&1
-            fi
+            case "$PKG_MGR" in
+                apk)    $EXEC_SUDO apk add --no-cache ufw >/dev/null 2>&1 ;;
+                dnf)    $EXEC_SUDO dnf install -y ufw >/dev/null 2>&1 ;;
+                pacman) $EXEC_SUDO pacman -S --noconfirm ufw >/dev/null 2>&1 ;;
+                *)      $EXEC_SUDO apt-get update -y >/dev/null 2>&1 && $EXEC_SUDO apt-get install -y --no-install-recommends ufw >/dev/null 2>&1 ;;
+            esac
         fi
 
         if command -v ufw >/dev/null 2>&1; then
@@ -1950,7 +2116,7 @@ EOF
 fi
 
 # ------------------------------------------------------------------------------
-# 8. Service Systemd (gickers.service)
+# 8. Service Système de Démarrage (systemd ou openrc)
 # ------------------------------------------------------------------------------
 if [ "$STEP_SYSTEMD" = "auto" ] && [ -n "$EXEC_SUDO" -o "$IS_ROOT" -eq 1 ]; then
     SYSTEMD_USER_DIRECTIVE=""
@@ -1960,7 +2126,33 @@ Group=${SYSTEM_USER}"
     fi
 
     (
-        echo "[Unit]
+        if [ "$INIT_SYSTEM" = "openrc" ]; then
+            cat << 'INIT_EOF' | $EXEC_SUDO tee /etc/init.d/gickers >/dev/null
+#!/sbin/openrc-run
+description="Gickers.sh Git Forge & Container Platform"
+
+depend() {
+    need docker
+    after network-online
+}
+
+start() {
+    ebegin "Starting Gickers.sh"
+    cd ${INSTALL_DIR} && /usr/bin/docker compose --env-file .env.docker up -d
+    eend $?
+}
+
+stop() {
+    ebegin "Stopping Gickers.sh"
+    cd ${INSTALL_DIR} && /usr/bin/docker compose --env-file .env.docker down
+    eend $?
+}
+INIT_EOF
+            $EXEC_SUDO chmod +x /etc/init.d/gickers
+            $EXEC_SUDO rc-update add gickers default >/dev/null 2>&1 || true
+            $EXEC_SUDO rc-service gickers start >/dev/null 2>&1 || true
+        else
+            echo "[Unit]
 Description=Gickers.sh Git Forge & Container Platform
 Requires=docker.service
 After=docker.service network-online.target
@@ -1979,10 +2171,11 @@ TimeoutStartSec=300
 [Install]
 WantedBy=multi-user.target" | $EXEC_SUDO tee /etc/systemd/system/gickers.service >/dev/null
 
-        $EXEC_SUDO systemctl daemon-reload >/dev/null 2>&1 || true
-        $EXEC_SUDO systemctl enable gickers.service >/dev/null 2>&1 || true
+            $EXEC_SUDO systemctl daemon-reload >/dev/null 2>&1 || true
+            $EXEC_SUDO systemctl enable gickers.service >/dev/null 2>&1 || true
+        fi
     ) &
-    gum_spin $! "Activation du service systemd gickers.service..."
+    gum_spin $! "Activation du service au boot de la machine ($INIT_SYSTEM)..."
 
     if [ "$SYSTEM_USER" != "root" ] && id -u "$SYSTEM_USER" >/dev/null 2>&1; then
         $EXEC_SUDO chown -R "$SYSTEM_USER":"$SYSTEM_USER" "$INSTALL_DIR" 2>/dev/null || true
