@@ -668,8 +668,15 @@ gum_spin() {
         i=$(( (i + 1) % 10 ))
         sleep 0.07
     done
+    wait "$pid"
+    local exit_code=$?
     printf "${ESC}[?25h"
-    printf "\r${ESC}[2K  %s✔%s %s%s%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$msg" "$C_RESET"
+    if [ "$exit_code" -eq 0 ]; then
+        printf "\r${ESC}[2K  %s✔%s %s%s%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$msg" "$C_RESET"
+    else
+        printf "\r${ESC}[2K  %s✖%s %s%s%s %s(Échec, code %d)%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$msg" "$C_RESET" "$C_DIM" "$exit_code" "$C_RESET"
+    fi
+    return "$exit_code"
 }
 
 # Backwards compatibility aliases

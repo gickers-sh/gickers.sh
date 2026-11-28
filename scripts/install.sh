@@ -675,8 +675,15 @@ gum_spin() {
         i=$(( (i + 1) % 10 ))
         sleep 0.07
     done
+    wait "$pid"
+    local exit_code=$?
     printf "${ESC}[?25h"
-    printf "\r${ESC}[2K  %s✔%s %s%s%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$msg" "$C_RESET"
+    if [ "$exit_code" -eq 0 ]; then
+        printf "\r${ESC}[2K  %s✔%s %s%s%s\n" "$C_GREEN" "$C_RESET" "$C_BOLD$C_WHITE" "$msg" "$C_RESET"
+    else
+        printf "\r${ESC}[2K  %s✖%s %s%s%s %s(Échec, code %d)%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$msg" "$C_RESET" "$C_DIM" "$exit_code" "$C_RESET"
+    fi
+    return "$exit_code"
 }
 
 # Backwards compatibility aliases
@@ -1624,11 +1631,8 @@ EOF
     if [ "$STEP_SSHD" = "skip" ]; then
         printf "  %sℹ%s %sTransition du port SSH hôte : ignoré (décoché par l'utilisateur)%s\n" "$C_CYAN" "$C_RESET" "$C_MUTED" "$C_RESET"
     elif [ "$IS_ROOT" -eq 0 ] && [ "$USE_SUDO" != "1" ]; then
-        if [ "$SSHD_ON_PORT_22" -eq 1 ]; then
-            printf "  %sℹ%s %sPort 22 occupé par OpenSSH : sans sudo, gickers.sh utilisera le port non-privilégié 2223.%s\n" "$C_CYAN" "$C_RESET" "$C_WHITE" "$C_RESET"
-            SSH_PORT="2223"
-        fi
         STEP_SSHD="skip"
+        SSH_PORT="${SSH_PORT:-22}"
     elif [ "$SSHD_ON_PORT_22" -eq 1 ]; then
         printf "\n  %s!%s %sLe port 22 est actuellement occupé par le serveur OpenSSH hôte (sshd).%s\n" "$C_GOLD" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
         SSHD_CMDS="$CMDS_SSHD"
@@ -2229,11 +2233,26 @@ EOF
     # --------------------------------------------------------------------------
     # 7. Build et Déploiement Docker Compose
     # --------------------------------------------------------------------------
-    ( docker compose --env-file .env.docker build >/dev/null 2>&1 ) &
-    gum_spin $! "Construction des conteneurs Docker (PHP, gickers-ssh, FrankenPHP)..."
+    local deploy_log="/tmp/gickers_deploy.log"
+    : > "$deploy_log"
 
-    ( docker compose --env-file .env.docker up -d postgres >/dev/null 2>&1 ) &
-    gum_spin $! "Démarrage de PostgreSQL..."
+    ( docker compose --env-file .env.docker build >> "$deploy_log" 2>&1 ) &
+    if ! gum_spin $! "Construction des conteneurs Docker (PHP, gickers-ssh, FrankenPHP)..."; then
+        printf "\n  %s✖%s %sÉchec de la construction des conteneurs Docker.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+        printf "  %sDernières lignes du journal d'erreur :%s\n\n" "$C_MUTED" "$C_RESET"
+        tail -n 25 "$deploy_log" | sed 's/^/    /'
+        printf "\n"
+        exit 1
+    fi
+
+    ( docker compose --env-file .env.docker up -d postgres >> "$deploy_log" 2>&1 ) &
+    if ! gum_spin $! "Démarrage de PostgreSQL..."; then
+        printf "\n  %s✖%s %sÉchec du démarrage de PostgreSQL.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+        printf "  %sDernières lignes du journal d'erreur :%s\n\n" "$C_MUTED" "$C_RESET"
+        tail -n 25 "$deploy_log" | sed 's/^/    /'
+        printf "\n"
+        exit 1
+    fi
 
     # Wait for PostgreSQL readiness
     RETRY=0
@@ -2243,11 +2262,23 @@ EOF
         RETRY=$((RETRY + 1))
     done
 
-    ( docker compose --env-file .env.docker run --rm init >/dev/null 2>&1 ) &
-    gum_spin $! "Exécution des migrations Doctrine & initialisation du serveur..."
+    ( docker compose --env-file .env.docker run --rm init >> "$deploy_log" 2>&1 ) &
+    if ! gum_spin $! "Exécution des migrations Doctrine & initialisation du serveur..."; then
+        printf "\n  %s✖%s %sÉchec de l'initialisation du serveur / migrations Doctrine.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+        printf "  %sDernières lignes du journal d'erreur :%s\n\n" "$C_MUTED" "$C_RESET"
+        tail -n 25 "$deploy_log" | sed 's/^/    /'
+        printf "\n"
+        exit 1
+    fi
 
-    ( docker compose --env-file .env.docker up -d >/dev/null 2>&1 ) &
-    gum_spin $! "Démarrage complet de la stack (HTTP, SSH, Worker, Deploy-Engine)..."
+    ( docker compose --env-file .env.docker up -d >> "$deploy_log" 2>&1 ) &
+    if ! gum_spin $! "Démarrage complet de la stack (HTTP, SSH, Worker, Deploy-Engine)..."; then
+        printf "\n  %s✖%s %sÉchec du démarrage complet de la stack Docker Compose.%s\n" "$C_PINK" "$C_RESET" "$C_BOLD$C_WHITE" "$C_RESET"
+        printf "  %sDernières lignes du journal d'erreur :%s\n\n" "$C_MUTED" "$C_RESET"
+        tail -n 25 "$deploy_log" | sed 's/^/    /'
+        printf "\n"
+        exit 1
+    fi
 fi
 
 # ------------------------------------------------------------------------------
