@@ -1,4 +1,4 @@
-﻿$esc = [char]27
+$esc = [char]27
 $escCyan = "$esc[1;38;2;125;207;255m"      # #7dcfff
 $escPink = "$esc[1;38;2;247;118;142m"      # #f7768e
 $escGreen = "$esc[1;38;2;115;218;202m"     # #73daca
@@ -278,6 +278,30 @@ function Gum-PastePubkey {
 
 function Select-Menu { Gum-Choose @args }
 
+function Invoke-QuietNative {
+    param([scriptblock]$CommandBlock)
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $global:LASTEXITCODE = 0
+    try {
+        return (& $CommandBlock 2>$null)
+    } catch {
+        $global:LASTEXITCODE = 1
+        return $null
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+}
+
+function Write-Utf8NoBomFile {
+    param(
+        [string]$Path,
+        [string]$Content
+    )
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+}
+
 function Run-LoggedStep {
     param(
         [string]$StepLabel,
@@ -288,6 +312,10 @@ function Run-LoggedStep {
 
     $chars = @('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏')
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $logDir = Split-Path -Parent $LogFile
+    if (-not [string]::IsNullOrEmpty($logDir) -and -not (Test-Path $logDir)) {
+        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    }
 
     while ($true) {
         $sw.Restart()
@@ -302,26 +330,39 @@ function Run-LoggedStep {
         $exitCode = 0
         if ($isBuild) {
             Write-Host "  $escPink⠋$escReset $escBold$escWhite$StepLabel...$escReset"
+            $prevEap = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            $global:LASTEXITCODE = 0
             try {
-                & $CommandBlock 2>&1 | Tee-Object -FilePath $LogFile
-                $exitCode = $LASTEXITCODE
+                & $CommandBlock 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $LogFile
+                $exitCode = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
             } catch {
                 $exitCode = 1
-                $_ | Out-File -FilePath $LogFile -Append
+                $_ | Out-String | Out-File -FilePath $LogFile -Append -Encoding UTF8
+            } finally {
+                $ErrorActionPreference = $prevEap
             }
         } else {
             Write-Host -NoNewline "$esc[?25l"
             $job = Start-Job -ScriptBlock {
-                param($blk, $dir, $log)
-                Set-Location $dir
+                param($cmdText, $dir, $log)
+                $ErrorActionPreference = "Continue"
+                if (-not [string]::IsNullOrEmpty($dir) -and (Test-Path $dir)) {
+                    Set-Location $dir
+                }
+                $global:LASTEXITCODE = 0
                 try {
-                    & $blk 2>&1 | Out-File -FilePath $log -Encoding UTF8
-                    return $LASTEXITCODE
+                    $sb = [scriptblock]::Create($cmdText)
+                    & $sb 2>&1 | ForEach-Object { "$_" } | Out-File -FilePath $log -Encoding UTF8
+                    if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+                        return [int]$LASTEXITCODE
+                    }
+                    return 0
                 } catch {
-                    $_ | Out-File -FilePath $log -Append -Encoding UTF8
+                    $_ | Out-String | Out-File -FilePath $log -Append -Encoding UTF8
                     return 1
                 }
-            } -ArgumentList $CommandBlock, (Get-Location).Path, $LogFile
+            } -ArgumentList $cmdStr, (Get-Location).Path, $LogFile
 
             $i = 0
             while ($job.State -eq 'Running') {
@@ -337,9 +378,16 @@ function Run-LoggedStep {
             }
 
             Write-Host -NoNewline "$esc[?25h"
-            $null = Receive-Job -Job $job
-            $exitCode = $job.ChildJobs[0].ExitCode
-            if ($null -eq $exitCode) { $exitCode = 0 }
+            $jobResult = Receive-Job -Job $job
+            $exitCode = 0
+            if ($job.State -eq 'Failed') {
+                $exitCode = 1
+            } elseif ($null -ne $jobResult) {
+                $lastVal = @($jobResult)[-1]
+                if ($lastVal -is [int] -or $lastVal -is [long]) {
+                    $exitCode = [int]$lastVal
+                }
+            }
             Remove-Job -Job $job -Force
         }
 
@@ -372,24 +420,25 @@ function Run-LoggedStep {
             "Ignorer cette étape et continuer quand même",
             "Abandonner l'installation"
         )
-        $errChoice = Gum-Choose -Title "Action en cas d'erreur sur '$StepLabel'" -Options $errOpts
-        switch ($errChoice) {
-            0 { continue }
-            1 {
+        $retryStep = $false
+        while ($true) {
+            $errChoice = Gum-Choose -Title "Action en cas d'erreur sur '$StepLabel'" -Options $errOpts
+            if ($errChoice -eq 0) {
+                $retryStep = $true
+                break
+            } elseif ($errChoice -eq 1) {
                 if (Test-Path $LogFile) {
                     Get-Content -Path $LogFile | Out-Host -Paging
                 }
-                continue
-            }
-            2 {
+            } elseif ($errChoice -eq 2) {
                 Write-Host "  $escGold!$escReset $escBold${escWhite}Étape ignorée par l'administrateur.$escReset`n"
                 return 0
-            }
-            3 {
+            } else {
                 Write-Host "`n  $escPink✖$escReset $escBold${escPink}Installation interrompue par l'administrateur.$escReset`n"
                 exit $exitCode
             }
         }
+        if ($retryStep) { continue }
     }
 }
 
@@ -400,8 +449,10 @@ function Manage-InstanceUpdate {
 
     if (Test-Path (Join-Path $Dir ".git")) {
         Run-LoggedStep -StepLabel "Récupération du dernier code source (git pull)" -LogFile $logFile -WorkDir $Dir -CommandBlock {
-            git fetch --depth 1 origin main 2>$null
-            git reset --hard origin/main 2>$null
+            git fetch --depth 1 origin main
+            if ($LASTEXITCODE -ne 0) { throw "git fetch failed ($LASTEXITCODE)" }
+            git reset --hard origin/main
+            if ($LASTEXITCODE -ne 0) { throw "git reset failed ($LASTEXITCODE)" }
         }
     }
 
@@ -483,13 +534,13 @@ function Manage-InstanceEdit {
 
     Write-Host "`n  $escBold${escCyan}⚙️  Édition de la configuration : $envFile$escReset`n"
 
-    $curDomain = (Get-Content $envFile | Where-Object { $_ -match '^APP_DOMAIN=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+    $curDomain = (Get-Content $envFile | Where-Object { $_ -match '^APP_DOMAIN=(.+)' } | ForEach-Object { $matches[1].Trim(' "') } | Select-Object -First 1)
     if ([string]::IsNullOrEmpty($curDomain)) { $curDomain = "gits.run" }
-    $curSsh = (Get-Content $envFile | Where-Object { $_ -match '^SSH_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+    $curSsh = (Get-Content $envFile | Where-Object { $_ -match '^SSH_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') } | Select-Object -First 1)
     if ([string]::IsNullOrEmpty($curSsh)) { $curSsh = "22" }
-    $curHttp = (Get-Content $envFile | Where-Object { $_ -match '^HTTP_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+    $curHttp = (Get-Content $envFile | Where-Object { $_ -match '^HTTP_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') } | Select-Object -First 1)
     if ([string]::IsNullOrEmpty($curHttp)) { $curHttp = "80" }
-    $curHttps = (Get-Content $envFile | Where-Object { $_ -match '^HTTPS_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') })
+    $curHttps = (Get-Content $envFile | Where-Object { $_ -match '^HTTPS_PORT=(.+)' } | ForEach-Object { $matches[1].Trim(' "') } | Select-Object -First 1)
     if ([string]::IsNullOrEmpty($curHttps)) { $curHttps = "443" }
 
     $newDomain = Gum-Input -PromptLabel "Domaine public (FQDN)" -DefaultValue $curDomain
@@ -500,6 +551,7 @@ function Manage-InstanceEdit {
     $signOpts = @("Inscriptions ouvertes (true)", "Inscriptions fermées (false)")
     $signChoice = Gum-Choose -Title "Politique d'inscriptions" -Options $signOpts
     $newSignup = if ($signChoice -eq 1) { "false" } else { "true" }
+    $newSshUrl = if ($newSsh -eq "22" -or [string]::IsNullOrEmpty($newSsh)) { "ssh://$newDomain" } else { "ssh://${newDomain}:${newSsh}" }
 
     $lines = Get-Content $envFile
     $newLines = @()
@@ -509,11 +561,11 @@ function Manage-InstanceEdit {
         elseif ($line -match '^HTTP_PORT=') { $newLines += "HTTP_PORT=$newHttp" }
         elseif ($line -match '^HTTPS_PORT=') { $newLines += "HTTPS_PORT=$newHttps" }
         elseif ($line -match '^SOFT_SERVE_ALLOW_SIGNUP=') { $newLines += "SOFT_SERVE_ALLOW_SIGNUP=$newSignup" }
-        elseif ($line -match '^SOFT_SERVE_SSH_PUBLIC_URL=') { $newLines += "SOFT_SERVE_SSH_PUBLIC_URL=ssh://$newDomain" }
+        elseif ($line -match '^SOFT_SERVE_SSH_PUBLIC_URL=') { $newLines += "SOFT_SERVE_SSH_PUBLIC_URL=$newSshUrl" }
         elseif ($line -match '^SOFT_SERVE_HTTP_PUBLIC_URL=') { $newLines += "SOFT_SERVE_HTTP_PUBLIC_URL=https://$newDomain" }
         else { $newLines += $line }
     }
-    Set-Content -Path $envFile -Value $newLines -Encoding UTF8
+    Write-Utf8NoBomFile -Path $envFile -Content (($newLines -join "`n") + "`n")
 
     Write-Host "`n  $escGreen✔$escReset $escBold${escWhite}Configuration mise à jour dans $envFile$escReset"
 
@@ -564,18 +616,24 @@ function Manage-InstanceDelete {
 
     if (Test-Path (Join-Path $Dir "compose.yaml")) {
         Run-LoggedStep -StepLabel "Arrêt et destruction des conteneurs et volumes Docker" -LogFile $logFile -WorkDir $Dir -CommandBlock {
-            docker compose --env-file .env.docker down -v --remove-orphans 2>$null
-            docker compose down -v --remove-orphans 2>$null
+            docker compose --env-file .env.docker down -v --remove-orphans
+            if ($LASTEXITCODE -ne 0) {
+                docker compose down -v --remove-orphans
+            }
+            $global:LASTEXITCODE = 0
         }
     }
 
-    docker volume rm -f gickers-sh_gickers-data gickers-sh_gickers-db gickers-sh_gickers-var gickers-sh_gickers-deploy-engine 2>$null
+    Invoke-QuietNative { docker volume rm -f gickers-sh_gickers-data gickers-sh_gickers-db gickers-sh_gickers-var gickers-sh_gickers-deploy-engine } | Out-Null
 
     if (Test-Path $Dir) {
         $logFileFs = Join-Path $env:TEMP "gickers_delete_fs.log"
-        Run-LoggedStep -StepLabel "Suppression du répertoire $Dir" -LogFile $logFileFs -WorkDir (Get-Location).Path -CommandBlock {
-            Remove-Item -Recurse -Force -Path $Dir
-        }
+        $parentDir = Split-Path -Parent $Dir
+        if ([string]::IsNullOrEmpty($parentDir) -or -not (Test-Path $parentDir)) { $parentDir = $env:TEMP }
+        if ((Get-Location).Path -eq $Dir) { Set-Location $parentDir }
+        $escapedDir = $Dir -replace "'", "''"
+        $delCmd = [scriptblock]::Create("Remove-Item -Recurse -Force -LiteralPath '$escapedDir'")
+        Run-LoggedStep -StepLabel "Suppression du répertoire $Dir" -LogFile $logFileFs -WorkDir $parentDir -CommandBlock $delCmd
     }
 
     Write-Host "  $escGreen✔$escReset $escBold${escWhite}Instance $Domain supprimée définitivement avec succès. Ports et ressources libérés.$escReset`n"

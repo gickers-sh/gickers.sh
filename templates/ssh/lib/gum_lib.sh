@@ -1064,7 +1064,7 @@ run_logged_step() {
         (
             cd "$work_dir"
             "$@"
-        ) 2>&1 | tee "$log_file"
+        ) < /dev/null 2>&1 | tee "$log_file"
         exit_code=${PIPESTATUS[0]}
         set -e
 
